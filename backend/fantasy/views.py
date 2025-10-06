@@ -24,20 +24,43 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        
+
         # Crear equipo para el nuevo usuario
         liga = Liga.objects.first()  # Asignar a la primera liga por defecto
+        equipo = None
         if liga:
-            Equipo.objects.create(
+            equipo = Equipo.objects.create(
                 usuario=user,
                 liga=liga,
                 nombre=f"Equipo de {user.username}",
                 presupuesto=liga.presupuesto_inicial
             )
-        
+
+            # 🆕 ASIGNACIÓN AUTOMÁTICA DE 7 JUGADORES INICIALES
+            # Reglas: 1 POR, 2 DEF, 2 MED, 2 DEL
+            jugadores_disponibles = Jugador.objects.exclude(
+                equipo__liga=liga
+            ).order_by('?')  # Aleatorio
+
+            asignaciones = {
+                'POR': 1,
+                'DEF': 2,
+                'MED': 2,
+                'DEL': 2
+            }
+
+            for posicion, cantidad in asignaciones.items():
+                jugadores = jugadores_disponibles.filter(posicion=posicion)[:cantidad]
+                for jugador in jugadores:
+                    if equipo.presupuesto >= jugador.valor:
+                        equipo.jugadores.add(jugador)
+                        equipo.presupuesto -= jugador.valor
+
+            equipo.save()
+
         # Generar tokens
         refresh = RefreshToken.for_user(user)
-        
+
         return Response({
             'user': {
                 'id': user.id,
@@ -171,27 +194,45 @@ class EquipoViewSet(viewsets.ModelViewSet):
         """Vender un jugador del equipo"""
         equipo = self.get_object()
         jugador_id = request.data.get('jugador_id')
-        
+
         try:
             jugador = Jugador.objects.get(id=jugador_id)
         except Jugador.DoesNotExist:
             return Response(
-                {'error': 'Jugador no encontrado'}, 
+                {'error': 'Jugador no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Verificar que el jugador esté en el equipo
         if jugador not in equipo.jugadores.all():
             return Response(
-                {'error': 'El jugador no está en tu equipo'}, 
+                {'error': 'El jugador no está en tu equipo'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # 🆕 VALIDACIONES DE PLANTILLA
+        # Contar jugadores por posición (excluyendo el que vamos a vender)
+        jugadores_actuales = equipo.jugadores.exclude(id=jugador_id)
+        count_por_posicion = {
+            'POR': jugadores_actuales.filter(posicion='POR').count(),
+            'DEF': jugadores_actuales.filter(posicion='DEF').count(),
+            'MED': jugadores_actuales.filter(posicion='MED').count(),
+            'DEL': jugadores_actuales.filter(posicion='DEL').count(),
+        }
+
+        # Validar mínimos requeridos
+        minimos = {'POR': 1, 'DEF': 2, 'MED': 2, 'DEL': 2}
+        if count_por_posicion[jugador.posicion] < minimos[jugador.posicion]:
+            return Response(
+                {'error': f'No puedes vender este {jugador.posicion}. Mínimo requerido: {minimos[jugador.posicion]}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Vender jugador
         equipo.jugadores.remove(jugador)
         equipo.presupuesto += jugador.valor
         equipo.save()
-        
+
         return Response({
             'message': 'Jugador vendido exitosamente',
             'equipo': EquipoSerializer(equipo).data
@@ -311,16 +352,31 @@ class PuntuacionViewSet(viewsets.ModelViewSet):
             try:
                 jugador = Jugador.objects.get(id=jugador_id)
                 
+                # 🆕 FIX: Obtener puntos anteriores ANTES de update_or_create
+                try:
+                    puntuacion_anterior = Puntuacion.objects.get(jugador=jugador, jornada=jornada)
+                    puntos_anteriores = puntuacion_anterior.puntos
+                    es_actualizacion = True
+                except Puntuacion.DoesNotExist:
+                    puntos_anteriores = 0
+                    es_actualizacion = False
+
                 # Crear o actualizar puntuación
                 puntuacion, created = Puntuacion.objects.update_or_create(
                     jugador=jugador,
                     jornada=jornada,
                     defaults={'puntos': puntos}
                 )
-                
+
                 # Actualizar puntos totales y valor del jugador
-                jugador.puntos_totales += puntos
-                jugador.valor += (puntos * 100000)  # €0.1M por punto
+                if es_actualizacion:
+                    delta = puntos - puntos_anteriores
+                    jugador.puntos_totales += delta
+                    jugador.valor += (delta * 100000)
+                else:
+                    jugador.puntos_totales += puntos
+                    jugador.valor += (puntos * 100000)
+
                 jugador.save()
                 
                 resultados.append({
