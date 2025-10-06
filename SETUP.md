@@ -52,7 +52,7 @@ GRANT ALL PRIVILEGES ON DATABASE fantasy_db TO fantasy_user;
 cd backend
 
 # Crear y activar entorno virtual
-python -m venv venv
+python3 -m venv venv
 
 # Activar (Linux/Mac)
 source venv/bin/activate

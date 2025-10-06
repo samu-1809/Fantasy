@@ -1,31 +1,60 @@
 from django.contrib import admin
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
 
 @admin.register(Liga)
 class LigaAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'codigo', 'presupuesto_inicial', 'jornada_actual', 'creada_en')
+    list_display = ('nombre', 'codigo', 'jornada_actual')
     search_fields = ('nombre', 'codigo')
 
 @admin.register(Jugador)
 class JugadorAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'posicion', 'valor', 'puntos_totales')
-    list_filter = ('posicion',)
-    search_fields = ('nombre',)
+    list_display = ('nombre', 'posicion', 'valor', 'puntos_totales', 'equipo_real', 'en_venta')
+    list_filter = ('posicion', 'equipo_real', 'en_venta')
+    search_fields = ('nombre', 'equipo_real__nombre')
 
 @admin.register(Equipo)
 class EquipoAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'usuario', 'liga', 'presupuesto')
+    list_display = ('nombre', 'usuario', 'liga', 'presupuesto', 'puntos_totales')
     list_filter = ('liga',)
     search_fields = ('nombre', 'usuario__username')
     filter_horizontal = ('jugadores',)
 
-@admin.register(Jornada)
-class JornadaAdmin(admin.ModelAdmin):
-    list_display = ('numero', 'liga', 'fecha')
-    list_filter = ('liga',)
-
 @admin.register(Puntuacion)
 class PuntuacionAdmin(admin.ModelAdmin):
     list_display = ('jugador', 'jornada', 'puntos')
-    list_filter = ('jornada__liga',)
+    list_filter = ('jornada',)
     search_fields = ('jugador__nombre',)
+    
+@admin.register(EquipoReal)
+class EquipoRealAdmin(admin.ModelAdmin):
+    list_display = ('nombre',)
+    search_fields = ('nombre',)
+
+@admin.register(Partido)
+class PartidoAdmin(admin.ModelAdmin):
+    list_display = ('jornada', 'equipo_local', 'equipo_visitante', 'fecha', 'goles_local', 'goles_visitante', 'jugado', 'resultado')
+    list_filter = ('jornada', 'jugado') 
+    search_fields = ('equipo_local__nombre', 'equipo_visitante__nombre')
+    list_editable = ('goles_local', 'goles_visitante', 'jugado')
+    ordering = ('-fecha',)
+
+@admin.register(Jornada)
+class JornadaAdmin(admin.ModelAdmin):
+    list_display = ('numero', 'fecha', 'total_partidos')
+    search_fields = ('numero',)  
+    
+    def total_partidos(self, obj):
+        return obj.partidos.count()
+    total_partidos.short_description = 'Partidos'
+
+
+@admin.register(Alineacion)
+class AlineacionAdmin(admin.ModelAdmin):
+    list_display = ('equipo', 'portero_titular', 'defensa1_titular', 'defensa2_titular', 
+                   'delantero1_titular', 'delantero2_titular', 'total_banquillo')
+    list_filter = ('equipo__liga',)
+    search_fields = ('equipo__nombre', 'equipo__usuario__username')
+    
+    def total_banquillo(self, obj):
+        return obj.banquillo.count()
+    total_banquillo.short_description = 'Jugadores en banquillo'

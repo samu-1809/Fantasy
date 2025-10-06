@@ -1,5 +1,13 @@
+# ======================================
+# 🌐 FRONTEND (React / Node)
+# ======================================
+node_modules/
+dist/
+dist-ssr/
+*.local
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,18 +15,62 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ======================================
+# 🐍 BACKEND (Python / Django)
+# ======================================
+# Compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django stuff
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+*.pot
+
+# Environments
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+.coverage
+.tox/
+.nox/
+pytest_cache/
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Migrations (optional, si no quieres subirlas)
+# backend/fantasy/migrations/
+
+# ======================================
+# 🧩 Otros
+# ======================================
+# macOS
+.AppleDouble
+.LSOverride
+
+# Backup files
+*~
