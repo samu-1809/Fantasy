@@ -1,10 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    LigaViewSet, JugadorViewSet, EquipoViewSet, 
+    LigaViewSet, JugadorViewSet, EquipoViewSet,
     MercadoViewSet, ClasificacionViewSet, JornadaViewSet, PuntuacionViewSet,
     RegisterView, LoginView, current_user
+)
+from .auth_views import (
+    CookieTokenObtainPairView,
+    CookieTokenRefreshView,
+    LogoutView
 )
 
 router = DefaultRouter()
@@ -18,8 +22,12 @@ router.register(r'puntuaciones', PuntuacionViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    # Auth endpoints - nueva implementación con cookies
     path('auth/register/', RegisterView.as_view(), name='register'),
-    path('auth/login/', LoginView.as_view(), name='login'),
+    path('auth/login/', CookieTokenObtainPairView.as_view(), name='login'),
+    path('auth/logout/', LogoutView.as_view(), name='logout'),
+    path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', current_user, name='current-user'),
-    path('auth/token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    # Legacy login (deprecado, usar auth/login/)
+    path('login/', LoginView.as_view(), name='legacy-login'),
 ]
