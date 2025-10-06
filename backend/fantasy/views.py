@@ -58,20 +58,29 @@ class RegisterView(generics.CreateAPIView):
 
             equipo.save()
 
-        # Generar tokens
+        # 🆕 Generar tokens con httpOnly cookie
         refresh = RefreshToken.for_user(user)
 
-        return Response({
+        response = Response({
             'user': {
                 'id': user.id,
                 'username': user.username,
                 'email': user.email
             },
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
+            'access': str(refresh.access_token),
         }, status=status.HTTP_201_CREATED)
+
+        # Guardar refresh token en httpOnly cookie
+        response.set_cookie(
+            key='refresh_token',
+            value=str(refresh),
+            httponly=True,
+            secure=False,  # True en producción
+            samesite='Lax',
+            max_age=7*24*60*60  # 7 días
+        )
+
+        return response
 
 # Vista de Login
 class LoginView(generics.GenericAPIView):
@@ -150,6 +159,15 @@ class JugadorViewSet(viewsets.ModelViewSet):
 class EquipoViewSet(viewsets.ModelViewSet):
     queryset = Equipo.objects.all()
     serializer_class = EquipoSerializer
+
+    def get_queryset(self):
+        """Optimiza queries con select_related y prefetch_related"""
+        return Equipo.objects.select_related(
+            'usuario',
+            'liga'
+        ).prefetch_related(
+            'jugadores'
+        )
     
     @action(detail=True, methods=['post'])
     def fichar_jugador(self, request, pk=None):
@@ -244,34 +262,38 @@ class MercadoViewSet(viewsets.ViewSet):
     """
     def list(self, request):
         liga_id = request.query_params.get('liga_id')
-        
+
         if not liga_id:
             return Response(
-                {'error': 'Se requiere liga_id'}, 
+                {'error': 'Se requiere liga_id'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             liga = Liga.objects.get(id=liga_id)
         except Liga.DoesNotExist:
             return Response(
-                {'error': 'Liga no encontrada'}, 
+                {'error': 'Liga no encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Obtener jugadores que NO están en ningún equipo de esta liga
-        jugadores_fichados = Jugador.objects.filter(
-            equipo__liga=liga
-        ).values_list('id', flat=True)
-        
+
+        # 🆕 OPTIMIZADO: Obtener IDs de jugadores fichados en una sola query
+        jugadores_fichados_ids = Equipo.objects.filter(
+            liga=liga
+        ).values_list('jugadores', flat=True).distinct()
+
+        # Jugadores disponibles (no fichados en esta liga)
         jugadores_disponibles = Jugador.objects.exclude(
-            id__in=jugadores_fichados
+            id__in=jugadores_fichados_ids
         )
-        
+
         # Seleccionar 8 aleatorios (o menos si no hay suficientes)
         count = min(8, jugadores_disponibles.count())
-        jugadores_mercado = random.sample(list(jugadores_disponibles), count)
-        
+        if count > 0:
+            jugadores_mercado = random.sample(list(jugadores_disponibles), count)
+        else:
+            jugadores_mercado = []
+
         serializer = JugadorSerializer(jugadores_mercado, many=True)
         return Response(serializer.data)
 
@@ -281,26 +303,30 @@ class ClasificacionViewSet(viewsets.ViewSet):
     """
     def list(self, request):
         liga_id = request.query_params.get('liga_id')
-        
+
         if not liga_id:
             return Response(
-                {'error': 'Se requiere liga_id'}, 
+                {'error': 'Se requiere liga_id'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             liga = Liga.objects.get(id=liga_id)
         except Liga.DoesNotExist:
             return Response(
-                {'error': 'Liga no encontrada'}, 
+                {'error': 'Liga no encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Obtener equipos de la liga ordenados por puntos totales
-        equipos = Equipo.objects.filter(liga=liga)
-        
+
+        # 🆕 OPTIMIZADO: Prefetch jugadores y select_related usuario
+        # Esto reduce las queries de 1 + N*2 a solo 2-3 queries totales
+        equipos = Equipo.objects.filter(
+            liga=liga
+        ).select_related('usuario').prefetch_related('jugadores')
+
         clasificacion = []
         for equipo in equipos:
+            # Los jugadores ya están en memoria, sin query adicional
             puntos_totales = sum(j.puntos_totales for j in equipo.jugadores.all())
             clasificacion.append({
                 'equipo_id': equipo.id,
@@ -309,23 +335,31 @@ class ClasificacionViewSet(viewsets.ViewSet):
                 'puntos_totales': puntos_totales,
                 'presupuesto': equipo.presupuesto
             })
-        
+
         # Ordenar por puntos (descendente)
         clasificacion.sort(key=lambda x: x['puntos_totales'], reverse=True)
-        
+
         # Añadir posición
         for idx, item in enumerate(clasificacion, 1):
             item['posicion'] = idx
-        
+
         return Response(clasificacion)
 
 class JornadaViewSet(viewsets.ModelViewSet):
     queryset = Jornada.objects.all()
     serializer_class = JornadaSerializer
 
+    def get_queryset(self):
+        """Optimiza queries con select_related"""
+        return Jornada.objects.select_related('liga')
+
 class PuntuacionViewSet(viewsets.ModelViewSet):
     queryset = Puntuacion.objects.all()
     serializer_class = PuntuacionSerializer
+
+    def get_queryset(self):
+        """Optimiza queries con select_related"""
+        return Puntuacion.objects.select_related('jugador', 'jornada')
     
     @action(detail=False, methods=['post'])
     def asignar_puntos(self, request):

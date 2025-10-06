@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect } from 'react';
-import { loginUser, registerUser, getCurrentUser } from '../services/api';
+import { loginUser, registerUser, getCurrentUser, logoutUser } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -43,9 +43,18 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const data = await loginUser(username, password);
 
-      // Guardar tokens
-      localStorage.setItem('accessToken', data.tokens.access);
-      localStorage.setItem('refreshToken', data.tokens.refresh);
+      // 🆕 NUEVO: Solo guardar access token en localStorage
+      // Refresh token está en httpOnly cookie (más seguro)
+      if (data.tokens) {
+        // Legacy response (RegisterView anterior)
+        localStorage.setItem('accessToken', data.tokens.access);
+        if (data.tokens.refresh) {
+          localStorage.setItem('refreshToken', data.tokens.refresh);
+        }
+      } else if (data.access) {
+        // Nueva response (auth_views con cookies)
+        localStorage.setItem('accessToken', data.access);
+      }
 
       // Guardar usuario y equipo
       setUser(data.user);
@@ -63,9 +72,14 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const data = await registerUser(username, email, password);
 
-      // Guardar tokens
-      localStorage.setItem('accessToken', data.tokens.access);
-      localStorage.setItem('refreshToken', data.tokens.refresh);
+      // 🆕 NUEVO: Solo guardar access token en localStorage
+      // Refresh token está en httpOnly cookie
+      if (data.access) {
+        localStorage.setItem('accessToken', data.access);
+      } else if (data.tokens?.access) {
+        // Legacy fallback
+        localStorage.setItem('accessToken', data.tokens.access);
+      }
 
       // Guardar usuario
       setUser(data.user);
@@ -77,11 +91,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setUser(null);
-    setEquipo(null);
+  const logout = async () => {
+    try {
+      // 🆕 Llamar al endpoint de logout para blacklistear el token
+      await logoutUser();
+    } catch (err) {
+      console.error('Error al hacer logout:', err);
+    } finally {
+      // Limpiar estado local siempre, incluso si la petición falla
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      setUser(null);
+      setEquipo(null);
+    }
   };
 
   const value = {

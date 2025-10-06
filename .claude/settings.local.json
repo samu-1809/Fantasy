@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py makemigrations:*)",
+      "Bash(python3 manage.py makemigrations:*)",
+      "Bash(source:*)",
+      "Bash(/mnt/c/Users/USUARIO/Desktop/📁 Proyectos/Pruebas/Fantasy/venv/bin/python manage.py makemigrations fantasy -n add_med_position)",
+      "Bash(/mnt/c/Users/USUARIO/Desktop/📁 Proyectos/Pruebas/Fantasy/venv/bin/python manage.py showmigrations fantasy)",
+      "Bash(cd:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -26,26 +26,46 @@ const handleResponse = async (response) => {
 // ==================== AUTENTICACIÓN ====================
 
 export const registerUser = async (username, email, password) => {
-  const response = await fetch(`${API_URL}/register/`, {
+  const response = await fetch(`${API_URL}/auth/register/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',  // 🆕 CRÍTICO: Necesario para cookies
     body: JSON.stringify({ username, email, password }),
   });
   return handleResponse(response);
 };
 
 export const loginUser = async (username, password) => {
-  const response = await fetch(`${API_URL}/login/`, {
+  const response = await fetch(`${API_URL}/auth/login/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',  // 🆕 CRÍTICO: Necesario para cookies
     body: JSON.stringify({ username, password }),
   });
   return handleResponse(response);
 };
 
 export const getCurrentUser = async () => {
-  const response = await fetch(`${API_URL}/current-user/`, {
+  const response = await fetch(`${API_URL}/auth/user/`, {
     headers: getAuthHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse(response);
+};
+
+export const logoutUser = async () => {
+  const response = await fetch(`${API_URL}/auth/logout/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    credentials: 'include',  // 🆕 Necesario para limpiar cookies
+  });
+  return handleResponse(response);
+};
+
+export const refreshToken = async () => {
+  const response = await fetch(`${API_URL}/auth/refresh/`, {
+    method: 'POST',
+    credentials: 'include',  // 🆕 CRÍTICO: Lee refresh token de cookie
   });
   return handleResponse(response);
 };
