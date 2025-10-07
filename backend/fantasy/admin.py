@@ -14,11 +14,13 @@ class JugadorAdmin(admin.ModelAdmin):
 
 @admin.register(Equipo)
 class EquipoAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'usuario', 'liga', 'presupuesto', 'puntos_totales')
+    list_display = ('nombre', 'usuario', 'liga', 'presupuesto', 'puntos_totales','total_jugadores')
     list_filter = ('liga',)
     search_fields = ('nombre', 'usuario__username')
-    filter_horizontal = ('jugadores',)
-
+    def total_jugadores(self, obj):
+        return obj.jugadores.count()
+    total_jugadores.short_description = 'Jugadores'
+    
 @admin.register(Puntuacion)
 class PuntuacionAdmin(admin.ModelAdmin):
     list_display = ('jugador', 'jornada', 'puntos')

@@ -20,16 +20,13 @@ router.register(r'equipos-reales', views.EquipoRealViewSet)
 router.register(r'partidos', views.PartidoViewSet)
 
 urlpatterns = [
-    # ✅ SIN /api/ aquí - el /api/ viene del proyecto
     path('', include(router.urls)),
     
-    # Auth endpoints SIN /api/
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', CookieTokenObtainPairView.as_view(), name='login'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
     
-    # Equipo del usuario SIN /api/
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
 ]

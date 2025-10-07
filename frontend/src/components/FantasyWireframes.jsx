@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Users, TrendingUp, Trophy, Settings, LogOut, Plus, Minus, Search, RefreshCw, Calendar, Star} from 'lucide-react';
-
+import { Menu, Check, Users, TrendingUp, Trophy, Settings,Save, Edit, LogOut, Plus, Minus, Search, RefreshCw, Calendar, Star} from 'lucide-react';
 import {
-  getMiEquipo,
+  getEquipo,
   getLiga,
+  getLigas,
+  intercambiarJugadores,
   getMercado,
   getClasificacion,
   getJugadores,
   ficharJugador,
+  actualizarEstadosBanquillo,
   venderJugador,
   getCurrentUser,
+  getJugadoresPorEquipo,
   loginUser,
   registerUser,
-  logoutUser
+  logoutUser,
+  asignarPuntos  
 } from '../services/api';
 
 const FantasyFutsalWireframes = () => {
@@ -22,7 +26,8 @@ const FantasyFutsalWireframes = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentAuthScreen, setCurrentAuthScreen] = useState('login');
-  
+  const [datosUsuario, setDatosUsuario] = useState(null);
+
   // Estados para datos
   const [equipoActual, setEquipoActual] = useState(null);
   const [ligaActual, setLigaActual] = useState(null);
@@ -44,35 +49,171 @@ const FantasyFutsalWireframes = () => {
     setCurrentScreen('login');
   };
 
-  const cargarDatosIniciales = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // ✅ Esto ahora funcionará porque getMiEquipo usa /api/mi-equipo/
-      const equipo = await getMiEquipo();
-      setEquipoActual(equipo);
-      
-      // Cargar datos relacionados
-      if (equipo.liga) {
-        const liga = await getLiga(equipo.liga);  // ✅ /api/ligas/{id}/
-        setLigaActual(liga);
-        
-        const mercadoData = await getMercado(equipo.liga);  // ✅ /api/mercado/
-        setMercado(mercadoData);
-        
-        const clasificacionData = await getClasificacion(equipo.liga);  // ✅ /api/clasificacion/
-        setClasificacion(clasificacionData);
-      }
-      
-      setLoading(false);
-      
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-      console.error('Error cargando datos:', err);
+const cargarDatosIniciales = async (usuario) => {
+    if (!usuario) {
+        throw new Error("Usuario no definido");
     }
-  };
+    
+    console.log("👨‍💼 Usuario", usuario.username, "Admin:", usuario.is_superuser || usuario.is_staff);
+    
+    try {
+        const isAdmin = usuario.is_superuser || usuario.is_staff;
+        
+        if (isAdmin) {
+            console.log("Usuario admin, cargando datos de administración");
+            
+            const jugadoresData = await getJugadores();
+            
+            console.log("✅ Datos admin cargados");
+            
+            const ligaPorDefecto = {
+                id: 1,
+                nombre: "Liga Principal", 
+                jornada_actual: 1
+            };
+            
+            return {
+                usuario,
+                ligaActual: ligaPorDefecto,
+                jugadores: jugadoresData || [],
+                equipo: null,
+                presupuesto: 0
+            };
+            
+        } else {
+            console.log("Usuario normal, cargando datos de liga y equipo");
+            
+            // Obtener liga
+            let ligaData;
+            if (usuario.liga_id) {
+                ligaData = await getLiga(usuario.liga_id);
+            } else {
+                try {
+                    const ligasData = await getLigas();
+                    ligaData = ligasData && ligasData.length > 0 ? ligasData[0] : null;
+                } catch (error) {
+                    console.log("⚠ No se pudieron cargar ligas, usando valor por defecto");
+                    ligaData = {
+                        id: 1,
+                        nombre: "Liga Principal",
+                        jornada_actual: 1
+                    };
+                }
+            }
+            
+            if (!ligaData) {
+                ligaData = {
+                    id: 1,
+                    nombre: "Liga Principal",
+                    jornada_actual: 1
+                };
+            }
+            
+            // 🆕 MEJORADO: Buscar equipo con múltiples estrategias
+            let equipoData = null;
+            try {
+                console.log(`🔍 Buscando equipo para usuario ID: ${usuario.id}`);
+                
+                // Intentar con usuario_id primero
+                equipoData = await getEquipo(usuario.id);
+                console.log("✅ Resultado búsqueda principal:", equipoData ? "ENCONTRADO" : "NO ENCONTRADO");
+                
+                // Si no funciona, intentar con la alternativa
+                if (!equipoData) {
+                    console.log("🔄 Intentando búsqueda alternativa...");
+                    equipoData = await getEquipoByUsuario(usuario.id);
+                    console.log("✅ Resultado búsqueda alternativa:", equipoData ? "ENCONTRADO" : "NO ENCONTRADO");
+                }
+                
+                // Si aún no hay equipo, usar el endpoint /mi-equipo/
+                if (!equipoData) {
+                    console.log("🔄 Usando endpoint /mi-equipo/...");
+                    equipoData = await getMiEquipo();
+                    console.log("✅ Resultado /mi-equipo/:", equipoData ? "ENCONTRADO" : "NO ENCONTRADO");
+                }
+                
+            } catch (error) {
+                console.error("❌ Error buscando equipo:", error);
+            }
+            
+            console.log("🎯 Equipo final encontrado:", equipoData);
+            
+            // 🆕 DEBUG MEJORADO - Verificar estructura del equipo
+            if (equipoData) {
+                console.log("📊 Estructura completa del equipo:", JSON.stringify(equipoData, null, 2));
+                console.log("👥 Jugadores en equipoData:", equipoData.jugadores);
+                console.log("🔢 Número de jugadores:", equipoData.jugadores ? equipoData.jugadores.length : 0);
+                
+                if (equipoData.jugadores && equipoData.jugadores.length > 0) {
+                    console.log("🎯 Primer jugador ejemplo:", equipoData.jugadores[0]);
+                    console.log("✅ Jugadores cargados correctamente en el equipo");
+                } else {
+                    console.log("❌ No hay jugadores en equipoData.jugadores");
+                    
+                    // 🆕 ESTRATEGIA MEJORADA para cargar jugadores manualmente
+                    try {
+                        console.log("🔄 Intentando cargar jugadores manualmente...");
+                        
+                        // Opción 1: Buscar jugadores por equipo
+                        const jugadoresDelEquipo = await getJugadoresPorEquipo(equipoData.id);
+                        console.log("👤 Jugadores por equipo API:", jugadoresDelEquipo.length);
+                        
+                        if (jugadoresDelEquipo.length > 0) {
+                            equipoData.jugadores = jugadoresDelEquipo;
+                            console.log("✅ Jugadores asignados manualmente desde API específica");
+                        } else {
+                            // Opción 2: Filtrar todos los jugadores
+                            console.log("🔄 Intentando filtrado manual de todos los jugadores...");
+                            const todosJugadores = await getJugadores();
+                            const jugadoresFiltrados = todosJugadores.filter(j => j.equipo === equipoData.id);
+                            console.log("👤 Jugadores filtrados manualmente:", jugadoresFiltrados.length);
+                            
+                            if (jugadoresFiltrados.length > 0) {
+                                equipoData.jugadores = jugadoresFiltrados;
+                                console.log("✅ Jugadores asignados manualmente por filtro");
+                            } else {
+                                console.log("⚠️ El equipo existe pero no tiene jugadores asignados en la base de datos");
+                                
+                                // 🆕 Verificar en la base de datos
+                                console.log("💡 Posibles soluciones:");
+                                console.log("   1. Verificar en Django Admin que los jugadores tengan este equipo asignado");
+                                console.log("   2. Revisar el proceso de registro de usuarios");
+                                console.log("   3. Contactar al administrador del sistema");
+                            }
+                        }
+                    } catch (error) {
+                        console.error("❌ Error cargando jugadores manualmente:", error);
+                    }
+                }
+            } else {
+                console.log("❌ No se pudo encontrar equipo para el usuario");
+                console.log("💡 El usuario necesita crear un equipo o contactar al administrador");
+            }
+            
+            return {
+                usuario,
+                ligaActual: ligaData,
+                jugadores: [],
+                equipo: equipoData,
+                presupuesto: equipoData?.presupuesto || 0
+            };
+        }
+    } catch (error) {
+        console.error("❌ Error cargando datos iniciales:", error);
+        
+        return {
+            usuario,
+            ligaActual: {
+                id: 1,
+                nombre: "Liga Principal",
+                jornada_actual: 1
+            },
+            jugadores: [],
+            equipo: null,
+            presupuesto: 0
+        };
+    }
+};
 
   const NavBar = ({ role }) => (
     <div className="bg-gray-800 text-white p-4 flex justify-between items-center">
@@ -110,44 +251,6 @@ const FantasyFutsalWireframes = () => {
       </div>
     </div>
   );
-
-  const PlayerCard = ({ player, positionLabel, onRemove }) => {
-    const getBadgeColor = (pts) => {
-      if (pts > 0) return 'bg-green-500';
-      if (pts < 0) return 'bg-red-500';
-      return 'bg-gray-400';
-    };
-
-    const formatValue = (value) => {
-      return `€${(value / 1000000).toFixed(1)}M`;
-    };
-
-    return (
-      <div className="flex flex-col items-center cursor-pointer group relative">
-        <div className="mb-1 bg-gray-900/80 text-white text-xs font-bold px-2 py-0.5 rounded">
-          {positionLabel}
-        </div>
-        <div className="relative">
-          <Users size={48} className="text-blue-600 group-hover:text-blue-800 transition-colors drop-shadow-lg" />
-          <div className={`absolute -top-1 -right-1 ${getBadgeColor(0)} text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white`}>
-            0
-          </div>
-        </div>
-        <div className="mt-2 bg-white/90 backdrop-blur px-3 py-1 rounded-lg shadow-md text-center min-w-[120px]">
-          <div className="font-bold text-sm">{player.nombre}</div>
-          <div className="text-xs text-gray-600">{formatValue(player.valor)} • {player.puntos_totales}pts</div>
-        </div>
-        {onRemove && (
-          <button 
-            onClick={() => onRemove(player.id)}
-            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <Minus size={16} />
-          </button>
-        )}
-      </div>
-    );
-  };
 
   const RegisterScreen = () => {
     const [formData, setFormData] = useState({
@@ -381,29 +484,32 @@ const FantasyFutsalWireframes = () => {
       setError('');
       
       try {
-        console.log('🔐 Intentando login en:', `${API_URL}/auth/login/`);  // Debería mostrar /api/auth/login/
-        
-        // ✅ Usar loginUser de api.js (que ya incluye /api/)
-        const data = await loginUser(username, password);
-        
-        localStorage.setItem('access_token', data.access);
-        localStorage.setItem('refresh_token', data.refresh);
-        
-        console.log('✅ Login exitoso, token obtenido');
-        
-        // Obtener información del usuario
-        const userData = await getCurrentUser();  // ✅ /api/auth/user/
-        const isUserAdmin = userData.is_superuser || userData.is_staff || username === 'admin';
-        setIsAdmin(isUserAdmin);
-        
-        setCurrentScreen(isUserAdmin ? 'admin' : 'dashboard');
-        await cargarDatosIniciales();
-        
+          console.log('🔐 Intentando login en:', `${API_URL}/auth/login/`);
+          
+          const data = await loginUser(username, password);
+          
+          localStorage.setItem('access_token', data.access);
+          localStorage.setItem('refresh_token', data.refresh);
+          
+          console.log('✅ Login exitoso, token obtenido');
+          
+          const userData = await getCurrentUser();
+          console.log('👤 Datos usuario:', userData);
+          
+          const isUserAdmin = userData.is_superuser || userData.is_staff || username === 'admin';
+          setIsAdmin(isUserAdmin);
+          
+          // ✅ Cargar datos y guardarlos en el estado
+          const datosIniciales = await cargarDatosIniciales(userData);
+          setDatosUsuario(datosIniciales);
+          setEquipoActual(datosIniciales.equipo);
+          setCurrentScreen(isUserAdmin ? 'admin' : 'dashboard');
+          
       } catch (error) {
-        console.error('❌ Error en login:', error);
-        setError(error.message || 'Error en el login');
+          console.error('❌ Error en login:', error);
+          setError(error.message || 'Error en el login');
       } finally {
-        setIsLoading(false);
+          setIsLoading(false);
       }
     };
 
@@ -471,261 +577,722 @@ const FantasyFutsalWireframes = () => {
     );
   };
 
-  const DashboardScreen = () => {
-    if (loading) {
-      return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
-            <p className="text-xl">Cargando datos...</p>
-          </div>
-        </div>
-      );
-    }
+const DashboardScreen = () => {
+  // Estados para gestión de cambios
+  const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
+  const [modoCambio, setModoCambio] = useState(false);
+  const [jugadorOrigenCambio, setJugadorOrigenCambio] = useState(null);
+  const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
+  const [precioVenta, setPrecioVenta] = useState('');
+  const [jugadorAVender, setJugadorAVender] = useState(null);
+  const [mostrarModalOpciones, setMostrarModalOpciones] = useState(false);
+  
+  // 🆕 ESTADOS PARA LA ALINEACIÓN
+  const [portero_titular, setPorteroTitular] = useState(null);
+  const [defensas_titulares, setDefensasTitulares] = useState([]);
+  const [delanteros_titulares, setDelanterosTitulares] = useState([]);
+  const [banquillo, setBanquillo] = useState([]);
+  const [alineacionCargada, setAlineacionCargada] = useState(false);
 
-    if (error) {
-      return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-          <div className="bg-red-50 border-2 border-red-300 p-6 rounded-lg">
-            <p className="text-red-600 font-bold">Error: {error}</p>
-            <button 
-              onClick={cargarDatosIniciales}
-              className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-            >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (!equipoActual) {
-      return (
-        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-          <p>No hay equipo disponible</p>
-        </div>
-      );
-    }
-
-    const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
-    const calcularPuntosTotales = () => equipoActual.jugadores.reduce((sum, j) => sum + j.puntos_totales, 0);
-    const miPosicion = clasificacion.findIndex(e => e.equipo_id === equipoActual.id) + 1;
-
-    // Separar jugadores por posición y banquillo
-    const portero = equipoActual.jugadores.find(j => j.posicion === 'POR');
-    const defensas = equipoActual.jugadores.filter(j => j.posicion === 'DEF');
-    const delanteros = equipoActual.jugadores.filter(j => j.posicion === 'DEL');
-    
-    // Banquillo: todos los jugadores que no están en la alineación base
-    // (asumiendo que los primeros 5 son titulares: 1 POR + 2 DEF + 2 DEL)
-    const banquillo = equipoActual.jugadores.slice(5); // Jugadores del 6º en adelante
-
-    const totalJugadores = equipoActual.jugadores.length;
-    const maxJugadores = 13;
-
-    const puedeVenderJugador = (jugador) => {
-      if (!equipoActual || !equipoActual.jugadores) return false;
-
-      const jugadores = equipoActual.jugadores;
-      
-      // Contar jugadores por posición
-      const contarPorPosicion = {
-        'POR': jugadores.filter(j => j.posicion === 'POR').length,
-        'DEF': jugadores.filter(j => j.posicion === 'DEF').length,
-        'DEL': jugadores.filter(j => j.posicion === 'DEL').length
-      };
-
-      // Verificar si al vender este jugador quedaría alguna posición vacía
-      if (jugador.posicion === 'POR' && contarPorPosicion.POR === 1) {
-        return false; // No se puede vender el único portero
+  // Efecto para cerrar al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (jugadorSeleccionado && !event.target.closest('.modal-content')) {
+        setJugadorSeleccionado(null);
+        setMostrarModalOpciones(false);
       }
-      
-      if (jugador.posicion === 'DEF' && contarPorPosicion.DEF === 2) {
-        return false; // No se puede vender si solo hay 2 defensas
-      }
-      
-      if (jugador.posicion === 'DEL' && contarPorPosicion.DEL === 2) {
-        return false; // No se puede vender si solo hay 2 delanteros
-      }
-
-      return true;
     };
 
-    const handleVenderJugador = async (jugadorId) => {
-      // Buscar el jugador en el equipo actual
-      const jugador = equipoActual.jugadores.find(j => j.id === jugadorId);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [jugadorSeleccionado]);
+
+  // 🆕 FUNCIÓN PARA RECARGAR DATOS DEL EQUIPO
+  const recargarDatosEquipo = async () => {
+    try {
+      console.log('🔄 Recargando datos del equipo...');
+      const userData = await getCurrentUser();
+      const nuevosDatos = await cargarDatosIniciales(userData);
       
-      if (!jugador) {
-        alert('Jugador no encontrado en el equipo');
-        return;
-      }
+      // Actualizar todos los estados
+      setDatosUsuario(nuevosDatos);
+      setEquipoActual(nuevosDatos.equipo);
+      
+      console.log('✅ Datos recargados correctamente');
+      return nuevosDatos;
+    } catch (error) {
+      console.error('❌ Error recargando datos:', error);
+      throw error;
+    }
+  };
 
-      // Validar si se puede vender
-      if (!puedeVenderJugador(jugador)) {
-        const mensajesError = {
-          'POR': 'No puedes vender a tu único portero. Debes tener al menos 1 portero en el equipo.',
-          'DEF': 'No puedes vender este defensa. Debes tener al menos 2 defensas en el equipo.',
-          'DEL': 'No puedes vender este delantero. Debes tener al menos 2 delanteros en el equipo.'
-        };
-        
-        alert(mensajesError[jugador.posicion]);
-        return;
-      }
+  // 🆕 FUNCIÓN MEJORADA PARA DETERMINAR TITULARES Y BANQUILLO
+  const determinarAlineacion = async (jugadores, equipoId) => {
+    console.log('🎯 Determinando alineación...');
+    
+    const portero = jugadores.find(j => j.posicion === 'POR');
+    const defensas = jugadores.filter(j => j.posicion === 'DEF');
+    const delanteros = jugadores.filter(j => j.posicion === 'DEL');
 
-      // Si pasa la validación, proceder con la venta
-      if (window.confirm(`¿Seguro que quieres vender a ${jugador.nombre}?`)) {
+    console.log(`📊 Jugadores por posición: POR:${portero ? 1 : 0}, DEF:${defensas.length}, DEL:${delanteros.length}`);
+
+    // 🆕 LÓGICA MEJORADA: Usar en_banquillo si está definido, si no usar puntos
+    let defensas_titulares, delanteros_titulares;
+
+    // Si hay jugadores con en_banquillo definido, usarlos
+    const defensasEnCampo = defensas.filter(d => d.en_banquillo === false);
+    const delanterosEnCampo = delanteros.filter(d => d.en_banquillo === false);
+
+    if (defensasEnCampo.length >= 2) {
+      defensas_titulares = defensasEnCampo.slice(0, 2);
+    } else {
+      // Si no hay suficientes definidos, usar los mejores por puntos
+      defensas_titulares = [...defensas]
+        .sort((a, b) => b.puntos_totales - a.puntos_totales)
+        .slice(0, 2);
+    }
+
+    if (delanterosEnCampo.length >= 2) {
+      delanteros_titulares = delanterosEnCampo.slice(0, 2);
+    } else {
+      delanteros_titulares = [...delanteros]
+        .sort((a, b) => b.puntos_totales - a.puntos_totales)
+        .slice(0, 2);
+    }
+
+    const portero_titular = portero;
+
+    console.log('🏆 Titulares seleccionados:');
+    console.log('   POR:', portero_titular?.nombre);
+    console.log('   DEF:', defensas_titulares.map(d => d.nombre));
+    console.log('   DEL:', delanteros_titulares.map(d => d.nombre));
+
+    // Determinar banquillo
+    const titulares = [portero_titular, ...defensas_titulares, ...delanteros_titulares].filter(Boolean);
+    const banquillo = jugadores.filter(jugador => !titulares.includes(jugador));
+
+    console.log('🪑 Banquillo:', banquillo.map(b => b.nombre));
+
+    // 🆕 PREPARAR DATOS PARA SINCRONIZAR
+    const estadosParaSincronizar = jugadores.map(jugador => ({
+      jugador_id: jugador.id,
+      en_banquillo: !titulares.includes(jugador)
+    }));
+
+    // 🆕 SINCRONIZAR CON EL BACKEND
+    try {
+      console.log('🔄 Sincronizando estados con el backend...');
+      await actualizarEstadosBanquillo(equipoId, estadosParaSincronizar);
+      console.log('✅ Estados sincronizados correctamente');
+    } catch (error) {
+      console.error('❌ Error sincronizando estados:', error);
+      // No bloquear la UI si falla la sincronización
+    }
+
+    return {
+      portero_titular,
+      defensas_titulares,
+      delanteros_titulares,
+      banquillo
+    };
+  };
+
+  // 🆕 EFFECT PARA CARGAR LA ALINEACIÓN CUANDO CAMBIA EL EQUIPO
+  useEffect(() => {
+    const cargarAlineacion = async () => {
+      if (equipoActual && equipoActual.jugadores) {
         try {
-          await venderJugador(equipoActual.id, jugadorId);
-          await cargarDatosIniciales();
-          alert('✅ Jugador vendido exitosamente');
-        } catch (err) {
-          alert('❌ Error al vender jugador: ' + err.message);
+          console.log('🔄 Cargando alineación...');
+          const alineacion = await determinarAlineacion(equipoActual.jugadores, equipoActual.id);
+          
+          setPorteroTitular(alineacion.portero_titular);
+          setDefensasTitulares(alineacion.defensas_titulares);
+          setDelanterosTitulares(alineacion.delanteros_titulares);
+          setBanquillo(alineacion.banquillo);
+          setAlineacionCargada(true);
+          
+          console.log('✅ Alineación cargada correctamente');
+        } catch (error) {
+          console.error('❌ Error cargando alineación:', error);
+          setAlineacionCargada(true); // Marcar como cargada incluso si hay error
         }
       }
     };
 
+    cargarAlineacion();
+  }, [equipoActual]); // Se ejecuta cuando cambia equipoActual
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100">
-        <NavBar role={isAdmin ? 'admin' : 'user'} />
-        <div className="p-6">
-          {/* Contador de jugadores */}
-          <div className="mb-4 bg-white p-4 rounded-lg shadow border-2 border-gray-300">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">Plantilla del Equipo</h3>
-                <p className="text-sm text-gray-600">
-                  {totalJugadores}/{maxJugadores} jugadores
-                </p>
-              </div>
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                totalJugadores >= maxJugadores 
-                  ? 'bg-red-100 text-red-800' 
-                  : totalJugadores >= 10 
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800'
-              }`}>
-                {totalJugadores >= maxJugadores ? 'Plantilla completa' : 
-                 totalJugadores >= 10 ? 'Casi completa' : 'Disponible para fichajes'}
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-6 grid grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-              <div className="text-sm text-gray-600">Presupuesto</div>
-              <div className="text-2xl font-bold text-blue-600">{formatValue(equipoActual.presupuesto)}</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-              <div className="text-sm text-gray-600">Puntos Totales</div>
-              <div className="text-2xl font-bold text-green-600">{calcularPuntosTotales()}</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
-              <div className="text-sm text-gray-600">Posición Liga</div>
-              <div className="text-2xl font-bold text-purple-600">{miPosicion}º</div>
-            </div>
-          </div>
-
-          <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
-            <Users size={28} />
-            {equipoActual.nombre}
-          </h2>
-
-          {/* Campo de fútbol */}
-          <div className="bg-amber-50 rounded-lg shadow-2xl p-6 relative overflow-hidden border-4 border-blue-500 max-w-4xl mx-auto">
-            <div className="absolute inset-0">
-              <div className="absolute left-2 top-2 bottom-2 w-1 bg-blue-500"></div>
-              <div className="absolute right-2 top-2 bottom-2 w-1 bg-blue-500"></div>
-              <div className="absolute left-2 right-2 bottom-2 h-1 bg-blue-500"></div>
-              <div className="absolute left-2 right-2 top-2 h-1 bg-blue-500"></div>
-              <div className="absolute left-1/2 top-2 transform -translate-x-1/2 w-24 h-12 border-4 border-blue-500 border-t-0 rounded-b-full"></div>
-              <div className="absolute left-1/2 bottom-2 transform -translate-x-1/2 w-48 h-20 border-4 border-blue-500 border-b-0 rounded-t-3xl"></div>
-              <div className="absolute left-1/2 bottom-16 transform -translate-x-1/2 w-3 h-3 bg-blue-500 rounded-full"></div>
-              <div className="absolute bottom-2 left-2 w-6 h-6 border-l-4 border-b-4 border-blue-500 rounded-bl-full"></div>
-              <div className="absolute bottom-2 right-2 w-6 h-6 border-r-4 border-b-4 border-blue-500 rounded-br-full"></div>
-              <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-blue-500"></div>
-              <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-blue-500"></div>
-            </div>
-
-            <div className="relative z-10">
-              <div className="relative z-10 h-96 flex flex-col justify-between py-4 pb-12">
-                <div className="flex justify-around px-24">
-                  {delanteros.slice(0, 2).map((del, idx) => (
-                    <PlayerCard 
-                      key={del.id} 
-                      player={del} 
-                      positionLabel="ATA" 
-                      onRemove={handleVenderJugador}
-                    />
-                  ))}
-                </div>
-
-                <div className="flex justify-around px-24">
-                  {defensas.slice(0, 2).map((def, idx) => (
-                    <PlayerCard 
-                      key={def.id} 
-                      player={def} 
-                      positionLabel="DEF"
-                      onRemove={handleVenderJugador}
-                    />
-                  ))}
-                </div>
-
-                <div className="flex justify-center">
-                  {portero && (
-                    <PlayerCard 
-                      player={portero} 
-                      positionLabel="POR"
-                      onRemove={handleVenderJugador}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Banquillo */}
-          {banquillo.length > 0 && (
-            <div className="mt-8 bg-white rounded-lg shadow border-2 border-gray-300 p-6">
-              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Users size={20} />
-                Banquillo ({banquillo.length} jugadores)
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {banquillo.map((jugador) => (
-                  <div key={jugador.id} className="border-2 border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <div className="font-bold text-sm">{jugador.nombre}</div>
-                        <div className="text-xs text-gray-600 capitalize">
-                          {jugador.posicion === 'POR' ? 'Portero' : 
-                           jugador.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
-                        </div>
-                      </div>
-                      <div className="text-xs font-bold text-green-600">
-                        {formatValue(jugador.valor)}
-                      </div>
-                    </div>
-                    <div className="text-xs text-gray-500 mb-2">
-                      {jugador.puntos_totales} pts
-                    </div>
-                    <button
-                      onClick={() => handleVenderJugador(jugador.id)}
-                      className="w-full bg-red-600 text-white py-1 px-3 rounded text-xs hover:bg-red-700"
-                    >
-                      Vender
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-2 gap-4">
-          </div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
+          <p className="text-xl">Cargando datos...</p>
         </div>
       </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-red-50 border-2 border-red-300 p-6 rounded-lg">
+          <p className="text-red-600 font-bold">Error: {error}</p>
+          <button 
+            onClick={recargarDatosEquipo}
+            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!equipoActual) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <p>No hay equipo disponible</p>
+      </div>
+    );
+  }
+
+  // 🆕 MOSTRAR LOADING MIENTRAS SE CARGA LA ALINEACIÓN
+  if (!alineacionCargada) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
+          <p className="text-xl">Cargando alineación...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
+  const calcularPuntosTotales = () => equipoActual.jugadores.reduce((sum, j) => sum + j.puntos_totales, 0);
+  const miPosicion = clasificacion.findIndex(e => e.equipo_id === equipoActual.id) + 1;
+
+  const totalJugadores = equipoActual.jugadores.length;
+  const maxJugadores = 13;
+
+  // 🆕 FUNCIÓN PARA ETIQUETAS DE POSICIÓN
+  const getEtiquetaPosicion = (posicion) => {
+    const etiquetas = {
+      'POR': 'POR',
+      'DEF': 'DEF', 
+      'DEL': 'ATA'  // 🎯 DEL se muestra como ATA
+    };
+    return etiquetas[posicion] || posicion;
   };
+
+  // Función para manejar clic en jugador
+  const handleClicJugador = (jugador) => {
+    if (modoCambio && jugadorOrigenCambio) {
+      // Segundo clic en modo cambio - realizar el intercambio
+      realizarCambio(jugadorOrigenCambio, jugador);
+    } else {
+      // Clic normal - mostrar opciones
+      setJugadorSeleccionado(jugador);
+      setMostrarModalOpciones(true);
+    }
+  };
+
+  // Función para iniciar modo cambio
+  const iniciarModoCambio = (jugador) => {
+    setJugadorOrigenCambio(jugador);
+    setModoCambio(true);
+    setMostrarModalOpciones(false);
+    setJugadorSeleccionado(null);
+  };
+
+  // Función para cancelar modo cambio
+  const cancelarModoCambio = () => {
+    setModoCambio(false);
+    setJugadorOrigenCambio(null);
+  };
+
+  // 🆕 FUNCIÓN CORREGIDA PARA REALIZAR EL CAMBIO
+  const realizarCambio = async (origen, destino) => {
+    console.log('🔄 REALIZAR CAMBIO - Datos completos:');
+    console.log('   Origen:', origen);
+    console.log('   Destino:', destino);
+    console.log('   Equipo Actual:', equipoActual);
+    
+    // Validar que sean de la misma posición
+    if (origen.posicion !== destino.posicion) {
+      alert(`❌ No puedes cambiar un ${origen.posicion} por un ${destino.posicion}. Deben ser de la misma posición.`);
+      cancelarModoCambio();
+      return;
+    }
+
+    try {
+      console.log('📡 Llamando a intercambiarJugadores...');
+      await intercambiarJugadores(equipoActual.id, origen.id, destino.id);
+      
+      console.log('🔄 Recargando datos...');
+      await recargarDatosEquipo();
+      
+      alert(`✅ Cambio realizado: ${origen.nombre} ↔ ${destino.nombre}`);
+    } catch (err) {
+      console.error('❌ Error en realizarCambio:', err);
+      alert('❌ Error al realizar el cambio: ' + err.message);
+    } finally {
+      cancelarModoCambio();
+    }
+  };
+
+  // Función para determinar el estado visual del jugador
+  const getEstadoJugador = (jugador) => {
+    if (modoCambio) {
+      if (jugador.id === jugadorOrigenCambio?.id) {
+        return 'origen-cambio'; // Jugador origen del cambio
+      } else if (jugador.posicion === jugadorOrigenCambio?.posicion) {
+        return 'apto-cambio'; // Jugadores de la misma posición (aptos)
+      } else {
+        return 'no-apto-cambio'; // Jugadores de diferente posición
+      }
+    } else if (jugador.id === jugadorSeleccionado?.id) {
+      return 'seleccionado'; // Jugador seleccionado normal
+    }
+    return 'normal'; // Estado normal
+  };
+
+  // Función para abrir modal de venta
+  const abrirModalVenta = (jugador) => {
+    setJugadorAVender(jugador);
+    setPrecioVenta(jugador.valor.toString());
+    setMostrarModalVenta(true);
+    setJugadorSeleccionado(null);
+    setMostrarModalOpciones(false);
+  };
+
+  // Función para cerrar modal de venta
+  const cerrarModalVenta = () => {
+    setMostrarModalVenta(false);
+    setJugadorAVender(null);
+    setPrecioVenta('');
+  };
+
+  // 🆕 FUNCIÓN CORREGIDA PARA CONFIRMAR VENTA
+  const confirmarVentaMercado = async () => {
+    if (!jugadorAVender || !precioVenta) return;
+
+    try {
+      await venderJugador(equipoActual.id, jugadorAVender.id, parseInt(precioVenta));
+      await recargarDatosEquipo();
+      cerrarModalVenta();
+      alert('✅ Jugador puesto en venta en el mercado');
+    } catch (err) {
+      alert('❌ Error al poner en venta: ' + err.message);
+    }
+  };
+
+  const puedeVenderJugador = (jugador) => {
+    if (!equipoActual || !equipoActual.jugadores) return false;
+
+    const jugadores = equipoActual.jugadores;
+    
+    const contarPorPosicion = {
+      'POR': jugadores.filter(j => j.posicion === 'POR').length,
+      'DEF': jugadores.filter(j => j.posicion === 'DEF').length,
+      'DEL': jugadores.filter(j => j.posicion === 'DEL').length
+    };
+
+    if (jugador.posicion === 'POR' && contarPorPosicion.POR === 1) return false;
+    if (jugador.posicion === 'DEF' && contarPorPosicion.DEF === 2) return false;
+    if (jugador.posicion === 'DEL' && contarPorPosicion.DEL === 2) return false;
+
+    return true;
+  };
+
+  // Función para manejar venta desde el botón del PlayerCard
+  const handleVenderJugador = (jugador) => {
+    if (!puedeVenderJugador(jugador)) {
+      const mensajesError = {
+        'POR': 'No puedes vender a tu único portero.',
+        'DEF': 'No puedes vender este defensa (mínimo 2).',
+        'DEL': 'No puedes vender este delantero (mínimo 2).'
+      };
+      alert(mensajesError[jugador.posicion]);
+      return;
+    }
+    abrirModalVenta(jugador);
+  };
+
+  // PlayerCard modificado para soportar los diferentes estados
+  const PlayerCard = ({ player, onRemove, onSelect, estado = 'normal' }) => {
+    const getBadgeColor = (pts) => {
+      if (pts > 0) return 'bg-green-500';
+      if (pts < 0) return 'bg-red-500';
+      return 'bg-gray-400';
+    };
+
+    const formatValue = (value) => {
+      return `€${(value / 1000000).toFixed(1)}M`;
+    };
+
+    // Determinar estilos según el estado
+    const getEstilosPorEstado = () => {
+      switch(estado) {
+        case 'origen-cambio':
+          return {
+            container: 'scale-110 transform ring-4 ring-yellow-500 bg-yellow-50',
+            badge: 'bg-yellow-600',
+            icon: 'text-yellow-600',
+            card: 'bg-yellow-100 border-2 border-yellow-500'
+          };
+        case 'apto-cambio':
+          return {
+            container: 'scale-105 transform ring-2 ring-green-400 bg-green-50 cursor-pointer hover:scale-110',
+            badge: 'bg-green-600',
+            icon: 'text-green-600',
+            card: 'bg-green-50 border-2 border-green-400'
+          };
+        case 'no-apto-cambio':
+          return {
+            container: 'opacity-50 cursor-not-allowed',
+            badge: 'bg-gray-600',
+            icon: 'text-gray-400',
+            card: 'bg-gray-100 border-gray-300'
+          };
+        case 'seleccionado':
+          return {
+            container: 'scale-110 transform',
+            badge: 'bg-green-600',
+            icon: 'text-green-600',
+            card: 'bg-green-100 border-2 border-green-500'
+          };
+        default:
+          return {
+            container: '',
+            badge: 'bg-gray-900/80',
+            icon: 'text-blue-600 group-hover:text-blue-800',
+            card: 'bg-white/90'
+          };
+      }
+    };
+
+    const estilos = getEstilosPorEstado();
+
+    return (
+      <div 
+        className={`flex flex-col items-center cursor-pointer group relative transition-all ${estilos.container}`}
+        onClick={() => onSelect && onSelect(player)}
+      >
+        {/* 🎯 CORREGIDO: Usar etiqueta correcta */}
+        <div className={`mb-1 text-white text-xs font-bold px-2 py-0.5 rounded ${estilos.badge}`}>
+          {getEtiquetaPosicion(player.posicion)}
+        </div>
+        <div className="relative">
+          <Users 
+            size={48} 
+            className={`transition-colors drop-shadow-lg ${estilos.icon}`} 
+          />
+          <div className={`absolute -top-1 -right-1 ${getBadgeColor(player.puntos_totales)} text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white`}>
+            {player.puntos_totales}
+          </div>
+        </div>
+        <div className={`mt-2 backdrop-blur px-3 py-1 rounded-lg shadow-md text-center min-w-[120px] transition-all ${estilos.card}`}>
+          <div className="font-bold text-sm">{player.nombre}</div>
+          <div className="text-xs text-gray-600">
+            {formatValue(player.valor)} • {player.equipo_real}
+          </div>
+        </div>
+        
+        {/* Botón de eliminar/vender (solo en estado normal) */}
+        {onRemove && estado === 'normal' && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(player);
+            }}
+            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Minus size={16} />
+          </button>
+        )}
+
+        {/* Indicadores de estado */}
+        {estado === 'origen-cambio' && (
+          <div className="absolute -top-1 -left-1 bg-yellow-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="text-[10px] font-bold">↔</span>
+          </div>
+        )}
+        {estado === 'apto-cambio' && (
+          <div className="absolute -top-1 -left-1 bg-green-500 text-white rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="text-[10px] font-bold">✓</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <NavBar role={isAdmin ? 'admin' : 'user'} />
+      <div className="p-6">
+        {/* Contador de jugadores */}
+        <div className="mb-4 bg-white p-4 rounded-lg shadow border-2 border-gray-300">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Plantilla del Equipo</h3>
+              <p className="text-sm text-gray-600">
+                {totalJugadores}/{maxJugadores} jugadores
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {modoCambio ? (
+                <button
+                  onClick={cancelarModoCambio}
+                  className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700"
+                >
+                  ✕ Cancelar Cambio
+                </button>
+              ) : (
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  totalJugadores >= maxJugadores 
+                    ? 'bg-red-100 text-red-800' 
+                    : totalJugadores >= 10 
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-green-100 text-green-800'
+                }`}>
+                  {totalJugadores >= maxJugadores ? 'Plantilla completa' : 
+                   totalJugadores >= 10 ? 'Casi completa' : 'Disponible para fichajes'}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Información del modo cambio */}
+          {modoCambio && jugadorOrigenCambio && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-sm text-yellow-800">
+                🔄 <strong>Modo cambio activado:</strong> Has seleccionado <strong>{jugadorOrigenCambio.nombre}</strong>. 
+                Ahora selecciona un {jugadorOrigenCambio.posicion === 'POR' ? 'portero' : 
+                jugadorOrigenCambio.posicion === 'DEF' ? 'defensa' : 'delantero'} para intercambiarlo.
+              </p>
+            </div>
+          )}
+          
+          {jugadorSeleccionado && !modoCambio && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">
+                💡 <strong>{jugadorSeleccionado.nombre}</strong> seleccionado. Elige una opción del menú.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-6 grid grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
+            <div className="text-sm text-gray-600">Presupuesto</div>
+            <div className="text-2xl font-bold text-blue-600">{formatValue(equipoActual.presupuesto)}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+            <div className="text-sm text-gray-600">Puntos Totales</div>
+            <div className="text-2xl font-bold text-green-600">{calcularPuntosTotales()}</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
+            <div className="text-sm text-gray-600">Posición Liga</div>
+            <div className="text-2xl font-bold text-purple-600">{miPosicion}º</div>
+          </div>
+        </div>
+
+        <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
+          <Users size={28} />
+          {equipoActual.nombre}
+        </h2>
+
+        {/* Campo de fútbol */}
+        <div className="bg-amber-50 rounded-lg shadow-2xl p-6 relative overflow-hidden border-4 border-blue-500 max-w-4xl mx-auto">
+          <div className="absolute inset-0">
+            <div className="absolute left-2 top-2 bottom-2 w-1 bg-blue-500"></div>
+            <div className="absolute right-2 top-2 bottom-2 w-1 bg-blue-500"></div>
+            <div className="absolute left-2 right-2 bottom-2 h-1 bg-blue-500"></div>
+            <div className="absolute left-2 right-2 top-2 h-1 bg-blue-500"></div>
+            <div className="absolute left-1/2 top-2 transform -translate-x-1/2 w-24 h-12 border-4 border-blue-500 border-t-0 rounded-b-full"></div>
+            <div className="absolute left-1/2 bottom-2 transform -translate-x-1/2 w-48 h-20 border-4 border-blue-500 border-b-0 rounded-t-3xl"></div>
+            <div className="absolute left-1/2 bottom-16 transform -translate-x-1/2 w-3 h-3 bg-blue-500 rounded-full"></div>
+            <div className="absolute bottom-2 left-2 w-6 h-6 border-l-4 border-b-4 border-blue-500 rounded-bl-full"></div>
+            <div className="absolute bottom-2 right-2 w-6 h-6 border-r-4 border-b-4 border-blue-500 rounded-br-full"></div>
+            <div className="absolute top-2 left-2 w-4 h-4 border-l-2 border-t-2 border-blue-500"></div>
+            <div className="absolute top-2 right-2 w-4 h-4 border-r-2 border-t-2 border-blue-500"></div>
+          </div>
+
+          <div className="relative z-10">
+            <div className="relative z-10 h-96 flex flex-col justify-between py-4 pb-12">
+              {/* Delanteros TITULARES */}
+              <div className="flex justify-around px-24">
+                {delanteros_titulares.map((del, idx) => (
+                  <PlayerCard 
+                    key={del.id} 
+                    player={del}
+                    onSelect={handleClicJugador}
+                    estado={getEstadoJugador(del)}
+                  />
+                ))}
+              </div>
+
+              {/* Defensas TITULARES */}
+              <div className="flex justify-around px-24">
+                {defensas_titulares.map((def, idx) => (
+                  <PlayerCard 
+                    key={def.id} 
+                    player={def}
+                    onSelect={handleClicJugador}
+                    estado={getEstadoJugador(def)}
+                  />
+                ))}
+              </div>
+
+              {/* Portero TITULAR */}
+              <div className="flex justify-center">
+                {portero_titular && (
+                  <PlayerCard 
+                    player={portero_titular}
+                    onSelect={handleClicJugador}
+                    estado={getEstadoJugador(portero_titular)}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Banquillo */}
+        {banquillo.length > 0 && (
+          <div className="mt-8 bg-white rounded-lg shadow border-2 border-gray-300 p-6">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Users size={20} />
+              Banquillo ({banquillo.length} jugadores)
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {banquillo.map((jugador) => (
+                <PlayerCard 
+                  key={jugador.id} 
+                  player={jugador} 
+                  onRemove={modoCambio ? null : handleVenderJugador}
+                  onSelect={handleClicJugador}
+                  estado={getEstadoJugador(jugador)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de opciones cuando un jugador está seleccionado */}
+        {mostrarModalOpciones && jugadorSeleccionado && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
+              <h3 className="text-xl font-bold mb-4">Opciones para {jugadorSeleccionado.nombre}</h3>
+              
+              <div className="mb-4 p-3 bg-gray-50 rounded">
+                <p className="font-semibold">{jugadorSeleccionado.nombre}</p>
+                <p className="text-sm text-gray-600">
+                  {jugadorSeleccionado.posicion === 'POR' ? 'Portero' : 
+                   jugadorSeleccionado.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
+                </p>
+                <p className="text-sm">Valor: {formatValue(jugadorSeleccionado.valor)}</p>
+                <p className="text-sm">Puntos: {jugadorSeleccionado.puntos_totales}</p>
+              </div>
+
+              <div className="flex gap-2 flex-col">
+                <button
+                  onClick={() => iniciarModoCambio(jugadorSeleccionado)}
+                  className="bg-blue-600 text-white py-3 px-4 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw size={16} />
+                  Cambiar
+                </button>
+                <button
+                  onClick={() => {
+                    if (!puedeVenderJugador(jugadorSeleccionado)) {
+                      const mensajesError = {
+                        'POR': 'No puedes vender a tu único portero.',
+                        'DEF': 'No puedes vender este defensa (mínimo 2).',
+                        'DEL': 'No puedes vender este delantero (mínimo 2).'
+                      };
+                      alert(mensajesError[jugadorSeleccionado.posicion]);
+                      return;
+                    }
+                    abrirModalVenta(jugadorSeleccionado);
+                  }}
+                  className="bg-red-600 text-white py-3 px-4 rounded text-sm hover:bg-red-700 flex items-center justify-center gap-2"
+                >
+                  <span>💰</span>
+                  Poner en el mercado
+                </button>
+                <button
+                  onClick={() => {
+                    setJugadorSeleccionado(null);
+                    setMostrarModalOpciones(false);
+                  }}
+                  className="bg-gray-600 text-white py-3 px-4 rounded text-sm hover:bg-gray-700 flex items-center justify-center gap-2"
+                >
+                  <span>✕</span>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de venta en mercado */}
+        {mostrarModalVenta && jugadorAVender && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
+              <h3 className="text-xl font-bold mb-4">Poner en el Mercado</h3>
+              
+              <div className="mb-4 p-3 bg-gray-50 rounded">
+                <p className="font-semibold">{jugadorAVender.nombre}</p>
+                <p className="text-sm text-gray-600">
+                  {jugadorAVender.posicion === 'POR' ? 'Portero' : 
+                   jugadorAVender.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
+                </p>
+                <p className="text-sm">Valor actual: {formatValue(jugadorAVender.valor)}</p>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Precio de venta:
+                </label>
+                <input
+                  type="number"
+                  value={precioVenta}
+                  onChange={(e) => setPrecioVenta(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded"
+                  placeholder="Ej: 5000000"
+                  min={0}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Precio sugerido: {formatValue(jugadorAVender.valor)}
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmarVentaMercado}
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
+                >
+                  Confirmar Venta
+                </button>
+                <button
+                  onClick={cerrarModalVenta}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
   const MarketScreen = () => {
     const [filtro, setFiltro] = useState('');
@@ -898,25 +1465,31 @@ const FantasyFutsalWireframes = () => {
     );
   };
 
-  const AdminScreen = ({ jugadores, ligaActual, setCurrentScreen, asignarPuntos, cargarDatosIniciales }) => {
+const AdminScreen = ({ jugadores, ligaActual, setCurrentScreen, asignarPuntos, cargarDatosIniciales }) => {
       const [puntuaciones, setPuntuaciones] = useState({});
       const [nuevaJornadaNumero, setNuevaJornadaNumero] = useState('');
       const [vista, setVista] = useState('jornadas');
       const [busqueda, setBusqueda] = useState('');
       const [filtroEquipo, setFiltroEquipo] = useState('todos');
-      const [jornadaSeleccionada, setJornadaSeleccionada] = useState(ligaActual?.jornada_actual || 1);
       const [jornadas, setJornadas] = useState([]);
-      const [jornadaDetalle, setJornadaDetalle] = useState(null);
-      const [partidos, setPartidos] = useState([]);
+      const [partidos, setPartidos] = useState({});
       const [equiposReales, setEquiposReales] = useState([]);
-      const [nuevoPartido, setNuevoPartido] = useState({ equipo_local: '', equipo_visitante: '' });
+      const [nuevosPartidos, setNuevosPartidos] = useState({});
+      const [resultadosEditando, setResultadosEditando] = useState({});
       const jugadoresList = jugadores || [];
+      const liga = ligaActual || { jornada_actual: 1 };
+      const [jornadaSeleccionada, setJornadaSeleccionada] = useState(null);
 
-      // Cargar jornadas y equipos al montar el componente
       useEffect(() => {
           cargarJornadas();
           cargarEquiposReales();
       }, []);
+
+      useEffect(() => {
+          if (jornadaSeleccionada && vista === 'resultados') {
+              cargarPartidosJornada(jornadaSeleccionada);
+          }
+      }, [jornadaSeleccionada, vista]);
 
       const cargarJornadas = async () => {
           try {
@@ -924,6 +1497,17 @@ const FantasyFutsalWireframes = () => {
               if (response.ok) {
                   const data = await response.json();
                   setJornadas(data);
+                  
+                  const inicialNuevosPartidos = {};
+                  data.forEach(jornada => {
+                      inicialNuevosPartidos[jornada.id] = { equipo_local: '', equipo_visitante: '' };
+                      cargarPartidosJornada(jornada.id);
+                  });
+                  setNuevosPartidos(inicialNuevosPartidos);
+
+                  if (data.length > 0) {
+                      setJornadaSeleccionada(data[0].id);
+                  }
               }
           } catch (error) {
               console.error('Error cargando jornadas:', error);
@@ -959,18 +1543,76 @@ const FantasyFutsalWireframes = () => {
             });
             if (response.ok) {
                 const data = await response.json();
-                setPartidos(data);
-                setJornadaDetalle(jornadaId);
+                setPartidos(prev => ({
+                    ...prev,
+                    [jornadaId]: data
+                }));
+                
+                // Inicializar resultados editando con valores por defecto
+                const resultadosInicial = {};
+                data.forEach(partido => {
+                    resultadosInicial[partido.id] = {
+                        goles_local: partido.goles_local ?? 0,
+                        goles_visitante: partido.goles_visitante ?? 0
+                    };
+                });
+                setResultadosEditando(prev => ({
+                    ...prev,
+                    [jornadaId]: resultadosInicial
+                }));
             }
         } catch (error) {
             console.error('Error cargando partidos:', error);
-            setPartidos([]);
+            setPartidos(prev => ({
+                ...prev,
+                [jornadaId]: []
+            }));
         }
+      };
+
+    // Función para verificar si un equipo ya está en un partido de la jornada
+    const equipoYaEnJornada = (jornadaId, equipoId, tipoEquipo) => {
+        const partidosJornada = partidos[jornadaId] || [];
+        return partidosJornada.some(partido => 
+            partido.equipo_local === equipoId || 
+            partido.equipo_visitante === equipoId
+        );
+    };
+
+    // Función para obtener equipos disponibles para una jornada
+    const getEquiposDisponibles = (jornadaId, tipoEquipo) => {
+        const partidosJornada = partidos[jornadaId] || [];
+        const equiposEnJornada = new Set();
+        
+        partidosJornada.forEach(partido => {
+            equiposEnJornada.add(partido.equipo_local);
+            equiposEnJornada.add(partido.equipo_visitante);
+        });
+
+        return equiposReales.filter(equipo => !equiposEnJornada.has(equipo.id));
     };
 
       const crearPartido = async (jornadaId) => {
+        const nuevoPartido = nuevosPartidos[jornadaId];
         if (!nuevoPartido.equipo_local || !nuevoPartido.equipo_visitante) {
             alert('Selecciona ambos equipos');
+            return;
+        }
+
+        // Verificar si los equipos ya están en la jornada
+        if (equipoYaEnJornada(jornadaId, parseInt(nuevoPartido.equipo_local), 'local')) {
+            alert('El equipo local ya está participando en otro partido de esta jornada');
+            return;
+        }
+
+        if (equipoYaEnJornada(jornadaId, parseInt(nuevoPartido.equipo_visitante), 'visitante')) {
+            alert('El equipo visitante ya está participando en otro partido de esta jornada');
+            return;
+        }
+
+        // Verificar que no sea el mismo equipo
+        if (nuevoPartido.equipo_local === nuevoPartido.equipo_visitante) {
+            alert('No puedes seleccionar el mismo equipo como local y visitante');
             return;
         }
 
@@ -986,13 +1628,19 @@ const FantasyFutsalWireframes = () => {
                     jornada: jornadaId,
                     equipo_local: parseInt(nuevoPartido.equipo_local),
                     equipo_visitante: parseInt(nuevoPartido.equipo_visitante),
-                    fecha: new Date().toISOString()
+                    fecha: new Date().toISOString(),
+                    goles_local: 0,
+                    goles_visitante: 0
                 }),
             });
             
             if (response.ok) {
                 alert('Partido creado exitosamente');
-                setNuevoPartido({ equipo_local: '', equipo_visitante: '' });
+                // Limpiar solo los selectores de esta jornada
+                setNuevosPartidos(prev => ({
+                    ...prev,
+                    [jornadaId]: { equipo_local: '', equipo_visitante: '' }
+                }));
                 await cargarPartidosJornada(jornadaId);
             } else {
                 const errorData = await response.json();
@@ -1016,6 +1664,12 @@ const FantasyFutsalWireframes = () => {
                 
                 if (response.ok) {
                     alert('Jornada eliminada exitosamente');
+                    // Eliminar también del estado nuevosPartidos
+                    setNuevosPartidos(prev => {
+                        const updated = { ...prev };
+                        delete updated[jornadaId];
+                        return updated;
+                    });
                     await cargarJornadas();
                 } else {
                     const errorData = await response.json();
@@ -1027,7 +1681,7 @@ const FantasyFutsalWireframes = () => {
         }
       };
 
-      const eliminarPartido = async (partidoId) => {
+      const eliminarPartido = async (partidoId, jornadaId) => {
         if (window.confirm('¿Seguro que quieres eliminar este partido?')) {
             try {
                 const token = localStorage.getItem('access_token');
@@ -1040,7 +1694,7 @@ const FantasyFutsalWireframes = () => {
                 
                 if (response.ok) {
                     alert('Partido eliminado exitosamente');
-                    await cargarPartidosJornada(jornadaDetalle);
+                    await cargarPartidosJornada(jornadaId);
                 } else {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || 'Error al eliminar partido');
@@ -1050,6 +1704,110 @@ const FantasyFutsalWireframes = () => {
             }
         }
     };
+
+    // Función para actualizar nuevo partido de una jornada específica
+    const actualizarNuevoPartido = (jornadaId, campo, valor) => {
+        setNuevosPartidos(prev => ({
+            ...prev,
+            [jornadaId]: {
+                ...prev[jornadaId],
+                [campo]: valor
+            }
+        }));
+    };
+
+    // Función para actualizar resultado de un partido
+    // Función para actualizar resultado de un partido
+    const actualizarResultado = (jornadaId, partidoId, campo, valor) => {
+        // Permitir valores vacíos temporalmente
+        let valorFinal = valor;
+        
+        // Si el valor está vacío, guardar como string vacío (para permitir borrar)
+        if (valor === '') {
+            valorFinal = '';
+        } else {
+            // Convertir a número, si no es un número válido, usar 0
+            valorFinal = parseInt(valor) || 0;
+        }
+        
+        setResultadosEditando(prev => ({
+            ...prev,
+            [jornadaId]: {
+                ...prev[jornadaId],
+                [partidoId]: {
+                    ...prev[jornadaId]?.[partidoId],
+                    [campo]: valorFinal
+                }
+            }
+        }));
+      };
+
+  const guardarTodosLosResultados = async (jornadaId) => {
+    const partidosJornada = partidos[jornadaId] || [];
+    const resultadosJornada = resultadosEditando[jornadaId] || {};
+    
+    if (partidosJornada.length === 0) {
+        alert('No hay partidos en esta jornada');
+        return;
+    }
+
+    try {
+        const token = localStorage.getItem('access_token');
+        let guardadosExitosos = 0;
+        let errores = 0;
+
+        // Guardar cada partido de la jornada
+        for (const partido of partidosJornada) {
+            const resultado = resultadosJornada[partido.id];
+            
+            // Si no hay cambios en este partido, usar los valores actuales
+            const golesLocal = resultado?.goles_local !== undefined 
+                ? (resultado.goles_local === '' ? 0 : (parseInt(resultado.goles_local) || 0))
+                : (partido.goles_local || 0);
+                
+            const golesVisitante = resultado?.goles_visitante !== undefined 
+                ? (resultado.goles_visitante === '' ? 0 : (parseInt(resultado.goles_visitante) || 0))
+                : (partido.goles_visitante || 0);
+
+            try {
+                const response = await fetch(`${API_URL}/partidos/${partido.id}/`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        goles_local: golesLocal,
+                        goles_visitante: golesVisitante
+                    }),
+                });
+                
+                if (response.ok) {
+                    guardadosExitosos++;
+                } else {
+                    errores++;
+                    console.error(`Error guardando partido ${partido.id}`);
+                }
+            } catch (error) {
+                errores++;
+                console.error(`Error guardando partido ${partido.id}:`, error);
+            }
+        }
+
+        // Recargar los partidos para mostrar los cambios
+        await cargarPartidosJornada(jornadaId);
+        
+        // Mostrar resumen
+        if (errores === 0) {
+            alert(`✅ Todos los resultados (${guardadosExitosos} partidos) guardados exitosamente`);
+        } else {
+            alert(`⚠ Resultados guardados: ${guardadosExitosos} exitosos, ${errores} con error`);
+        }
+        
+    } catch (err) {
+        alert('Error al guardar los resultados: ' + err.message);
+    }
+  };
 
       // 🆕 Filtrar jugadores según búsqueda y equipo REAL
       const jugadoresFiltrados = jugadoresList.filter(jugador => {
@@ -1081,15 +1839,16 @@ const FantasyFutsalWireframes = () => {
           }));
 
           try {
-              await asignarPuntos(jornadaSeleccionada, puntosArray);
-              alert(`Puntos asignados exitosamente para la jornada ${jornadaSeleccionada}`);
+              const numeroJornada = jornadas.find(j => j.id === jornadaSeleccionada)?.numero || 1;
+              await asignarPuntos(numeroJornada, puntosArray);
+              alert(`Puntos asignados exitosamente para la jornada ${numeroJornada}`);
               setPuntuaciones({});
               await cargarDatosIniciales();
           } catch (err) {
               alert('Error al asignar puntos: ' + err.message);
           }
       };
-
+      
       const handleCrearJornada = async () => {
           if (!nuevaJornadaNumero) {
               alert('Ingresa un número de jornada');
@@ -1175,6 +1934,16 @@ const FantasyFutsalWireframes = () => {
                           <Calendar size={18} /> Calendario
                       </button>
                       <button
+                          onClick={() => setVista('resultados')}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
+                              vista === 'resultados'
+                                  ? 'bg-white border-yellow-500 text-yellow-700'
+                                  : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'
+                          }`}
+                      >
+                          <Edit size={18} /> Resultados
+                      </button>
+                      <button
                           onClick={() => setVista('puntuaciones')}
                           className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
                               vista === 'puntuaciones'
@@ -1222,15 +1991,12 @@ const FantasyFutsalWireframes = () => {
                                       {jornadas.map((jornada) => (
                                           <div key={jornada.id} className="border-2 border-gray-300 rounded-lg p-4 hover:border-yellow-500 transition-colors">
                                               <div className="flex justify-between items-start mb-3">
-                                                  <div 
-                                                      className="flex-1 cursor-pointer"
-                                                      onClick={() => cargarPartidosJornada(jornada.id)}
-                                                  >
+                                                  <div className="flex-1">
                                                       <h4 className="font-bold text-lg">Jornada {jornada.numero}</h4>
                                                   </div>
                                                   <div className="flex items-center gap-2">
                                                       <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm font-medium">
-                                                          {jornada.partidos_count || 0} partidos
+                                                          {partidos[jornada.id]?.length || 0} partidos
                                                       </div>
                                                       <button
                                                           onClick={(e) => {
@@ -1245,80 +2011,179 @@ const FantasyFutsalWireframes = () => {
                                                   </div>
                                               </div>
                                               
-                                              {/* Detalles de partidos si esta es la jornada seleccionada */}
-                                              {jornadaDetalle === jornada.id && (
-                                                  <div className="mt-4 space-y-4">
-                                                      {/* Lista de partidos */}
-                                                      <div className="space-y-2">
-                                                          <h5 className="font-semibold text-sm text-gray-700">Partidos:</h5>
-                                                          {partidos.length === 0 ? (
-                                                              <p className="text-sm text-gray-500 text-center py-2">No hay partidos en esta jornada</p>
-                                                          ) : (
-                                                              partidos.map((partido) => (
-                                                                  <div key={partido.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-                                                                      <div className="text-sm">
-                                                                          <span className="font-medium">{partido.equipo_local_nombre}</span>
-                                                                          <span className="mx-2">vs</span>
-                                                                          <span className="font-medium">{partido.equipo_visitante_nombre}</span>
-                                                                      </div>
-                                                                      <button
-                                                                          onClick={(e) => {
-                                                                              e.stopPropagation();
-                                                                              eliminarPartido(partido.id);
-                                                                          }}
-                                                                          className="text-red-600 hover:text-red-800 text-sm"
-                                                                      >
-                                                                          Eliminar
-                                                                      </button>
+                                              {/* Detalles de partidos - SIEMPRE VISIBLES */}
+                                              <div className="mt-4 space-y-4">
+                                                  {/* Lista de partidos */}
+                                                  <div className="space-y-2">
+                                                      <h5 className="font-semibold text-sm text-gray-700">Partidos:</h5>
+                                                      {(!partidos[jornada.id] || partidos[jornada.id].length === 0) ? (
+                                                          <p className="text-sm text-gray-500 text-center py-2">No hay partidos en esta jornada</p>
+                                                      ) : (
+                                                          partidos[jornada.id].map((partido) => (
+                                                              <div key={partido.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                                                                  <div className="text-sm">
+                                                                      <span className="font-medium">{partido.equipo_local_nombre}</span>
+                                                                      <span className="mx-2">vs</span>
+                                                                      <span className="font-medium">{partido.equipo_visitante_nombre}</span>
+                                                                      {(partido.goles_local !== null && partido.goles_visitante !== null) && (
+                                                                          <span className="ml-2 font-bold">
+                                                                              ({partido.goles_local} - {partido.goles_visitante})
+                                                                          </span>
+                                                                      )}
                                                                   </div>
-                                                              ))
-                                                          )}
-                                                      </div>
-
-                                                      {/* Formulario para crear nuevo partido */}
-                                                      <div className="border-t pt-3">
-                                                          <h5 className="font-semibold text-sm text-gray-700 mb-2">Crear Nuevo Partido:</h5>
-                                                          <div className="flex gap-2 mb-2">
-                                                              <select
-                                                                  value={nuevoPartido.equipo_local}
-                                                                  onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_local: e.target.value }))}
-                                                                  className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                                                              >
-                                                                  <option value="">Equipo Local</option>
-                                                                  {equiposReales.map(equipo => (
-                                                                      <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                                                                  ))}
-                                                              </select>
-                                                              <select
-                                                                  value={nuevoPartido.equipo_visitante}
-                                                                  onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_visitante: e.target.value }))}
-                                                                  className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                                                              >
-                                                                  <option value="">Equipo Visitante</option>
-                                                                  {equiposReales.map(equipo => (
-                                                                      <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                                                                  ))}
-                                                              </select>
-                                                          </div>
-                                                          <button
-                                                              onClick={(e) => {
-                                                                  e.stopPropagation();
-                                                                  crearPartido(jornada.id);
-                                                              }}
-                                                              className="w-full bg-blue-600 text-white p-2 rounded text-sm hover:bg-blue-700"
-                                                          >
-                                                              + Añadir Partido
-                                                          </button>
-                                                      </div>
+                                                                  <button
+                                                                      onClick={(e) => {
+                                                                          e.stopPropagation();
+                                                                          eliminarPartido(partido.id, jornada.id);
+                                                                      }}
+                                                                      className="text-red-600 hover:text-red-800 text-sm"
+                                                                  >
+                                                                      Eliminar
+                                                                  </button>
+                                                              </div>
+                                                          ))
+                                                      )}
                                                   </div>
-                                              )}
+
+                                                  {/* Formulario para crear nuevo partido */}
+                                                  <div className="border-t pt-3">
+                                                      <h5 className="font-semibold text-sm text-gray-700 mb-2">Crear Nuevo Partido:</h5>
+                                                      <div className="flex gap-2 mb-2">
+                                                          <select
+                                                              value={nuevosPartidos[jornada.id]?.equipo_local || ''}
+                                                              onChange={(e) => actualizarNuevoPartido(jornada.id, 'equipo_local', e.target.value)}
+                                                              className="flex-1 border border-gray-300 p-2 rounded text-sm"
+                                                          >
+                                                              <option value="">Equipo Local</option>
+                                                              {getEquiposDisponibles(jornada.id, 'local').map(equipo => (
+                                                                  <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
+                                                              ))}
+                                                          </select>
+                                                          <select
+                                                              value={nuevosPartidos[jornada.id]?.equipo_visitante || ''}
+                                                              onChange={(e) => actualizarNuevoPartido(jornada.id, 'equipo_visitante', e.target.value)}
+                                                              className="flex-1 border border-gray-300 p-2 rounded text-sm"
+                                                          >
+                                                              <option value="">Equipo Visitante</option>
+                                                              {getEquiposDisponibles(jornada.id, 'visitante').map(equipo => (
+                                                                  <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
+                                                              ))}
+                                                          </select>
+                                                      </div>
+                                                      <button
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              crearPartido(jornada.id);
+                                                          }}
+                                                          className="w-full bg-blue-600 text-white p-2 rounded text-sm hover:bg-blue-700"
+                                                      >
+                                                          + Añadir Partido
+                                                      </button>
+                                                  </div>
+                                              </div>
                                           </div>
                                       ))}
                                   </div>
                               )}
                           </div>
                       </div>
+                  ) : vista === 'resultados' ? (
+                      // VISTA DE RESULTADOS
+                      <div className="space-y-4">
+                          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                              <div className="flex-1">
+                                  <h4 className="font-bold text-lg mb-2">Partidos de la Jornada {jornadas.find(j => j.id === jornadaSeleccionada)?.numero}</h4>
+                                  
+                                  {/* Selector de Jornada */}
+                                  <div className="flex-1">
+                                      <label className="block text-sm font-medium mb-2">Jornada</label>
+                                      <select
+                                          value={jornadaSeleccionada}
+                                          onChange={(e) => setJornadaSeleccionada(parseInt(e.target.value))}
+                                          className="w-full border-2 border-gray-300 p-3 rounded bg-white"
+                                      >
+                                          {jornadas.map(jornada => (
+                                              <option key={jornada.id} value={jornada.id}>
+                                                  Jornada {jornada.numero}
+                                              </option>
+                                          ))}
+                                      </select>
+                                  </div>
+                              </div>
+                              
+                              {/* Botón para guardar todos los resultados */}
+                              <button
+                                  onClick={() => guardarTodosLosResultados(jornadaSeleccionada)}
+                                  className="bg-green-600 text-white px-6 py-3 rounded font-medium hover:bg-green-700 flex items-center gap-2 whitespace-nowrap"
+                              >
+                                  <Save size={18} /> Guardar Todos los Resultados
+                              </button>
+                          </div>
+                          
+                          {(!partidos[jornadaSeleccionada] || partidos[jornadaSeleccionada].length === 0) ? (
+                              <p className="text-center text-gray-500 py-4">No hay partidos en esta jornada</p>
+                          ) : (
+                              partidos[jornadaSeleccionada].map((partido) => (
+                                  <div key={partido.id} className="border-2 border-gray-300 rounded-lg p-4">
+                                      <div className="flex items-center justify-between mb-3">
+                                          <div className="flex-1">
+                                              <div className="font-semibold text-lg text-center">
+                                                  {partido.equipo_local_nombre} vs {partido.equipo_visitante_nombre}
+                                              </div>
+                                          </div>
+                                      </div>
+                                      
+                                      <div className="flex items-center justify-center gap-4">
+                                          <div className="text-center">
+                                              <label className="block text-sm font-medium mb-1">Goles Local</label>
+                                              <input
+                                                  type="text"
+                                                  inputMode="numeric"
+                                                  pattern="[0-9]*"
+                                                  value={resultadosEditando[jornadaSeleccionada]?.[partido.id]?.goles_local ?? partido.goles_local ?? 0}
+                                                  onChange={(e) => {
+                                                      const value = e.target.value.replace(/[^0-9]/g, '');
+                                                      actualizarResultado(jornadaSeleccionada, partido.id, 'goles_local', value);
+                                                  }}
+                                                  onBlur={(e) => {
+                                                      if (e.target.value === '') {
+                                                          actualizarResultado(jornadaSeleccionada, partido.id, 'goles_local', 0);
+                                                      }
+                                                  }}
+                                                  className="w-20 border-2 border-gray-300 p-2 rounded text-center"
+                                                  placeholder="0"
+                                              />
+                                          </div>
+                                          
+                                          <div className="text-2xl font-bold">-</div>
+                                          
+                                          <div className="text-center">
+                                              <label className="block text-sm font-medium mb-1">Goles Visitante</label>
+                                              <input
+                                                  type="text"
+                                                  inputMode="numeric"
+                                                  pattern="[0-9]*"
+                                                  value={resultadosEditando[jornadaSeleccionada]?.[partido.id]?.goles_visitante ?? partido.goles_visitante ?? 0}
+                                                  onChange={(e) => {
+                                                      const value = e.target.value.replace(/[^0-9]/g, '');
+                                                      actualizarResultado(jornadaSeleccionada, partido.id, 'goles_visitante', value);
+                                                  }}
+                                                  onBlur={(e) => {
+                                                      if (e.target.value === '') {
+                                                          actualizarResultado(jornadaSeleccionada, partido.id, 'goles_visitante', 0);
+                                                      }
+                                                  }}
+                                                  className="w-20 border-2 border-gray-300 p-2 rounded text-center"
+                                                  placeholder="0"
+                                              />
+                                          </div>
+                                      </div>
+                                    </div>
+                                ))
+                            )}
+                      </div>
                   ) : (
+                      // VISTA DE PUNTUACIONES (se mantiene igual)
                       <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
                           <div className="flex flex-col lg:flex-row gap-4 mb-6">
                               {/* Selector de Jornada */}
@@ -1411,23 +2276,22 @@ const FantasyFutsalWireframes = () => {
                           </div>
 
                           <div className="mt-6 pt-6 border-t-2 border-gray-300">
-                              <button
-                                  onClick={handleAsignarPuntos}
-                                  className="w-full bg-green-600 text-white p-4 rounded font-bold hover:bg-green-700"
-                              >
-                                  Aplicar Puntos a Jornada {jornadaSeleccionada}
-                              </button>
-                              <p className="text-sm text-gray-600 mt-2 text-center">
-                                  Los valores se recalcularán automáticamente (€0.1M por punto)
-                              </p>
-                          </div>
+                            <button
+                                onClick={handleAsignarPuntos}
+                                className="w-full bg-green-600 text-white p-4 rounded font-bold hover:bg-green-700"
+                            >
+                                Aplicar Puntos a Jornada {jornadaSeleccionada}
+                            </button>
+                            <p className="text-sm text-gray-600 mt-2 text-center">
+                                Los valores de los jugadores se recalcularán automáticamente según los puntos asignados
+                            </p>
+                        </div>
                       </div>
                   )}
               </div>
           </div>
       );
-  };
-
+};
 const RankingsScreen = () => (
     <div className="min-h-screen bg-gray-100">
       <NavBar role={isAdmin ? 'admin' : 'user'} />

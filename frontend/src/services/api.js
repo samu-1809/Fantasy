@@ -89,12 +89,65 @@ export const getLiga = async (id) => {
 
 // ==================== JUGADORES ====================
 
-export const getJugadores = async (posicion = null) => {
-  const url = posicion 
-    ? `${API_URL}/jugadores/?posicion=${posicion}`
-    : `${API_URL}/jugadores/`;
+export const getJugadores = async (posicion = null, equipoId = null) => {
+  let url = `${API_URL}/jugadores/`;
+  const params = new URLSearchParams();
+  
+  if (posicion) params.append('posicion', posicion);
+  if (equipoId) params.append('equipo', equipoId);
+  
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+  
   const response = await fetch(url);
   return handleResponse(response);
+};
+
+// Añade esta función en api.js para obtener jugadores por equipo
+export const getJugadoresPorEquipo = async (equipoId) => {
+  const response = await fetch(`${API_URL}/jugadores/?equipo=${equipoId}`);
+  return handleResponse(response);
+};
+
+// ==================== INTERCAMBIOS ====================
+export const intercambiarJugadores = async (equipoId, jugadorOrigenId, jugadorDestinoId) => {
+  console.log(`🔍 Llamando API intercambiarJugadores:`);
+  console.log(`   Equipo ID: ${equipoId}`);
+  console.log(`   Jugador Origen ID: ${jugadorOrigenId}`);
+  console.log(`   Jugador Destino ID: ${jugadorDestinoId}`);
+  
+  const requestBody = { 
+    jugador_origen_id: jugadorOrigenId,
+    jugador_destino_id: jugadorDestinoId
+  };
+  
+  console.log('📦 Request body:', requestBody);
+  
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/intercambiar_jugadores/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(requestBody),
+  });
+
+  console.log(`📊 Respuesta HTTP: ${response.status}`);
+  console.log(`📊 Respuesta OK: ${response.ok}`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Error response:', errorText);
+    
+    try {
+      const errorData = JSON.parse(errorText);
+      throw new Error(errorData.error || 'Error al intercambiar jugadores');
+    } catch {
+      throw new Error(errorText || 'Error al intercambiar jugadores');
+    }
+  }
+
+  const result = await response.json();
+  console.log('✅ Intercambio exitoso:', result);
+  return result;
 };
 
 // ==================== EQUIPOS ====================
@@ -104,8 +157,72 @@ export const getEquipos = async () => {
   return handleResponse(response);
 };
 
-export const getEquipo = async (id) => {
-  const response = await fetch(`${API_URL}/equipos/${id}/`);
+export const getEquipo = async (userId) => {
+  try {
+    // 🆕 CORREGIDO: Buscar equipos que pertenezcan a este usuario específico
+    const response = await fetch(`${API_URL}/equipos/?usuario=${userId}`, {
+      headers: getAuthHeaders()
+    });
+    
+    console.log(`🔍 Buscando equipo para usuario ${userId}, status:`, response.status);
+    
+    if (response.status === 404) {
+      console.log("❌ No existe equipo para este usuario");
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error('Error en la petición');
+    }
+    
+    const data = await response.json();
+    console.log("📦 Datos recibidos de equipos:", data);
+    
+    // La API debería devolver un array, tomamos el primer equipo del usuario
+    const equipo = data.length > 0 ? data[0] : null;
+    console.log("✅ Equipo encontrado:", equipo);
+    
+    return equipo;
+  } catch (error) {
+    console.error('Error obteniendo equipo:', error);
+    throw error;
+  }
+};
+
+// Función alternativa para buscar equipo por usuario
+export const getEquipoByUsuario = async (userId) => {
+  try {
+    console.log(`🔍 [Alternativa] Buscando equipo para usuario: ${userId}`);
+    
+    // 🆕 Probar diferentes parámetros de búsqueda
+    const response = await fetch(`${API_URL}/equipos/?usuario=${userId}`, {
+      headers: getAuthHeaders()
+    });
+    
+    if (response.status === 404) {
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error('Error en la petición');
+    }
+    
+    const data = await response.json();
+    console.log(`📦 [Alternativa] Equipos encontrados: ${data.length}`);
+    return data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error obteniendo equipo por usuario:', error);
+    throw error;
+  }
+};
+
+// Función para crear equipo
+export const crearEquipo = async (equipoData) => {
+  const response = await fetch(`${API_URL}/equipos/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(equipoData),
+  });
   return handleResponse(response);
 };
 
@@ -132,16 +249,45 @@ export const ficharJugador = async (equipoId, jugadorId) => {
   }
 };
 
-export const venderJugador = async (equipoId, jugadorId) => {
+// 🆕 Función para sincronizar estados con el backend
+export const actualizarEstadosBanquillo = async (equipoId, estados) => {
+  try {
+    console.log(`🔄 Sincronizando estados para equipo ${equipoId}:`, estados);
+    
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/actualizar_estados_banquillo/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ estados })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Error sincronizando estados');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Estados sincronizados:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ Error sincronizando estados:', error);
+    throw error;
+  }
+};
+
+// ==================== VENTAS EN MERCADO ====================
+
+export const venderJugador = async (equipoId, jugadorId, precio) => {
   const response = await fetch(`${API_URL}/equipos/${equipoId}/vender_jugador/`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ jugador_id: jugadorId }),
+    body: JSON.stringify({ 
+      jugador_id: jugadorId, 
+      precio_venta: precio 
+    }),
   });
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || 'Error al vender jugador');
+    throw new Error(errorData.error || 'Error al poner jugador en el mercado');
   }
 
   return await response.json();

@@ -36,7 +36,7 @@ class Jugador(models.Model):
     puntos_totales = models.IntegerField(default=0)
     equipo_real = models.ForeignKey('EquipoReal', on_delete=models.CASCADE, null=True, blank=True)
     en_venta = models.BooleanField(default=False)
-    equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores_fichados')
+    equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores')
     en_banquillo = models.BooleanField(default=True)
     fecha_mercado = models.DateTimeField(null=True, blank=True)
     fecha_fichaje = models.DateTimeField(null=True, blank=True)  # 🆕 Si no la tienes
@@ -70,7 +70,6 @@ class Equipo(models.Model):
     nombre = models.CharField(max_length=100)
     presupuesto = models.IntegerField(default=150000000)
     puntos_totales = models.IntegerField(default=0)
-    jugadores = models.ManyToManyField(Jugador, related_name='equipos_mtm')
 
     def __str__(self):
         return f"{self.nombre} - {self.usuario.username}"

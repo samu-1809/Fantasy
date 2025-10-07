@@ -119,8 +119,12 @@ class RegisterView(generics.CreateAPIView):
             if len(jugadores_asignados) == 7:
                 costo_total = sum(j.valor for j in jugadores_asignados)
                 
-                # Asignar jugadores al equipo
-                equipo.jugadores.add(*jugadores_asignados)
+                # 🆕 CORREGIDO: ASIGNAR EQUIPO A CADA JUGADOR
+                for jugador in jugadores_asignados:
+                    jugador.equipo = equipo  # 🎯 ESTA LÍNEA ES CLAVE
+                    jugador.en_banquillo = True  # Todos al banquillo inicialmente
+                    jugador.save()
+                
                 equipo.presupuesto = 150000000 - costo_total
                 equipo.save()
                 
@@ -130,9 +134,10 @@ class RegisterView(generics.CreateAPIView):
                 # Mostrar resumen del equipo
                 print("\n📊 RESUMEN DEL EQUIPO:")
                 for jugador in jugadores_asignados:
-                    print(f"   • {jugador.posicion}: {jugador.nombre} - €{jugador.valor:,}")
+                    print(f"   • {jugador.posicion}: {jugador.nombre} - €{jugador.valor:,} - Equipo: {jugador.equipo}")
                 
-                # Serializar respuesta
+                # Serializar respuesta - 🆕 CARGAR JUGADORES ACTUALIZADOS
+                equipo.refresh_from_db()  # Recargar datos actualizados
                 equipo_serializer = EquipoSerializer(equipo)
                 
             else:
@@ -249,8 +254,14 @@ class JugadorViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Jugador.objects.all()
         posicion = self.request.query_params.get('posicion', None)
+        equipo_id = self.request.query_params.get('equipo', None)  # 🆕 NUEVO FILTRO
+        
         if posicion:
             queryset = queryset.filter(posicion=posicion)
+            
+        if equipo_id:  # 🆕 FILTRAR POR EQUIPO
+            queryset = queryset.filter(equipo_id=equipo_id)
+            
         return queryset
 
 class EquipoViewSet(viewsets.ModelViewSet):
@@ -258,13 +269,34 @@ class EquipoViewSet(viewsets.ModelViewSet):
     serializer_class = EquipoSerializer
 
     def get_queryset(self):
-        """Optimiza queries con select_related y prefetch_related"""
-        return Equipo.objects.select_related(
+        """Optimiza queries y filtra por usuario si se especifica"""
+        queryset = Equipo.objects.select_related(
             'usuario',
             'liga'
         ).prefetch_related(
-            Prefetch('jugadores', queryset=Jugador.objects.select_related('equipo_real'))
+            'jugadores'
         )
+        
+        # 🆕 FILTRADO CRUCIAL - Soporta diferentes parámetros de búsqueda
+        usuario_id = self.request.query_params.get('usuario_id')
+        usuario_param = self.request.query_params.get('usuario')
+        
+        print(f"🔍 Parámetros de búsqueda: usuario_id={usuario_id}, usuario={usuario_param}")
+        
+        if usuario_id:
+            print(f"🎯 Filtrando por usuario_id: {usuario_id}")
+            queryset = queryset.filter(usuario_id=usuario_id)
+        elif usuario_param:
+            print(f"🎯 Filtrando por usuario: {usuario_param}")
+            queryset = queryset.filter(usuario_id=usuario_param)
+        
+        # 🆕 Debug: mostrar resultados de la búsqueda
+        if usuario_id or usuario_param:
+            print(f"✅ Equipos encontrados: {queryset.count()}")
+            for equipo in queryset:
+                print(f"   - {equipo.nombre} (Usuario: {equipo.usuario.username}) - Jugadores: {equipo.jugadores.count()}")
+        
+        return queryset
 
     def puede_vender_jugador(self, equipo, jugador):
         """
@@ -295,13 +327,53 @@ class EquipoViewSet(viewsets.ModelViewSet):
         equipo.save()
 
     @action(detail=True, methods=['post'])
+    def actualizar_estados_banquillo(self, request, pk=None):
+        """Actualizar estados en_banquillo de múltiples jugadores"""
+        equipo = self.get_object()
+        estados = request.data.get('estados', [])
+        
+        print(f"🔄 Actualizando estados de banquillo para equipo {equipo.nombre}")
+        print(f"📊 Estados recibidos: {len(estados)} jugadores")
+        
+        cambios_realizados = 0
+        errores = 0
+        
+        for estado_data in estados:
+            try:
+                jugador_id = estado_data.get('jugador_id')
+                en_banquillo = estado_data.get('en_banquillo')
+                
+                jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
+                
+                # Solo actualizar si hay cambio
+                if jugador.en_banquillo != en_banquillo:
+                    jugador.en_banquillo = en_banquillo
+                    jugador.save()
+                    cambios_realizados += 1
+                    print(f"   ✅ {jugador.nombre}: en_banquillo = {en_banquillo}")
+                else:
+                    print(f"   ℹ️ {jugador.nombre}: sin cambios")
+                    
+            except Jugador.DoesNotExist:
+                print(f"   ❌ Jugador {jugador_id} no encontrado en el equipo")
+                errores += 1
+            except Exception as e:
+                print(f"   ❌ Error con jugador {jugador_id}: {e}")
+                errores += 1
+        
+        return Response({
+            'message': f'Estados actualizados: {cambios_realizados} cambios, {errores} errores',
+            'cambios_realizados': cambios_realizados,
+            'errores': errores
+        })
+    @action(detail=True, methods=['post'])
     def fichar_jugador(self, request, pk=None):
         """Fichar un jugador al equipo - SIEMPRE al banquillo"""
-        print("📥 Datos recibidos en fichar_jugador:", request.data)  # 🆕 DEBUG
+        print("📥 Datos recibidos en fichar_jugador:", request.data)
         equipo = self.get_object()
         serializer = FicharJugadorSerializer(data=request.data)
         if not serializer.is_valid():
-            print("❌ Errores del serializer:", serializer.errors)  # 🆕 DEBUG
+            print("❌ Errores del serializer:", serializer.errors)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         jugador_id = serializer.validated_data['jugador_id']
@@ -321,7 +393,7 @@ class EquipoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # 🆕 SIEMPRE va al banquillo - eliminada la lógica de determinación automática
+        # SIEMPRE va al banquillo
         en_banquillo = True
         
         # Realizar el fichaje
@@ -330,7 +402,7 @@ class EquipoViewSet(viewsets.ModelViewSet):
         jugador.en_banquillo = en_banquillo
         jugador.fecha_fichaje = timezone.now()
         
-        # 🆕 Si el jugador estaba en venta, quitarlo del mercado
+        # Si el jugador estaba en venta, quitarlo del mercado
         if jugador.en_venta:
             jugador.en_venta = False
         
@@ -384,7 +456,7 @@ class EquipoViewSet(viewsets.ModelViewSet):
         jugador.equipo = None
         jugador.en_banquillo = True
         jugador.fecha_fichaje = None
-        jugador.en_venta = False  # 🆕 Quitar de venta si estaba en venta
+        jugador.en_venta = False  # Quitar de venta si estaba en venta
         
         equipo.save()
         jugador.save()
@@ -442,6 +514,54 @@ class EquipoViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'{jugador.nombre} quitado de venta',
             'jugador': JugadorSerializer(jugador).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def intercambiar_jugadores(self, request, pk=None):
+        """Intercambiar dos jugadores del equipo (misma posición)"""
+        equipo = self.get_object()
+        jugador_origen_id = request.data.get('jugador_origen_id')
+        jugador_destino_id = request.data.get('jugador_destino_id')
+        
+        print(f"🔍 Intercambiando jugadores: {jugador_origen_id} ↔ {jugador_destino_id}")
+        
+        # Validación básica
+        if not jugador_origen_id or not jugador_destino_id:
+            return Response({'error': 'Se requieren ambos IDs de jugadores'}, status=400)
+        
+        try:
+            # Buscar por la ForeignKey (related_name='jugadores')
+            jugador_origen = equipo.jugadores.get(id=jugador_origen_id)
+            jugador_destino = equipo.jugadores.get(id=jugador_destino_id)
+            print(f"✅ Jugadores encontrados: {jugador_origen.nombre} ↔ {jugador_destino.nombre}")
+        except Jugador.DoesNotExist:
+            print("❌ Jugador no encontrado en el equipo")
+            return Response({'error': 'Jugador no encontrado en tu equipo'}, status=404)
+        
+        # Verificar misma posición
+        if jugador_origen.posicion != jugador_destino.posicion:
+            error_msg = f'Solo puedes intercambiar jugadores de la misma posición: {jugador_origen.posicion} != {jugador_destino.posicion}'
+            print(f"❌ {error_msg}")
+            return Response({'error': error_msg}, status=400)
+        
+        # Intercambiar sus estados de banquillo
+        origen_banquillo = jugador_origen.en_banquillo
+        destino_banquillo = jugador_destino.en_banquillo
+        
+        print(f"🔄 Intercambiando banquillo: {origen_banquillo} ↔ {destino_banquillo}")
+        
+        jugador_origen.en_banquillo = destino_banquillo
+        jugador_destino.en_banquillo = origen_banquillo
+        
+        jugador_origen.save()
+        jugador_destino.save()
+        
+        print("✅ Intercambio completado")
+        
+        return Response({
+            'message': f'Intercambio realizado: {jugador_origen.nombre} ↔ {jugador_destino.nombre}',
+            'origen_en_banquillo': jugador_origen.en_banquillo,
+            'destino_en_banquillo': jugador_destino.en_banquillo
         })
 
 class MercadoViewSet(viewsets.ViewSet):
