@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, Users, TrendingUp, Trophy, Settings, LogOut, Plus, Minus, Search, RefreshCw, Calendar, Star} from 'lucide-react';
 
+import {
+  getMiEquipo,
+  getLiga,
+  getMercado,
+  getClasificacion,
+  getJugadores,
+  ficharJugador,
+  venderJugador,
+  getCurrentUser,
+  loginUser,
+  registerUser,
+  logoutUser
+} from '../services/api';
+
 const FantasyFutsalWireframes = () => {
   const API_URL = 'http://127.0.0.1:8000/api';
-  
   const [currentScreen, setCurrentScreen] = useState('login');
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,141 +38,40 @@ const FantasyFutsalWireframes = () => {
     admin: 'Panel Admin'
   };
 
-  // Funciones API
-  const handleResponse = async (response) => {
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Error en la petición' }));
-      throw new Error(error.message || 'Error en la petición');
-    }
-    return response.json();
-};
-
-  const getEquipo = async (id) => {
-    const response = await fetch(`${API_URL}/equipos/${id}/`);
-    return handleResponse(response);
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    setCurrentScreen('login');
   };
 
-  const getLiga = async (id) => {
-    const response = await fetch(`${API_URL}/ligas/${id}/`);
-    return handleResponse(response);
-  };
-
-  const getMercado = async (ligaId) => {
-    const response = await fetch(`${API_URL}/mercado/?liga_id=${ligaId}`);
-    return handleResponse(response);
-  };
-
-  const getClasificacion = async (ligaId) => {
-    const response = await fetch(`${API_URL}/clasificacion/?liga_id=${ligaId}`);
-    return handleResponse(response);
-  };
-
-  const getJugadores = async () => {
-    const response = await fetch(`${API_URL}/jugadores/`);
-    return handleResponse(response);
-  };
-
-  const ficharJugador = async (equipoId, jugadorId, enBanquillo = false) => {
-    const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_URL}/equipos/${equipoId}/fichar_jugador/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ 
-        jugador_id: jugadorId,
-        en_banquillo: enBanquillo
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Error al fichar jugador');
-    }
-    return await response.json();
-  };
-  const venderJugador = async (equipoId, jugadorId) => {
-    const token = localStorage.getItem('access_token');
-    const response = await fetch(`${API_URL}/equipos/${equipoId}/vender_jugador/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        jugador_id: jugadorId
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Error al vender jugador');
-    }
-
-    return await response.json();
-  };
-  const fetchMiEquipo = async () => {
-      try {
-          const token = localStorage.getItem('access_token');
-          const response = await fetch(`${API_URL}/equipos/mi_equipo/`, {
-              headers: {
-                  'Authorization': `Bearer ${token}`
-              }
-          });
-          
-          if (response.ok) {
-              const equipo = await response.json();
-              console.log('Mi equipo:', equipo);
-          }
-      } catch (error) {
-          console.error('Error cargando equipo:', error);
-      }
-  };
-  const asignarPuntos = async (jornadaId, puntos) => {
-    const response = await fetch(`${API_URL}/puntuaciones/asignar_puntos/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ jornada_id: jornadaId, puntos }),
-    });
-    return handleResponse(response);
-  };
-
-  // Cargar datos iniciales al hacer login
   const cargarDatosIniciales = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const equipo = await getEquipo(1);
+      // ✅ Esto ahora funcionará porque getMiEquipo usa /api/mi-equipo/
+      const equipo = await getMiEquipo();
       setEquipoActual(equipo);
       
-      const liga = await getLiga(equipo.liga);
-      setLigaActual(liga);
-      
-      const mercadoData = await getMercado(equipo.liga);
-      setMercado(mercadoData);
-      
-      const clasificacionData = await getClasificacion(equipo.liga);
-      setClasificacion(clasificacionData);
-      
-      const jugadoresData = await getJugadores();
-      setJugadores(jugadoresData);
+      // Cargar datos relacionados
+      if (equipo.liga) {
+        const liga = await getLiga(equipo.liga);  // ✅ /api/ligas/{id}/
+        setLigaActual(liga);
+        
+        const mercadoData = await getMercado(equipo.liga);  // ✅ /api/mercado/
+        setMercado(mercadoData);
+        
+        const clasificacionData = await getClasificacion(equipo.liga);  // ✅ /api/clasificacion/
+        setClasificacion(clasificacionData);
+      }
       
       setLoading(false);
+      
     } catch (err) {
       setError(err.message);
       setLoading(false);
       console.error('Error cargando datos:', err);
     }
-  };
-
-    const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    setCurrentScreen('login');
   };
 
   const NavBar = ({ role }) => (
@@ -243,8 +155,8 @@ const FantasyFutsalWireframes = () => {
         email: '',
         password: '',
         confirmPassword: '',
-        first_name: '',    // ✅ MANTENER
-        last_name: ''      // ✅ MANTENER
+        first_name: '',    
+        last_name: ''      
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -274,7 +186,6 @@ const FantasyFutsalWireframes = () => {
             return;
         }
 
-        // 🆕 Validar que first_name y last_name no estén vacíos
         if (!formData.first_name.trim() || !formData.last_name.trim()) {
             setError('Nombre y apellidos son obligatorios');
             setIsLoading(false);
@@ -314,7 +225,6 @@ const FantasyFutsalWireframes = () => {
                 const data = JSON.parse(responseText);
                 console.log('✅ Registro exitoso');
                 
-                // 🆕 MOSTRAR MENSAJE DE ÉXITO Y REDIRIGIR AL LOGIN
                 alert('✅ Cuenta creada exitosamente. Ahora puedes iniciar sesión.');
                 setCurrentScreen('login');
                 
@@ -471,42 +381,27 @@ const FantasyFutsalWireframes = () => {
       setError('');
       
       try {
-        const response = await fetch(`${API_URL}/auth/login/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ username, password }),
-        });
+        console.log('🔐 Intentando login en:', `${API_URL}/auth/login/`);  // Debería mostrar /api/auth/login/
         
-        if (response.ok) {
-          const data = await response.json();
-          localStorage.setItem('access_token', data.access);
-          localStorage.setItem('refresh_token', data.refresh);
-          
-          // Obtener información del usuario para determinar si es admin
-          const userResponse = await fetch(`${API_URL}/auth/user/`, {
-            headers: {
-              'Authorization': `Bearer ${data.access}`
-            }
-          });
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json();
-            // Determinar si es admin (puedes ajustar esta lógica según tu backend)
-            const isUserAdmin = userData.is_superuser || userData.is_staff || username === 'admin';
-            setIsAdmin(isUserAdmin);
-            
-            setCurrentScreen(isUserAdmin ? 'admin' : 'dashboard');
-            await cargarDatosIniciales();
-          }
-        } else {
-          const errorData = await response.json();
-          setError(errorData.detail || 'Error en el login');
-        }
+        // ✅ Usar loginUser de api.js (que ya incluye /api/)
+        const data = await loginUser(username, password);
+        
+        localStorage.setItem('access_token', data.access);
+        localStorage.setItem('refresh_token', data.refresh);
+        
+        console.log('✅ Login exitoso, token obtenido');
+        
+        // Obtener información del usuario
+        const userData = await getCurrentUser();  // ✅ /api/auth/user/
+        const isUserAdmin = userData.is_superuser || userData.is_staff || username === 'admin';
+        setIsAdmin(isUserAdmin);
+        
+        setCurrentScreen(isUserAdmin ? 'admin' : 'dashboard');
+        await cargarDatosIniciales();
+        
       } catch (error) {
-        setError('Error de conexión');
-        console.error('Error:', error);
+        console.error('❌ Error en login:', error);
+        setError(error.message || 'Error en el login');
       } finally {
         setIsLoading(false);
       }
@@ -832,153 +727,708 @@ const FantasyFutsalWireframes = () => {
     );
   };
 
-  const jugadorVaAlBanquillo = (jugadorPosicion) => {
-    const posicionesDisponibles = obtenerPosicionesDisponibles();
-    
-    // Si la posición del jugador está disponible en el campo, NO va al banquillo
-    // Si NO está disponible, SÍ va al banquillo
-    return !posicionesDisponibles.includes(jugadorPosicion);
-  };
-    const obtenerPosicionesDisponibles = () => {
-    if (!equipoActual || !equipoActual.jugadores) return [];
-    
-    const jugadoresEnCampo = equipoActual.jugadores.filter(j => j.en_banquillo === false);
-    
-    // Contar cuántos jugadores hay por posición en el campo
-    const contarEnCampo = {
-      'POR': jugadoresEnCampo.filter(j => j.posicion === 'POR').length,
-      'DEF': jugadoresEnCampo.filter(j => j.posicion === 'DEF').length,
-      'DEL': jugadoresEnCampo.filter(j => j.posicion === 'DEL').length
-    };
-    
-    // Definir los límites máximos por posición
-    const limites = {
-      'POR': 1,
-      'DEF': 2, 
-      'DEL': 2
-    };
-    
-    // Calcular posiciones disponibles (donde no se ha alcanzado el límite)
-    const posicionesDisponibles = [];
-    
-    if (contarEnCampo.POR < limites.POR) posicionesDisponibles.push('POR');
-    if (contarEnCampo.DEF < limites.DEF) posicionesDisponibles.push('DEF');
-    if (contarEnCampo.DEL < limites.DEL) posicionesDisponibles.push('DEL');
-    
-    return posicionesDisponibles;
-  };
-
   const MarketScreen = () => {
     const [filtro, setFiltro] = useState('');
     const [posicionFiltro, setPosicionFiltro] = useState('');
+    const [mercado, setMercado] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    // Calcular fecha de expiración formateada
+    const calcularExpiracion = (fechaMercado) => {
+        if (!fechaMercado) return 'Fecha no disponible';
+        
+        const fechaMercadoObj = new Date(fechaMercado);
+        const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000)); // +24 horas
+        
+        // Formatear como "15 Oct a las 14:30"
+        const opciones = { 
+            day: 'numeric', 
+            month: 'short',
+            hour: '2-digit', 
+            minute: '2-digit' 
+        };
+        return expiracion.toLocaleDateString('es-ES', opciones);
+    };
+
+    // Verificar si un jugador ha expirado
+    const estaExpirado = (fechaMercado) => {
+        if (!fechaMercado) return false;
+        
+        const fechaMercadoObj = new Date(fechaMercado);
+        const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
+        const ahora = new Date();
+        
+        return ahora >= expiracion;
+    };
+
+    // Cargar mercado solo al montar el componente
+    useEffect(() => {
+        cargarMercado();
+    }, []);
+
+    const cargarMercado = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            if (!equipoActual || !equipoActual.liga) {
+                setError('No se pudo cargar la información del equipo');
+                return;
+            }
+            
+            const response = await fetch(`${API_URL}/mercado/?liga_id=${equipoActual.liga}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                setMercado(data);
+            } else {
+                throw new Error('Error cargando mercado');
+            }
+        } catch (error) {
+            setError('Error cargando el mercado de jugadores');
+            setMercado([]);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
 
     const handleFichar = async (jugadorId) => {
-      try {
-        const jugador = mercado.find(j => j.id === jugadorId);
-        
-        if (!jugador) {
-          alert('Jugador no encontrado');
-          return;
+        try {
+            const jugador = mercado.find(j => j.id === jugadorId);
+            
+            if (!jugador) {
+                alert('Jugador no encontrado');
+                return;
+            }
+            
+            // Verificar si el jugador ya expiró
+            if (estaExpirado(jugador.fecha_mercado)) {
+                alert('Este jugador ya no está disponible en el mercado');
+                return;
+            }
+            
+            // SIEMPRE va al banquillo
+            const vaAlBanquillo = true;
+            
+            // Llamar a la API de fichaje
+            await ficharJugador(equipoActual.id, jugadorId, vaAlBanquillo);
+            await cargarDatosIniciales();
+            
+            // Recargar el mercado después de fichar
+            await cargarMercado();
+            
+            alert(`✅ ${jugador.nombre} fichado para el banquillo`);
+            
+        } catch (err) {
+            alert('❌ Error al fichar: ' + err.message);
         }
-        
-        // Determinar si el jugador irá al banquillo
-        const vaAlBanquillo = jugadorVaAlBanquillo(jugador.posicion);
-        
-        if (vaAlBanquillo) {
-          const confirmacion = window.confirm(
-            `No hay espacio en el campo para un ${jugador.posicion_display}. ` +
-            `¿Quieres fichar a ${jugador.nombre} para el banquillo?`
-          );
-          
-          if (!confirmacion) return;
-        }
-        
-        // Llamar a la API de fichaje (necesitarás modificar el backend para aceptar el parámetro de banquillo)
-        await ficharJugador(equipoActual.id, jugadorId, vaAlBanquillo);
-        await cargarDatosIniciales();
-        
-        const mensaje = vaAlBanquillo 
-          ? `✅ ${jugador.nombre} fichado para el banquillo`
-          : `✅ ${jugador.nombre} fichado para el campo`;
-        
-        alert(mensaje);
-        
-      } catch (err) {
-        alert('❌ Error al fichar: ' + err.message);
-      }
     };
 
     const mercadoFiltrado = mercado.filter(j => {
-      const matchNombre = j.nombre.toLowerCase().includes(filtro.toLowerCase());
-      const matchPosicion = posicionFiltro === '' || j.posicion === posicionFiltro;
-      return matchNombre && matchPosicion;
+        const matchNombre = j.nombre.toLowerCase().includes(filtro.toLowerCase());
+        const matchPosicion = posicionFiltro === '' || j.posicion === posicionFiltro;
+        return matchNombre && matchPosicion;
     });
 
     return (
-      <div className="min-h-screen bg-gray-100">
-        <NavBar role={isAdmin ? 'admin' : 'user'} />
-        <div className="p-6">
-          <div className="mb-6 bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-            <h2 className="text-2xl font-bold mb-4">Mercado de Fichajes</h2>
-            <div className="flex gap-4 mb-4">
-              <div className="flex-1 border-2 border-gray-300 p-3 rounded bg-gray-50 flex items-center gap-2">
-                <Search size={20} className="text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar jugador..."
-                  className="bg-transparent outline-none flex-1"
-                  value={filtro}
-                  onChange={(e) => setFiltro(e.target.value)}
-                />
-              </div>
-              <select 
-                className="border-2 border-gray-300 p-3 rounded bg-white"
-                value={posicionFiltro}
-                onChange={(e) => setPosicionFiltro(e.target.value)}
-              >
-                <option value="">Todas las posiciones</option>
-                <option value="POR">Portero</option>
-                <option value="DEF">Defensa</option>
-                <option value="DEL">Delantero</option>
-              </select>
-            </div>
-            <div className="bg-blue-50 p-3 rounded border border-blue-300 text-sm">
-              💰 Presupuesto disponible: {equipoActual && formatValue(equipoActual.presupuesto)}
-            </div>
-          </div>
+        <div className="min-h-screen bg-gray-100">
+            <NavBar role={isAdmin ? 'admin' : 'user'} />
+            <div className="p-6">
+                <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
+                    <h3 className="text-xl font-bold mb-4">Mercado de Fichajes ({mercadoFiltrado.length})</h3>
 
-          <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-            <h3 className="text-xl font-bold mb-4">Jugadores Disponibles ({mercadoFiltrado.length})</h3>
-            {mercadoFiltrado.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No hay jugadores disponibles</p>
-            ) : (
-              <div className="space-y-3">
-                {mercadoFiltrado.map((player) => (
-                  <div key={player.id} className="flex items-center justify-between p-4 bg-gray-50 rounded border-2 border-gray-300 hover:bg-gray-100">
-                    <div className="flex-1">
-                      <div className="font-medium">{player.nombre}</div>
-                      <div className="text-sm text-gray-600">{player.posicion_display} • {formatValue(player.valor)} • {player.puntos_totales} pts</div>
-                    </div>
-                    <button 
-                      onClick={() => handleFichar(player.id)}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center gap-2"
-                    >
-                      <Plus size={16} />
-                      Fichar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    {loading ? (
+                        <p className="text-center text-gray-500 py-8">Cargando jugadores disponibles...</p>
+                    ) : mercadoFiltrado.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            No hay jugadores disponibles en el mercado
+                        </p>
+                    ) : (
+                        <div className="space-y-3">
+                            {mercadoFiltrado.map((player) => {
+                                const expirado = player.expirado;
+                                const esVentaUsuario = player.tipo === 'venta_usuario';
+                                
+                                return (
+                                    <div key={player.id} className="flex items-center justify-between p-4 bg-gray-50 rounded border-2 border-gray-300 hover:bg-gray-100">
+                                        <div className="flex-1">
+                                            <div className="font-medium">{player.nombre}</div>
+                                            <div className="text-sm text-gray-600">
+                                                {player.posicion_display} • {player.equipo_real_nombre} • {formatValue(player.valor)} • {player.puntos_totales} pts
+                                            </div>
+                                            {/* 🆕 INFORMACIÓN DE PROCEDENCIA */}
+                                            <div className={`text-xs mt-1 ${
+                                                esVentaUsuario 
+                                                    ? 'text-purple-600 font-medium' 
+                                                    : expirado 
+                                                        ? 'text-red-600 font-bold' 
+                                                        : 'text-green-600'
+                                            }`}>
+                                                {esVentaUsuario ? (
+                                                    <>🏷️ <span className="font-medium">{player.procedencia}</span></>
+                                                ) : expirado ? (
+                                                    <>❌ <span className="font-medium">Expirado - Ya no disponible</span></>
+                                                ) : (
+                                                    <>🆓 <span className="font-medium">{player.procedencia} • Hasta: {player.fecha_expiracion}</span></>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleFichar(player.id)}
+                                            disabled={expirado}
+                                            className={`px-4 py-2 rounded flex items-center gap-2 transition-all ${
+                                                expirado
+                                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                                    : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105'
+                                            }`}
+                                        >
+                                            <Plus size={16} />
+                                            {expirado ? 'Expirado' : 'Fichar'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
-      </div>
     );
   };
 
-  const RankingsScreen = () => (
+  const AdminScreen = ({ jugadores, ligaActual, setCurrentScreen, asignarPuntos, cargarDatosIniciales }) => {
+      const [puntuaciones, setPuntuaciones] = useState({});
+      const [nuevaJornadaNumero, setNuevaJornadaNumero] = useState('');
+      const [vista, setVista] = useState('jornadas');
+      const [busqueda, setBusqueda] = useState('');
+      const [filtroEquipo, setFiltroEquipo] = useState('todos');
+      const [jornadaSeleccionada, setJornadaSeleccionada] = useState(ligaActual?.jornada_actual || 1);
+      const [jornadas, setJornadas] = useState([]);
+      const [jornadaDetalle, setJornadaDetalle] = useState(null);
+      const [partidos, setPartidos] = useState([]);
+      const [equiposReales, setEquiposReales] = useState([]);
+      const [nuevoPartido, setNuevoPartido] = useState({ equipo_local: '', equipo_visitante: '' });
+      const jugadoresList = jugadores || [];
+
+      // Cargar jornadas y equipos al montar el componente
+      useEffect(() => {
+          cargarJornadas();
+          cargarEquiposReales();
+      }, []);
+
+      const cargarJornadas = async () => {
+          try {
+              const response = await fetch(`${API_URL}/jornadas/`);
+              if (response.ok) {
+                  const data = await response.json();
+                  setJornadas(data);
+              }
+          } catch (error) {
+              console.error('Error cargando jornadas:', error);
+          }
+      };
+
+      const cargarEquiposReales = async () => {
+          try {
+              const token = localStorage.getItem('access_token');
+              const response = await fetch(`${API_URL}/equipos-reales/`, {
+                  headers: {
+                      'Authorization': `Bearer ${token}`
+                  }
+              });
+              if (response.ok) {
+                  const data = await response.json();
+                  setEquiposReales(data);
+              } else {
+                  console.error('Error cargando equipos reales');
+              }
+          } catch (error) {
+              console.error('Error cargando equipos reales:', error);
+          }
+      };
+
+      const cargarPartidosJornada = async (jornadaId) => {
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`${API_URL}/jornadas/${jornadaId}/partidos/`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setPartidos(data);
+                setJornadaDetalle(jornadaId);
+            }
+        } catch (error) {
+            console.error('Error cargando partidos:', error);
+            setPartidos([]);
+        }
+    };
+
+      const crearPartido = async (jornadaId) => {
+        if (!nuevoPartido.equipo_local || !nuevoPartido.equipo_visitante) {
+            alert('Selecciona ambos equipos');
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('access_token');
+            const response = await fetch(`${API_URL}/partidos/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    jornada: jornadaId,
+                    equipo_local: parseInt(nuevoPartido.equipo_local),
+                    equipo_visitante: parseInt(nuevoPartido.equipo_visitante),
+                    fecha: new Date().toISOString()
+                }),
+            });
+            
+            if (response.ok) {
+                alert('Partido creado exitosamente');
+                setNuevoPartido({ equipo_local: '', equipo_visitante: '' });
+                await cargarPartidosJornada(jornadaId);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Error al crear partido');
+            }
+        } catch (err) {
+            alert('Error al crear partido: ' + err.message);
+        }
+      };
+
+      const eliminarJornada = async (jornadaId) => {
+        if (window.confirm('¿Seguro que quieres eliminar esta jornada? Se eliminarán todos sus partidos.')) {
+            try {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch(`${API_URL}/jornadas/${jornadaId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    alert('Jornada eliminada exitosamente');
+                    await cargarJornadas();
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Error al eliminar jornada');
+                }
+            } catch (err) {
+                alert('Error al eliminar jornada: ' + err.message);
+            }
+        }
+      };
+
+      const eliminarPartido = async (partidoId) => {
+        if (window.confirm('¿Seguro que quieres eliminar este partido?')) {
+            try {
+                const token = localStorage.getItem('access_token');
+                const response = await fetch(`${API_URL}/partidos/${partidoId}/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    alert('Partido eliminado exitosamente');
+                    await cargarPartidosJornada(jornadaDetalle);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Error al eliminar partido');
+                }
+            } catch (err) {
+                alert('Error al eliminar partido: ' + err.message);
+            }
+        }
+    };
+
+      // 🆕 Filtrar jugadores según búsqueda y equipo REAL
+      const jugadoresFiltrados = jugadoresList.filter(jugador => {
+          const coincideBusqueda = jugador.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+                                (jugador.equipo_real_nombre && jugador.equipo_real_nombre.toLowerCase().includes(busqueda.toLowerCase()));
+          
+          const coincideEquipo = filtroEquipo === 'todos' || 
+                                (jugador.equipo_real_nombre && jugador.equipo_real_nombre === filtroEquipo);
+          
+          return coincideBusqueda && coincideEquipo;
+      });
+
+      const handlePuntuacionChange = (jugadorId, puntos) => {
+          setPuntuaciones(prev => ({
+              ...prev,
+              [jugadorId]: parseInt(puntos) || 0
+          }));
+      };
+
+      const handleAsignarPuntos = async () => {
+          if (Object.keys(puntuaciones).length === 0) {
+              alert('No hay puntuaciones para asignar');
+              return;
+          }
+
+          const puntosArray = Object.entries(puntuaciones).map(([jugador_id, puntos]) => ({
+              jugador_id: parseInt(jugador_id),
+              puntos
+          }));
+
+          try {
+              await asignarPuntos(jornadaSeleccionada, puntosArray);
+              alert(`Puntos asignados exitosamente para la jornada ${jornadaSeleccionada}`);
+              setPuntuaciones({});
+              await cargarDatosIniciales();
+          } catch (err) {
+              alert('Error al asignar puntos: ' + err.message);
+          }
+      };
+
+      const handleCrearJornada = async () => {
+          if (!nuevaJornadaNumero) {
+              alert('Ingresa un número de jornada');
+              return;
+          }
+
+          try {
+              const token = localStorage.getItem('access_token');
+              if (!token) {
+                  throw new Error('No hay sesión activa');
+              }
+
+              const response = await fetch(`${API_URL}/jornadas/`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ 
+                      numero: parseInt(nuevaJornadaNumero)
+                  }),
+              });
+              
+              if (response.ok) {
+                  alert('Jornada creada exitosamente');
+                  setNuevaJornadaNumero('');
+                  await cargarJornadas();
+              } else {
+                  const errorData = await response.json();
+                  throw new Error(errorData.detail || `Error ${response.status}`);
+              }
+          } catch (err) {
+              alert('Error al crear jornada: ' + err.message);
+              console.error('Error detallado:', err);
+          }
+      };
+
+      const limpiarFiltros = () => {
+          setBusqueda('');
+          setFiltroEquipo('todos');
+      };
+
+      return (
+          <div className="min-h-screen bg-gray-100">
+              {/* Navbar principal */}
+              <div className="bg-yellow-600 text-white p-4 shadow-lg">
+                  <div className="container mx-auto flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                          <Settings size={28} />
+                          <h1 className="text-xl font-bold">Panel de Administración</h1>
+                      </div>
+                      <div className="flex gap-4">
+                          <button
+                              onClick={() => {
+                                  localStorage.removeItem('access_token');
+                                  localStorage.removeItem('refresh_token');
+                                  setCurrentScreen('login');
+                              }}
+                              className="px-4 py-2 bg-red-600 rounded hover:bg-red-700 flex items-center gap-2"
+                          >
+                              <LogOut size={18} /> Cerrar Sesión
+                          </button>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="p-6">
+                  <div className="mb-6 bg-yellow-50 p-6 rounded-lg shadow border-2 border-yellow-400">
+                      <h2 className="text-2xl font-bold mb-2">Panel de Administración</h2>
+                      <p className="text-sm text-gray-600">Gestiona jornadas, partidos, puntuaciones y jugadores</p>
+                  </div>
+
+                  {/* Barra interna para cambiar de vista */}
+                  <div className="flex gap-2 mb-6">
+                      <button
+                          onClick={() => setVista('jornadas')}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
+                              vista === 'jornadas'
+                                  ? 'bg-white border-yellow-500 text-yellow-700'
+                                  : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'
+                          }`}
+                      >
+                          <Calendar size={18} /> Calendario
+                      </button>
+                      <button
+                          onClick={() => setVista('puntuaciones')}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
+                              vista === 'puntuaciones'
+                                  ? 'bg-white border-yellow-500 text-yellow-700'
+                                  : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'
+                          }`}
+                      >
+                          <Star size={18} /> Puntuaciones
+                      </button>
+                  </div>
+
+                  {/* Contenido dinámico según la vista */}
+                  {vista === 'jornadas' ? (
+                      <div className="space-y-6">
+                          {/* Panel para crear nueva jornada */}
+                          <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
+                              <h3 className="text-xl font-bold mb-4">Crear Nueva Jornada</h3>
+                              <div className="flex gap-4 items-end">
+                                  <div className="flex-1">
+                                      <label className="block text-sm font-medium mb-2">Número de Jornada</label>
+                                      <input
+                                          type="number"
+                                          value={nuevaJornadaNumero}
+                                          onChange={(e) => setNuevaJornadaNumero(e.target.value)}
+                                          className="w-full border-2 border-gray-300 p-3 rounded"
+                                          placeholder="Ej: 5"
+                                      />
+                                  </div>
+                                  <button
+                                      onClick={handleCrearJornada}
+                                      className="bg-green-600 text-white p-3 rounded font-medium hover:bg-green-700 whitespace-nowrap"
+                                  >
+                                      + Crear Jornada
+                                  </button>
+                              </div>
+                          </div>
+
+                          {/* Panel de jornadas existentes */}
+                          <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
+                              <h3 className="text-xl font-bold mb-4">Jornadas Existentes</h3>
+                              {jornadas.length === 0 ? (
+                                  <p className="text-center text-gray-500 py-4">No hay jornadas creadas</p>
+                              ) : (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                      {jornadas.map((jornada) => (
+                                          <div key={jornada.id} className="border-2 border-gray-300 rounded-lg p-4 hover:border-yellow-500 transition-colors">
+                                              <div className="flex justify-between items-start mb-3">
+                                                  <div 
+                                                      className="flex-1 cursor-pointer"
+                                                      onClick={() => cargarPartidosJornada(jornada.id)}
+                                                  >
+                                                      <h4 className="font-bold text-lg">Jornada {jornada.numero}</h4>
+                                                  </div>
+                                                  <div className="flex items-center gap-2">
+                                                      <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm font-medium">
+                                                          {jornada.partidos_count || 0} partidos
+                                                      </div>
+                                                      <button
+                                                          onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              eliminarJornada(jornada.id);
+                                                          }}
+                                                          className="text-red-600 hover:text-red-800 p-1"
+                                                          title="Eliminar jornada"
+                                                      >
+                                                          🗑️
+                                                      </button>
+                                                  </div>
+                                              </div>
+                                              
+                                              {/* Detalles de partidos si esta es la jornada seleccionada */}
+                                              {jornadaDetalle === jornada.id && (
+                                                  <div className="mt-4 space-y-4">
+                                                      {/* Lista de partidos */}
+                                                      <div className="space-y-2">
+                                                          <h5 className="font-semibold text-sm text-gray-700">Partidos:</h5>
+                                                          {partidos.length === 0 ? (
+                                                              <p className="text-sm text-gray-500 text-center py-2">No hay partidos en esta jornada</p>
+                                                          ) : (
+                                                              partidos.map((partido) => (
+                                                                  <div key={partido.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                                                                      <div className="text-sm">
+                                                                          <span className="font-medium">{partido.equipo_local_nombre}</span>
+                                                                          <span className="mx-2">vs</span>
+                                                                          <span className="font-medium">{partido.equipo_visitante_nombre}</span>
+                                                                      </div>
+                                                                      <button
+                                                                          onClick={(e) => {
+                                                                              e.stopPropagation();
+                                                                              eliminarPartido(partido.id);
+                                                                          }}
+                                                                          className="text-red-600 hover:text-red-800 text-sm"
+                                                                      >
+                                                                          Eliminar
+                                                                      </button>
+                                                                  </div>
+                                                              ))
+                                                          )}
+                                                      </div>
+
+                                                      {/* Formulario para crear nuevo partido */}
+                                                      <div className="border-t pt-3">
+                                                          <h5 className="font-semibold text-sm text-gray-700 mb-2">Crear Nuevo Partido:</h5>
+                                                          <div className="flex gap-2 mb-2">
+                                                              <select
+                                                                  value={nuevoPartido.equipo_local}
+                                                                  onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_local: e.target.value }))}
+                                                                  className="flex-1 border border-gray-300 p-2 rounded text-sm"
+                                                              >
+                                                                  <option value="">Equipo Local</option>
+                                                                  {equiposReales.map(equipo => (
+                                                                      <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
+                                                                  ))}
+                                                              </select>
+                                                              <select
+                                                                  value={nuevoPartido.equipo_visitante}
+                                                                  onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_visitante: e.target.value }))}
+                                                                  className="flex-1 border border-gray-300 p-2 rounded text-sm"
+                                                              >
+                                                                  <option value="">Equipo Visitante</option>
+                                                                  {equiposReales.map(equipo => (
+                                                                      <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
+                                                                  ))}
+                                                              </select>
+                                                          </div>
+                                                          <button
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  crearPartido(jornada.id);
+                                                              }}
+                                                              className="w-full bg-blue-600 text-white p-2 rounded text-sm hover:bg-blue-700"
+                                                          >
+                                                              + Añadir Partido
+                                                          </button>
+                                                      </div>
+                                                  </div>
+                                              )}
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  ) : (
+                      <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
+                          <div className="flex flex-col lg:flex-row gap-4 mb-6">
+                              {/* Selector de Jornada */}
+                              <div className="flex-1">
+                                  <label className="block text-sm font-medium mb-2">Jornada</label>
+                                  <select
+                                      value={jornadaSeleccionada}
+                                      onChange={(e) => setJornadaSeleccionada(parseInt(e.target.value))}
+                                      className="w-full border-2 border-gray-300 p-3 rounded bg-white"
+                                  >
+                                      {[...Array(ligaActual?.jornada_actual || 1).keys()].map(i => (
+                                          <option key={i + 1} value={i + 1}>
+                                              Jornada {i + 1}
+                                          </option>
+                                      ))}
+                                  </select>
+                              </div>
+
+                              {/* Buscador */}
+                              <div className="flex-1">
+                                  <label className="block text-sm font-medium mb-2">Buscar Jugador</label>
+                                  <div className="relative">
+                                      <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+                                      <input
+                                          type="text"
+                                          value={busqueda}
+                                          onChange={(e) => setBusqueda(e.target.value)}
+                                          className="w-full border-2 border-gray-300 p-3 pl-10 rounded"
+                                          placeholder="Nombre o equipo real..."
+                                      />
+                                  </div>
+                              </div>
+
+                              {/* 🆕 Filtro por Equipo REAL */}
+                              <div className="flex-1">
+                                  <label className="block text-sm font-medium mb-2">Filtrar por Equipo Real</label>
+                                  <select
+                                      value={filtroEquipo}
+                                      onChange={(e) => setFiltroEquipo(e.target.value)}
+                                      className="w-full border-2 border-gray-300 p-3 rounded bg-white"
+                                  >
+                                      <option value="todos">Todos los equipos</option>
+                                      {equiposReales.map(equipo => (
+                                          <option key={equipo.id} value={equipo.nombre}>
+                                              {equipo.nombre}
+                                          </option>
+                                      ))}
+                                  </select>
+                              </div>
+
+                              {/* Botón Limpiar */}
+                              <div className="flex items-end">
+                                  <button
+                                      onClick={limpiarFiltros}
+                                      className="bg-gray-500 text-white p-3 rounded font-medium hover:bg-gray-600 whitespace-nowrap"
+                                  >
+                                      Limpiar Filtros
+                                  </button>
+                              </div>
+                          </div>
+
+                          <h3 className="text-xl font-bold mb-4">Asignar Puntos - Jornada {jornadaSeleccionada}</h3>
+                          
+                          <div className="mb-4 text-sm text-gray-600">
+                              Mostrando {jugadoresFiltrados.length} de {jugadoresList.length} jugadores
+                              {filtroEquipo !== 'todos' && ` • Filtrado por: ${filtroEquipo}`}
+                          </div>
+                          
+                          <div className="space-y-3 max-h-96 overflow-y-auto">
+                              {jugadoresFiltrados.map((player) => (
+                                  <div key={player.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded border-2 border-gray-300">
+                                      <div className="flex-1">
+                                          <div className="font-medium">{player.nombre}</div>
+                                          <div className="text-sm text-gray-600">
+                                              {player.posicion_display} • {player.equipo_real_nombre} • €{(player.valor / 1000000).toFixed(1)}M • {player.puntos_totales} pts totales
+                                          </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                          <label className="text-sm text-gray-600">Puntos:</label>
+                                          <input
+                                              type="number"
+                                              className="w-20 border-2 border-gray-300 p-2 rounded text-center"
+                                              placeholder="0"
+                                              value={puntuaciones[player.id] || ''}
+                                              onChange={(e) => handlePuntuacionChange(player.id, e.target.value)}
+                                          />
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+
+                          <div className="mt-6 pt-6 border-t-2 border-gray-300">
+                              <button
+                                  onClick={handleAsignarPuntos}
+                                  className="w-full bg-green-600 text-white p-4 rounded font-bold hover:bg-green-700"
+                              >
+                                  Aplicar Puntos a Jornada {jornadaSeleccionada}
+                              </button>
+                              <p className="text-sm text-gray-600 mt-2 text-center">
+                                  Los valores se recalcularán automáticamente (€0.1M por punto)
+                              </p>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          </div>
+      );
+  };
+
+const RankingsScreen = () => (
     <div className="min-h-screen bg-gray-100">
       <NavBar role={isAdmin ? 'admin' : 'user'} />
       <div className="p-6">
@@ -1015,533 +1465,6 @@ const FantasyFutsalWireframes = () => {
       </div>
     </div>
   );
-
-  const AdminScreen = ({ jugadores, ligaActual, setCurrentScreen, asignarPuntos, cargarDatosIniciales }) => {
-    const [puntuaciones, setPuntuaciones] = useState({});
-    const [nuevaJornadaNumero, setNuevaJornadaNumero] = useState('');
-    const [vista, setVista] = useState('jornadas');
-    const [busqueda, setBusqueda] = useState('');
-    const [filtroEquipo, setFiltroEquipo] = useState('todos');
-    const [jornadaSeleccionada, setJornadaSeleccionada] = useState(ligaActual?.jornada_actual || 1);
-    const [jornadas, setJornadas] = useState([]);
-    const [jornadaDetalle, setJornadaDetalle] = useState(null);
-    const [partidos, setPartidos] = useState([]);
-    const [equiposReales, setEquiposReales] = useState([]);
-    const [nuevoPartido, setNuevoPartido] = useState({ equipo_local: '', equipo_visitante: '' });
-    
-    const jugadoresList = jugadores || [];
-    
-
-    // Cargar jornadas y equipos al montar el componente
-    useEffect(() => {
-        cargarJornadas();
-        cargarEquiposReales();
-    }, []);
-
-    const cargarJornadas = async () => {
-        try {
-            const response = await fetch(`${API_URL}/jornadas/`);
-            if (response.ok) {
-                const data = await response.json();
-                setJornadas(data);
-            }
-        } catch (error) {
-            console.error('Error cargando jornadas:', error);
-        }
-    };
-
-    const cargarEquiposReales = async () => {
-        try {
-            const token = localStorage.getItem('access_token');
-            const response = await fetch(`${API_URL}/equipos-reales/`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setEquiposReales(data);
-            } else {
-                console.error('Error cargando equipos reales');
-            }
-        } catch (error) {
-            console.error('Error cargando equipos reales:', error);
-        }
-    };
-
-    const cargarPartidosJornada = async (jornadaId) => {
-      try {
-          const token = localStorage.getItem('access_token');
-          const response = await fetch(`${API_URL}/jornadas/${jornadaId}/partidos/`, {
-              headers: {
-                  'Authorization': `Bearer ${token}`
-              }
-          });
-          if (response.ok) {
-              const data = await response.json();
-              setPartidos(data);
-              setJornadaDetalle(jornadaId);
-          }
-      } catch (error) {
-          console.error('Error cargando partidos:', error);
-          setPartidos([]);
-      }
-  };
-
-    const crearPartido = async (jornadaId) => {
-      if (!nuevoPartido.equipo_local || !nuevoPartido.equipo_visitante) {
-          alert('Selecciona ambos equipos');
-          return;
-      }
-
-      try {
-          const token = localStorage.getItem('access_token');
-          const response = await fetch(`${API_URL}/partidos/`, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`  // ← Agregar token aquí
-              },
-              body: JSON.stringify({
-                  jornada: jornadaId,
-                  equipo_local: parseInt(nuevoPartido.equipo_local),
-                  equipo_visitante: parseInt(nuevoPartido.equipo_visitante),
-                  fecha: new Date().toISOString()  // ← Agregar fecha actual
-              }),
-          });
-          
-          if (response.ok) {
-              alert('Partido creado exitosamente');
-              setNuevoPartido({ equipo_local: '', equipo_visitante: '' });
-              await cargarPartidosJornada(jornadaId);
-          } else {
-              const errorData = await response.json();
-              throw new Error(errorData.detail || 'Error al crear partido');
-          }
-      } catch (err) {
-          alert('Error al crear partido: ' + err.message);
-      }
-    };
-    const eliminarJornada = async (jornadaId) => {
-      if (window.confirm('¿Seguro que quieres eliminar esta jornada? Se eliminarán todos sus partidos.')) {
-          try {
-              const token = localStorage.getItem('access_token');
-              const response = await fetch(`${API_URL}/jornadas/${jornadaId}/`, {
-                  method: 'DELETE',
-                  headers: {
-                      'Authorization': `Bearer ${token}`
-                  }
-              });
-              
-              if (response.ok) {
-                  alert('Jornada eliminada exitosamente');
-                  await cargarJornadas();
-              } else {
-                  const errorData = await response.json();
-                  throw new Error(errorData.detail || 'Error al eliminar jornada');
-              }
-          } catch (err) {
-              alert('Error al eliminar jornada: ' + err.message);
-          }
-      }
-    };
-    const eliminarPartido = async (partidoId) => {
-      if (window.confirm('¿Seguro que quieres eliminar este partido?')) {
-          try {
-              const token = localStorage.getItem('access_token');
-              const response = await fetch(`${API_URL}/partidos/${partidoId}/`, {
-                  method: 'DELETE',
-                  headers: {
-                      'Authorization': `Bearer ${token}`  // ← Agregar token aquí
-                  }
-              });
-              
-              if (response.ok) {
-                  alert('Partido eliminado exitosamente');
-                  await cargarPartidosJornada(jornadaDetalle);
-              } else {
-                  const errorData = await response.json();
-                  throw new Error(errorData.detail || 'Error al eliminar partido');
-              }
-          } catch (err) {
-              alert('Error al eliminar partido: ' + err.message);
-          }
-      }
-   };
-
-    // Obtener lista única de equipos para el filtro de jugadores
-    const equiposFiltro = [...new Set(jugadoresList.map(j => j.equipo_nombre).filter(Boolean))];
-
-    // Filtrar jugadores según búsqueda y equipo
-    const jugadoresFiltrados = jugadoresList.filter(jugador => {
-        const coincideBusqueda = jugador.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-                               jugador.equipo_nombre?.toLowerCase().includes(busqueda.toLowerCase());
-        const coincideEquipo = filtroEquipo === 'todos' || jugador.equipo_nombre === filtroEquipo;
-        return coincideBusqueda && coincideEquipo;
-    });
-
-    const handlePuntuacionChange = (jugadorId, puntos) => {
-        setPuntuaciones(prev => ({
-            ...prev,
-            [jugadorId]: parseInt(puntos) || 0
-        }));
-    };
-
-    const handleAsignarPuntos = async () => {
-        if (Object.keys(puntuaciones).length === 0) {
-            alert('No hay puntuaciones para asignar');
-            return;
-        }
-
-        const puntosArray = Object.entries(puntuaciones).map(([jugador_id, puntos]) => ({
-            jugador_id: parseInt(jugador_id),
-            puntos
-        }));
-
-        try {
-            await asignarPuntos(jornadaSeleccionada, puntosArray);
-            alert(`Puntos asignados exitosamente para la jornada ${jornadaSeleccionada}`);
-            setPuntuaciones({});
-            await cargarDatosIniciales();
-        } catch (err) {
-            alert('Error al asignar puntos: ' + err.message);
-        }
-    };
-
-  const handleCrearJornada = async () => {
-    if (!nuevaJornadaNumero) {
-        alert('Ingresa un número de jornada');
-        return;
-    }
-
-    try {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            throw new Error('No hay sesión activa');
-        }
-
-        const response = await fetch(`${API_URL}/jornadas/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ 
-                numero: parseInt(nuevaJornadaNumero)
-            }),
-        });
-        
-        if (response.ok) {
-            alert('Jornada creada exitosamente');
-            setNuevaJornadaNumero('');
-            await cargarJornadas();
-        } else {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || `Error ${response.status}`);
-        }
-    } catch (err) {
-        alert('Error al crear jornada: ' + err.message);
-        console.error('Error detallado:', err);
-    }
-  };
-    const limpiarFiltros = () => {
-        setBusqueda('');
-        setFiltroEquipo('todos');
-    };
-
-    return (
-        <div className="min-h-screen bg-gray-100">
-            {/* Navbar principal */}
-            <div className="bg-yellow-600 text-white p-4 shadow-lg">
-                <div className="container mx-auto flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <Settings size={28} />
-                        <h1 className="text-xl font-bold">Panel de Administración</h1>
-                    </div>
-                    <div className="flex gap-4">
-                        <button
-                            onClick={() => {
-                                localStorage.removeItem('access_token');
-                                localStorage.removeItem('refresh_token');
-                                setCurrentScreen('login');
-                            }}
-                            className="px-4 py-2 bg-red-600 rounded hover:bg-red-700 flex items-center gap-2"
-                        >
-                            <LogOut size={18} /> Cerrar Sesión
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="p-6">
-                <div className="mb-6 bg-yellow-50 p-6 rounded-lg shadow border-2 border-yellow-400">
-                    <h2 className="text-2xl font-bold mb-2">Panel de Administración</h2>
-                    <p className="text-sm text-gray-600">Gestiona jornadas, partidos, puntuaciones y jugadores</p>
-                </div>
-
-                {/* Barra interna para cambiar de vista */}
-                <div className="flex gap-2 mb-6">
-                    <button
-                        onClick={() => setVista('jornadas')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
-                            vista === 'jornadas'
-                                ? 'bg-white border-yellow-500 text-yellow-700'
-                                : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'
-                        }`}
-                    >
-                        <Calendar size={18} /> Calendario
-                    </button>
-                    <button
-                        onClick={() => setVista('puntuaciones')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium border-b-4 transition-all ${
-                            vista === 'puntuaciones'
-                                ? 'bg-white border-yellow-500 text-yellow-700'
-                                : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'
-                        }`}
-                    >
-                        <Star size={18} /> Puntuaciones
-                    </button>
-                </div>
-
-                {/* Contenido dinámico según la vista */}
-                {vista === 'jornadas' ? (
-                    <div className="space-y-6">
-                        {/* Panel para crear nueva jornada */}
-                        <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-                            <h3 className="text-xl font-bold mb-4">Crear Nueva Jornada</h3>
-                            <div className="flex gap-4 items-end">
-                                <div className="flex-1">
-                                    <label className="block text-sm font-medium mb-2">Número de Jornada</label>
-                                    <input
-                                        type="number"
-                                        value={nuevaJornadaNumero}
-                                        onChange={(e) => setNuevaJornadaNumero(e.target.value)}
-                                        className="w-full border-2 border-gray-300 p-3 rounded"
-                                        placeholder="Ej: 5"
-                                    />
-                                </div>
-                                <button
-                                    onClick={handleCrearJornada}
-                                    className="bg-green-600 text-white p-3 rounded font-medium hover:bg-green-700 whitespace-nowrap"
-                                >
-                                    + Crear Jornada
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Panel de jornadas existentes */}
-                        <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-                            <h3 className="text-xl font-bold mb-4">Jornadas Existentes</h3>
-                            {jornadas.length === 0 ? (
-                                <p className="text-center text-gray-500 py-4">No hay jornadas creadas</p>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {jornadas.map((jornada) => (
-                                        <div key={jornada.id} className="border-2 border-gray-300 rounded-lg p-4 hover:border-yellow-500 transition-colors">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div 
-                                                    className="flex-1 cursor-pointer"
-                                                    onClick={() => cargarPartidosJornada(jornada.id)}
-                                                >
-                                                    <h4 className="font-bold text-lg">Jornada {jornada.numero}</h4>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm font-medium">
-                                                        {jornada.partidos_count || 0} partidos
-                                                    </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            eliminarJornada(jornada.id);
-                                                        }}
-                                                        className="text-red-600 hover:text-red-800 p-1"
-                                                        title="Eliminar jornada"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            
-                                            {/* Detalles de partidos si esta es la jornada seleccionada */}
-                                            {jornadaDetalle === jornada.id && (
-                                                <div className="mt-4 space-y-4">
-                                                    {/* Lista de partidos */}
-                                                    <div className="space-y-2">
-                                                        <h5 className="font-semibold text-sm text-gray-700">Partidos:</h5>
-                                                        {partidos.length === 0 ? (
-                                                            <p className="text-sm text-gray-500 text-center py-2">No hay partidos en esta jornada</p>
-                                                        ) : (
-                                                            partidos.map((partido) => (
-                                                                <div key={partido.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-                                                                    <div className="text-sm">
-                                                                        <span className="font-medium">{partido.equipo_local_nombre}</span>
-                                                                        <span className="mx-2">vs</span>
-                                                                        <span className="font-medium">{partido.equipo_visitante_nombre}</span>
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            eliminarPartido(partido.id);
-                                                                        }}
-                                                                        className="text-red-600 hover:text-red-800 text-sm"
-                                                                    >
-                                                                        Eliminar
-                                                                    </button>
-                                                                </div>
-                                                            ))
-                                                        )}
-                                                    </div>
-
-                                                    {/* Formulario para crear nuevo partido */}
-                                                    <div className="border-t pt-3">
-                                                        <h5 className="font-semibold text-sm text-gray-700 mb-2">Crear Nuevo Partido:</h5>
-                                                        <div className="flex gap-2 mb-2">
-                                                            <select
-                                                                value={nuevoPartido.equipo_local}
-                                                                onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_local: e.target.value }))}
-                                                                className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                                                            >
-                                                                <option value="">Equipo Local</option>
-                                                                {equiposReales.map(equipo => (
-                                                                    <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                                                                ))}
-                                                            </select>
-                                                            <select
-                                                                value={nuevoPartido.equipo_visitante}
-                                                                onChange={(e) => setNuevoPartido(prev => ({ ...prev, equipo_visitante: e.target.value }))}
-                                                                className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                                                            >
-                                                                <option value="">Equipo Visitante</option>
-                                                                {equiposReales.map(equipo => (
-                                                                    <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                crearPartido(jornada.id);
-                                                            }}
-                                                            className="w-full bg-blue-600 text-white p-2 rounded text-sm hover:bg-blue-700"
-                                                        >
-                                                            + Añadir Partido
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                      </div>
-                ) : (
-                    // Vista de puntuaciones (se mantiene igual)
-                    <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-                        <div className="flex flex-col lg:flex-row gap-4 mb-6">
-                            {/* Selector de Jornada */}
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium mb-2">Jornada</label>
-                                <select
-                                    value={jornadaSeleccionada}
-                                    onChange={(e) => setJornadaSeleccionada(parseInt(e.target.value))}
-                                    className="w-full border-2 border-gray-300 p-3 rounded bg-white"
-                                >
-                                    {[...Array(ligaActual?.jornada_actual || 1).keys()].map(i => (
-                                        <option key={i + 1} value={i + 1}>
-                                            Jornada {i + 1}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Buscador */}
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium mb-2">Buscar Jugador</label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-                                    <input
-                                        type="text"
-                                        value={busqueda}
-                                        onChange={(e) => setBusqueda(e.target.value)}
-                                        className="w-full border-2 border-gray-300 p-3 pl-10 rounded"
-                                        placeholder="Nombre o equipo..."
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Filtro por Equipo */}
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium mb-2">Filtrar por Equipo</label>
-                                <select
-                                    value={filtroEquipo}
-                                    onChange={(e) => setFiltroEquipo(e.target.value)}
-                                    className="w-full border-2 border-gray-300 p-3 rounded bg-white"
-                                >
-                                    <option value="todos">Todos los equipos</option>
-                                    {equiposFiltro.map(equipo => (
-                                        <option key={equipo} value={equipo}>{equipo}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Botón Limpiar */}
-                            <div className="flex items-end">
-                                <button
-                                    onClick={limpiarFiltros}
-                                    className="bg-gray-500 text-white p-3 rounded font-medium hover:bg-gray-600 whitespace-nowrap"
-                                >
-                                    Limpiar Filtros
-                                </button>
-                            </div>
-                        </div>
-
-                        <h3 className="text-xl font-bold mb-4">Asignar Puntos - Jornada {jornadaSeleccionada}</h3>
-                        
-                        <div className="mb-4 text-sm text-gray-600">
-                            Mostrando {jugadoresFiltrados.length} de {jugadoresList.length} jugadores
-                        </div>
-                        
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                            {jugadoresFiltrados.map((player) => (
-                                <div key={player.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded border-2 border-gray-300">
-                                    <div className="flex-1">
-                                        <div className="font-medium">{player.nombre}</div>
-                                        <div className="text-sm text-gray-600">
-                                            {player.posicion_display} • {player.equipo_nombre} • €{(player.valor / 1000000).toFixed(1)}M • {player.puntos_totales} pts totales
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-sm text-gray-600">Puntos:</label>
-                                        <input
-                                            type="number"
-                                            className="w-20 border-2 border-gray-300 p-2 rounded text-center"
-                                            placeholder="0"
-                                            value={puntuaciones[player.id] || ''}
-                                            onChange={(e) => handlePuntuacionChange(player.id, e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-6 pt-6 border-t-2 border-gray-300">
-                            <button
-                                onClick={handleAsignarPuntos}
-                                className="w-full bg-green-600 text-white p-4 rounded font-bold hover:bg-green-700"
-                            >
-                                Aplicar Puntos a Jornada {jornadaSeleccionada}
-                            </button>
-                            <p className="text-sm text-gray-600 mt-2 text-center">
-                                Los valores se recalcularán automáticamente (€0.1M por punto)
-                            </p>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-  };
 
   const CalendarScreen = () => {
     const [jornadas, setJornadas] = useState([]);
@@ -1696,15 +1619,6 @@ const FantasyFutsalWireframes = () => {
                           )}
                         </div>
                       </div>
-                      
-                      {partido.jugado && (
-                        <div className="text-center mt-3">
-                          <div className="text-sm text-gray-600">
-                            Resultado: <span className="font-bold">{partido.goles_local} - {partido.goles_visitante}</span>
-                          </div>
-                        </div>
-                      )}
-                      
                       {!partido.jugado && (
                         <div className="text-center mt-3">
                           <div className="text-sm text-gray-500">Partido pendiente</div>
@@ -1720,6 +1634,8 @@ const FantasyFutsalWireframes = () => {
       </div>
     );
   };
+
+
 
 const renderScreen = () => {
     switch(currentScreen) {

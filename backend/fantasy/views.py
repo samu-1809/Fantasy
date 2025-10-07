@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
@@ -8,15 +9,16 @@ from django.contrib.auth.models import User
 from .serializers import RegisterSerializer, LoginSerializer
 from django.db.models import Prefetch
 from django.utils import timezone
-
+from datetime import datetime, timedelta
 from django.db.models import Q
+import random
 from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
 from .serializers import (
     LigaSerializer, JugadorSerializer, EquipoSerializer, AlineacionSerializer,
     JornadaSerializer, PuntuacionSerializer, EquipoRealSerializer, PartidoSerializer, FicharJugadorSerializer, VenderJugadorSerializer
 )
-import random
 
+# RegisterView CORREGIDA
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
@@ -41,70 +43,138 @@ class RegisterView(generics.CreateAPIView):
             equipo = Equipo.objects.create(
                 usuario=user,
                 liga=liga,
-                nombre=f"{user.username}",
-                presupuesto=50000000
+                nombre=f"Equipo de {user.username}",
+                presupuesto=150000000  # 150M inicial
             )
             print(f"✅ Equipo creado: {equipo.nombre}")
 
-            # ASIGNACIÓN AUTOMÁTICA DE JUGADORES INICIALES
-            print("🔄 Asignando jugadores iniciales...")
-            jugadores_disponibles = Jugador.objects.exclude(
-                equipo__liga=liga
-            ).order_by('?')
+            # ASIGNACIÓN ALEATORIA - GARANTIZAR 1-3-3
+            print("🔄 Asignando jugadores aleatorios (1 POR, 3 DEF, 3 DEL)...")
+            
+            presupuesto_maximo = 100000000  # 100M para jugadores
+            presupuesto_actual = presupuesto_maximo
+            jugadores_asignados = []
+            
+            # DEBUG: Contar disponibles
+            for pos in ['POR', 'DEF', 'DEL']:
+                count = Jugador.objects.filter(equipo__isnull=True, posicion=pos).count()
+                print(f"🎯 {pos} disponibles: {count}")
 
-            print(f"🎯 Jugadores disponibles: {jugadores_disponibles.count()}")
+            # 1. PORTERO - aleatorio que quepa en el presupuesto
+            porteros = Jugador.objects.filter(
+                equipo__isnull=True, 
+                posicion='POR',
+                valor__lte=presupuesto_actual  # Que quepa en el presupuesto
+            ).order_by('?')  # ✅ ALEATORIO
+            
+            portero = porteros.first() if porteros.exists() else None
+            
+            if portero:
+                jugadores_asignados.append(portero)
+                presupuesto_actual -= portero.valor
+                print(f"✅ PORTERO: {portero.nombre} - €{portero.valor:,}")
+                print(f"💰 Presupuesto restante: €{presupuesto_actual:,}")
+            else:
+                print("❌ No hay porteros disponibles que quepan en el presupuesto")
+                equipo.delete()
+                return Response({"error": "No hay porteros disponibles"}, status=400)
 
-            asignaciones = {
-                'POR': 1,
-                'DEF': 2,
-                'DEL': 2
-            }
+            # 2. DEFENSAS - 3 aleatorias que quepan en el presupuesto
+            defensas = Jugador.objects.filter(
+                equipo__isnull=True, 
+                posicion='DEF',
+                valor__lte=presupuesto_actual  # Que quepan en el presupuesto
+            ).order_by('?')[:3]  # ✅ ALEATORIO
+            
+            if len(defensas) == 3:
+                for defensa in defensas:
+                    jugadores_asignados.append(defensa)
+                    presupuesto_actual -= defensa.valor
+                print(f"✅ 3 DEFENSAS: €{sum(d.valor for d in defensas):,}")
+                print(f"💰 Presupuesto restante: €{presupuesto_actual:,}")
+            else:
+                print(f"❌ Solo {len(defensas)} defensas disponibles (necesarias 3)")
+                equipo.delete()
+                return Response({"error": f"Solo {len(defensas)} defensas disponibles"}, status=400)
 
-            for posicion, cantidad in asignaciones.items():
-                print(f"🎯 Buscando {cantidad} {posicion}...")
-                jugadores = jugadores_disponibles.filter(posicion=posicion)[:cantidad]
-                print(f"🎯 Encontrados: {jugadores.count()}")
+            # 3. DELANTEROS - 3 aleatorios que quepan en el presupuesto
+            delanteros = Jugador.objects.filter(
+                equipo__isnull=True, 
+                posicion='DEL',
+                valor__lte=presupuesto_actual  # Que quepan en el presupuesto
+            ).order_by('?')[:3]  # ✅ ALEATORIO
+            
+            if len(delanteros) == 3:
+                for delantero in delanteros:
+                    jugadores_asignados.append(delantero)
+                    presupuesto_actual -= delantero.valor
+                print(f"✅ 3 DELANTEROS: €{sum(d.valor for d in delanteros):,}")
+                print(f"💰 Presupuesto restante: €{presupuesto_actual:,}")
+            else:
+                print(f"❌ Solo {len(delanteros)} delanteros disponibles (necesarios 3)")
+                equipo.delete()
+                return Response({"error": f"Solo {len(delanteros)} delanteros disponibles"}, status=400)
+
+            # VERIFICAR ASIGNACIÓN COMPLETA
+            if len(jugadores_asignados) == 7:
+                costo_total = sum(j.valor for j in jugadores_asignados)
                 
-                for jugador in jugadores:
-                    if equipo.presupuesto >= jugador.valor:
-                        print(f"➕ Fichando {jugador.nombre} ({jugador.posicion}) por {jugador.valor}")
-                        jugador.equipo = equipo
-                        jugador.en_banquillo = False
-                        jugador.fecha_fichaje = timezone.now()
-                        jugador.save()
-                        equipo.presupuesto -= jugador.valor
-                        print(f"💰 Presupuesto restante: {equipo.presupuesto}")
+                # Asignar jugadores al equipo
+                equipo.jugadores.add(*jugadores_asignados)
+                equipo.presupuesto = 150000000 - costo_total
+                equipo.save()
+                
+                print(f"🎉 EQUIPO COMPLETO: 7 jugadores - €{costo_total:,}")
+                print(f"💰 Presupuesto final: €{equipo.presupuesto:,}")
+                
+                # Mostrar resumen del equipo
+                print("\n📊 RESUMEN DEL EQUIPO:")
+                for jugador in jugadores_asignados:
+                    print(f"   • {jugador.posicion}: {jugador.nombre} - €{jugador.valor:,}")
+                
+                # Serializar respuesta
+                equipo_serializer = EquipoSerializer(equipo)
+                
+            else:
+                print(f"❌ Asignación incompleta: {len(jugadores_asignados)}/7 jugadores")
+                equipo.delete()
+                return Response({"error": "Asignación incompleta de jugadores"}, status=400)
 
-            equipo.save()
-            print("✅ Jugadores asignados correctamente")
         else:
-            print("❌ No se encontró ninguna liga")
+            print("❌ No se encontró liga")
+            return Response({"error": "No se encontró liga"}, status=400)
 
-        # 🆕 Generar tokens con httpOnly cookie
+        # Generar tokens
         refresh = RefreshToken.for_user(user)
 
-        response = Response({
+        response_data = {
             'user': {
                 'id': user.id,
                 'username': user.username,
                 'email': user.email
             },
             'access': str(refresh.access_token),
-        }, status=status.HTTP_201_CREATED)
+            'equipo_creado': True,
+            'jugadores_asignados': len(jugadores_asignados),
+            'presupuesto_restante': equipo.presupuesto,
+            'costo_equipo': costo_total,
+            'equipo': equipo_serializer.data
+        }
 
-        # Guardar refresh token en httpOnly cookie
+        response = Response(response_data, status=status.HTTP_201_CREATED)
+
+        # Cookie
         response.set_cookie(
             key='refresh_token',
             value=str(refresh),
             httponly=True,
-            secure=False,  # True en producción
+            secure=False,
             samesite='Lax',
-            max_age=7*24*60*60  # 7 días
+            max_age=7*24*60*60
         )
 
         return response
 
-# Vista de Login
 class LoginView(generics.GenericAPIView):
     permission_classes = [AllowAny]
     serializer_class = LoginSerializer
@@ -143,26 +213,31 @@ class LoginView(generics.GenericAPIView):
             {'error': 'Credenciales inválidas'}, 
             status=status.HTTP_401_UNAUTHORIZED
         )
-
-# Vista para obtener usuario actual
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mi_equipo(request):
+    try:
+        equipo = Equipo.objects.get(usuario=request.user)
+        serializer = EquipoSerializer(equipo)
+        return Response(serializer.data)
+    except Equipo.DoesNotExist:
+        return Response(
+            {"error": "No se encontró equipo para este usuario"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
     user = request.user
-    try:
-        equipo = Equipo.objects.get(usuario=user)
-        equipo_data = EquipoSerializer(equipo).data
-    except Equipo.DoesNotExist:
-        equipo_data = None
-    
     return Response({
         'id': user.id,
         'username': user.username,
         'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
         'is_staff': user.is_staff,
-        'equipo': equipo_data
+        'is_superuser': user.is_superuser
     })
-
 class LigaViewSet(viewsets.ModelViewSet):
     queryset = Liga.objects.all()
     serializer_class = LigaSerializer
@@ -188,44 +263,8 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'usuario',
             'liga'
         ).prefetch_related(
-            Prefetch('jugadores', queryset=Jugador.objects.select_related('equipo_real'))  # ← Mejorado
+            Prefetch('jugadores', queryset=Jugador.objects.select_related('equipo_real'))
         )
-    
-    @action(detail=False, methods=['get'])
-    def mi_equipo(self, request):
-        """Obtener el equipo del usuario actual"""
-        try:
-            equipo = Equipo.objects.get(usuario=request.user)
-            serializer = self.get_serializer(equipo)
-            return Response(serializer.data)
-        except Equipo.DoesNotExist:
-            return Response(
-                {'error': 'No tienes un equipo creado'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
-    def determinar_si_va_al_banquillo(self, equipo, jugador, en_banquillo_param):
-        """
-        Determina si un jugador debe ir al banquillo automáticamente
-        """
-        # Si el frontend ya especificó, usar ese valor
-        if en_banquillo_param is not None:
-            return en_banquillo_param
-        
-        # Si no, determinar automáticamente basado en espacios disponibles
-        jugadores_en_campo = Jugador.objects.filter(equipo=equipo, en_banquillo=False)
-        
-        contar_posiciones = {
-            'POR': jugadores_en_campo.filter(posicion='POR').count(),
-            'DEF': jugadores_en_campo.filter(posicion='DEF').count(),
-            'DEL': jugadores_en_campo.filter(posicion='DEL').count(),
-        }
-        
-        limites = {'POR': 1, 'DEF': 2, 'DEL': 2}
-        
-        # Si hay espacio en su posición, va al campo (False)
-        # Si no hay espacio, va al banquillo (True)
-        return contar_posiciones[jugador.posicion] >= limites[jugador.posicion]
 
     def puede_vender_jugador(self, equipo, jugador):
         """
@@ -257,13 +296,16 @@ class EquipoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def fichar_jugador(self, request, pk=None):
-        """Fichar un jugador al equipo"""
+        """Fichar un jugador al equipo - SIEMPRE al banquillo"""
+        print("📥 Datos recibidos en fichar_jugador:", request.data)  # 🆕 DEBUG
         equipo = self.get_object()
         serializer = FicharJugadorSerializer(data=request.data)
         if not serializer.is_valid():
+            print("❌ Errores del serializer:", serializer.errors)  # 🆕 DEBUG
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         jugador_id = serializer.validated_data['jugador_id']
-        en_banquillo_param = serializer.validated_data.get('en_banquillo')
+        
         try:
             jugador = Jugador.objects.get(id=jugador_id, equipo__isnull=True)
         except Jugador.DoesNotExist:
@@ -279,8 +321,8 @@ class EquipoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Determinar si va al banquillo
-        en_banquillo = self.determinar_si_va_al_banquillo(equipo, jugador, en_banquillo_param)
+        # 🆕 SIEMPRE va al banquillo - eliminada la lógica de determinación automática
+        en_banquillo = True
         
         # Realizar el fichaje
         equipo.presupuesto -= jugador.valor
@@ -288,13 +330,17 @@ class EquipoViewSet(viewsets.ModelViewSet):
         jugador.en_banquillo = en_banquillo
         jugador.fecha_fichaje = timezone.now()
         
+        # 🆕 Si el jugador estaba en venta, quitarlo del mercado
+        if jugador.en_venta:
+            jugador.en_venta = False
+        
         equipo.save()
         jugador.save()
         
         # Actualizar estadísticas del equipo
         self.actualizar_estadisticas_equipo(equipo)
         
-        mensaje = f'{jugador.nombre} fichado para el {"banquillo" if en_banquillo else "campo"}'
+        mensaje = f'{jugador.nombre} fichado para el banquillo'
         return Response({
             'message': mensaje, 
             'en_banquillo': en_banquillo,
@@ -308,7 +354,9 @@ class EquipoViewSet(viewsets.ModelViewSet):
         serializer = VenderJugadorSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         jugador_id = serializer.validated_data['jugador_id']
+        
         try:
             jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
         except Jugador.DoesNotExist:
@@ -336,6 +384,7 @@ class EquipoViewSet(viewsets.ModelViewSet):
         jugador.equipo = None
         jugador.en_banquillo = True
         jugador.fecha_fichaje = None
+        jugador.en_venta = False  # 🆕 Quitar de venta si estaba en venta
         
         equipo.save()
         jugador.save()
@@ -349,9 +398,57 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'nuevo_presupuesto': equipo.presupuesto
         })
 
+    @action(detail=True, methods=['post'])
+    def poner_en_venta(self, request, pk=None):
+        """Poner un jugador del equipo en venta"""
+        equipo = self.get_object()
+        jugador_id = request.data.get('jugador_id')
+        
+        try:
+            jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
+        except Jugador.DoesNotExist:
+            return Response(
+                {'error': 'Jugador no encontrado en tu equipo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Poner en venta
+        jugador.en_venta = True
+        jugador.save()
+        
+        return Response({
+            'message': f'{jugador.nombre} puesto en venta',
+            'jugador': JugadorSerializer(jugador).data
+        })
+
+    @action(detail=True, methods=['post'])
+    def quitar_de_venta(self, request, pk=None):
+        """Quitar un jugador de la venta"""
+        equipo = self.get_object()
+        jugador_id = request.data.get('jugador_id')
+        
+        try:
+            jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
+        except Jugador.DoesNotExist:
+            return Response(
+                {'error': 'Jugador no encontrado en tu equipo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Quitar de venta
+        jugador.en_venta = False
+        jugador.save()
+        
+        return Response({
+            'message': f'{jugador.nombre} quitado de venta',
+            'jugador': JugadorSerializer(jugador).data
+        })
+
 class MercadoViewSet(viewsets.ViewSet):
     """
-    Endpoint para obtener jugadores disponibles en el mercado
+    Endpoint para obtener jugadores disponibles en el mercado:
+    - 8 jugadores libres rotatorios cada 24h
+    - Jugadores en venta de usuarios (ilimitados)
     """
     def list(self, request):
         liga_id = request.query_params.get('liga_id')
@@ -370,25 +467,97 @@ class MercadoViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Obtener IDs de jugadores fichados en una sola query
-        jugadores_fichados_ids = Equipo.objects.filter(
-            liga=liga
-        ).values_list('jugadores', flat=True).distinct()
+        # GESTIÓN DEL MERCADO ROTATORIO (solo para jugadores libres)
+        self.actualizar_mercado_libre()
 
-        # Jugadores disponibles (no fichados en esta liga)
-        jugadores_disponibles = Jugador.objects.exclude(
-            id__in=jugadores_fichados_ids
+        ahora = timezone.now()
+        limite_expiracion = ahora - timedelta(hours=24)
+        
+        # 🆕 OBTENER DOS TIPOS DE JUGADORES:
+        
+        # 1. JUGADORES LIBRES ROTATORIOS (máximo 8)
+        jugadores_libres = Jugador.objects.filter(
+            equipo__isnull=True,  # Sin equipo fantasy
+            equipo_real__isnull=False,  # Con equipo real
+            fecha_mercado__isnull=False,  # En el mercado
+            fecha_mercado__gte=limite_expiracion,  # No expirados
+            en_venta=False  # 🆕 No están en venta por usuarios
+        ).order_by('?')[:8]
+        
+        # 2. 🆕 JUGADORES EN VENTA POR USUARIOS (ilimitados)
+        jugadores_en_venta = Jugador.objects.filter(
+            en_venta=True,  # 🆕 Marcados para vender
+            equipo__isnull=False,  # 🆕 Tienen equipo (pertenecen a usuarios)
+            equipo__liga=liga  # 🆕 De la misma liga
         )
 
-        # Seleccionar 8 aleatorios (o menos si no hay suficientes)
-        count = min(8, jugadores_disponibles.count())
-        if count > 0:
-            jugadores_mercado = random.sample(list(jugadores_disponibles), count)
-        else:
-            jugadores_mercado = []
+        # 🆕 COMBINAR AMBOS TIPOS
+        todos_jugadores = list(jugadores_libres) + list(jugadores_en_venta)
+        
+        serializer = JugadorSerializer(todos_jugadores, many=True)
+        
+        # Añadir información de expiración y procedencia
+        data = serializer.data
+        for jugador_data in data:
+            jugador = Jugador.objects.get(id=jugador_data['id'])
+            
+            # 🆕 DETERMINAR PROCEDENCIA
+            if jugador.en_venta and jugador.equipo:
+                # Jugador en venta por usuario
+                jugador_data['procedencia'] = f"Equipo: {jugador.equipo.nombre}"
+                jugador_data['tipo'] = 'venta_usuario'
+                jugador_data['fecha_expiracion'] = 'En venta'  # No expira
+                jugador_data['expirado'] = False
+            else:
+                # Jugador libre rotatorio
+                if jugador.fecha_mercado:
+                    expiracion = jugador.fecha_mercado + timedelta(hours=24)
+                    fecha_expiracion = expiracion.strftime('%d %b a las %H:%M')
+                    jugador_data['fecha_expiracion'] = fecha_expiracion
+                    jugador_data['expirado'] = ahora >= expiracion
+                else:
+                    jugador_data['fecha_expiracion'] = 'Fecha no disponible'
+                    jugador_data['expirado'] = True
+                
+                jugador_data['procedencia'] = 'Sin equipo'
+                jugador_data['tipo'] = 'libre_rotatorio'
 
-        serializer = JugadorSerializer(jugadores_mercado, many=True)
-        return Response(serializer.data)
+        return Response(data)
+
+    def actualizar_mercado_libre(self):
+        """Actualiza solo el mercado de jugadores libres (no afecta jugadores en venta)"""
+        ahora = timezone.now()
+        limite_expiracion = ahora - timedelta(hours=24)
+        
+        # 🆕 SOLO ELIMINAR JUGADORES LIBRES EXPIRADOS (no los en venta)
+        Jugador.objects.filter(
+            fecha_mercado__lt=limite_expiracion,
+            en_venta=False,  # 🆕 Solo jugadores libres
+            equipo__isnull=True  # 🆕 Solo sin equipo
+        ).update(fecha_mercado=None)
+        
+        # CONTAR JUGADORES LIBRES ACTUALES
+        jugadores_libres_en_mercado = Jugador.objects.filter(
+            fecha_mercado__isnull=False,
+            fecha_mercado__gte=limite_expiracion,
+            en_venta=False,
+            equipo__isnull=True
+        ).count()
+        
+        # SI HAY MENOS DE 8 JUGADORES LIBRES, AÑADIR NUEVOS
+        if jugadores_libres_en_mercado < 8:
+            necesarios = 8 - jugadores_libres_en_mercado
+            
+            jugadores_libres = Jugador.objects.filter(
+                equipo__isnull=True,
+                equipo_real__isnull=False,
+                fecha_mercado__isnull=True,
+                en_venta=False  # 🆕 Solo jugadores no en venta
+            ).order_by('?')[:necesarios]
+            
+            for jugador in jugadores_libres:
+                jugador.fecha_mercado = ahora
+                jugador.save()
 
 class ClasificacionViewSet(viewsets.ViewSet):
     """
@@ -550,7 +719,7 @@ class AlineacionViewSet(viewsets.ModelViewSet):
     def asignar_titular(self, request, pk=None):
         alineacion = self.get_object()
         jugador_id = request.data.get('jugador_id')
-        posicion = request.data.get('posicion')  # 'POR', 'DEF1', 'DEF2', 'DEL1', 'DEL2'
+        posicion = request.data.get('posicion')
         
         try:
             jugador = Jugador.objects.get(id=jugador_id)

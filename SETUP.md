@@ -22,7 +22,7 @@ cd Fantasy
 **Opción A: Con Docker (RECOMENDADO)**
 ```bash
 # Iniciar PostgreSQL
-docker-compose up -d
+sudo docker-compose up -d
 
 # Verificar que está corriendo
 docker ps

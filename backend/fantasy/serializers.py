@@ -2,6 +2,15 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
 
+class FicharJugadorSerializer(serializers.Serializer):
+    jugador_id = serializers.IntegerField()
+    en_banquillo = serializers.BooleanField(required=False, allow_null=True)
+
+class LigaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Liga
+        fields = ['id', 'nombre', 'codigo', 'jornada_actual']
+
 class JugadorSerializer(serializers.ModelSerializer):
     posicion_display = serializers.CharField(source='get_posicion_display', read_only=True)
     equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
@@ -11,17 +20,9 @@ class JugadorSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nombre', 'posicion', 'posicion_display', 
             'valor', 'puntos_totales', 'equipo_real', 'equipo_real_nombre',
-            'equipo', 'en_banquillo', 'en_venta'
+            'equipo', 'en_banquillo', 'en_venta', 'fecha_mercado', 
         ]
 
-class FicharJugadorSerializer(serializers.Serializer):
-    jugador_id = serializers.IntegerField()
-    en_banquillo = serializers.BooleanField(required=False, allow_null=True)
-
-class LigaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Liga
-        fields = ['id', 'nombre', 'codigo', 'jornada_actual']
 
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)

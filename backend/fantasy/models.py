@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from datetime import datetime, timedelta
 
 
 class EquipoReal(models.Model):
@@ -31,24 +32,43 @@ class Jugador(models.Model):
 
     nombre = models.CharField(max_length=100)
     posicion = models.CharField(max_length=3, choices=POSICIONES)
-    valor = models.DecimalField(max_digits=10, decimal_places=2, default=5000000)
+    valor = models.IntegerField(default=5000000)
     puntos_totales = models.IntegerField(default=0)
-    equipo_real = models.ForeignKey(EquipoReal, on_delete=models.CASCADE, null=True, blank=True)
+    equipo_real = models.ForeignKey('EquipoReal', on_delete=models.CASCADE, null=True, blank=True)
     en_venta = models.BooleanField(default=False)
-    equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores_fichados') 
+    equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores_fichados')
     en_banquillo = models.BooleanField(default=True)
+    fecha_mercado = models.DateTimeField(null=True, blank=True)
+    fecha_fichaje = models.DateTimeField(null=True, blank=True)  # 🆕 Si no la tienes
 
     def __str__(self):
         return f"{self.nombre} ({self.posicion})"
+    
     @property
     def posicion_display(self):
         return dict(self.POSICIONES).get(self.posicion, self.posicion)
+    
+    # 🆕 Propiedad para saber si está en el mercado (no expirado)
+    @property
+    def en_mercado(self):
+        from django.utils import timezone
+        if not self.fecha_mercado:
+            return False
+        # Un jugador está en el mercado si se añadió en las últimas 24 horas
+        return timezone.now() <= self.fecha_mercado + timedelta(hours=24)
+    
+    # 🆕 Propiedad para calcular la expiración
+    @property
+    def expiracion_mercado(self):
+        if not self.fecha_mercado:
+            return None
+        return self.fecha_mercado + timedelta(hours=24)
 
 class Equipo(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)
     liga = models.ForeignKey(Liga, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=100)
-    presupuesto = models.DecimalField(max_digits=10, decimal_places=2, default=50000000)
+    presupuesto = models.IntegerField(default=150000000)
     puntos_totales = models.IntegerField(default=0)
     jugadores = models.ManyToManyField(Jugador, related_name='equipos_mtm')
 
