@@ -25,20 +25,39 @@ const DashboardScreen = ({ datosUsuario }) => {
   const [banquillo, setBanquillo] = useState([]);
   const [alineacionCargada, setAlineacionCargada] = useState(false);
 
-  // Efecto para cerrar al hacer clic fuera
+  // DashboardScreen.jsx - Manejar mejor el estado
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (jugadorSeleccionado && !event.target.closest('.modal-content')) {
-        setJugadorSeleccionado(null);
-        setMostrarModalOpciones(false);
+    const cargarAlineacion = async () => {
+      // 🎯 MEJORADO: Verificar que tenemos datos completos
+      if (!datosUsuario) {
+        console.log('❌ No hay datosUsuario cargados');
+        return;
+      }
+
+      if (!datosUsuario.equipo || !datosUsuario.equipo.id) {
+        console.log('❌ No hay equipo cargado o equipo sin ID');
+        return;
+      }
+
+      if (!datosUsuario.jugadores || datosUsuario.jugadores.length === 0) {
+        console.log('❌ No hay jugadores cargados');
+        return;
+      }
+
+      console.log('🔄 Cargando alineación...');
+      setLoadingAlineacion(true);
+      try {
+        await determinarAlineacion();
+        console.log('✅ Alineación cargada correctamente');
+      } catch (err) {
+        console.error('❌ Error cargando alineación:', err);
+      } finally {
+        setLoadingAlineacion(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [jugadorSeleccionado]);
+    cargarAlineacion();
+  }, [datosUsuario]);
 
   // Recargar datos del equipo
   const recargarDatosEquipo = async () => {

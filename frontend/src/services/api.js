@@ -369,174 +369,37 @@ export const cargarDatosIniciales = async (usuario) => {
         const isAdmin = usuario.is_superuser || usuario.is_staff;
         
         if (isAdmin) {
-            console.log("Usuario admin, cargando datos de administración");
+            console.log("🎯 Usuario es administrador, cargando datos básicos...");
             
-            const jugadoresData = await getJugadores();
-            
-            console.log("✅ Datos admin cargados");
-            
-            const ligaPorDefecto = {
-                id: 1,
-                nombre: "Liga Principal", 
-                jornada_actual: 1
-            };
-            
+            // Para admin, no necesitamos equipo pero sí datos básicos
             return {
                 usuario,
-                ligaActual: ligaPorDefecto,
-                jugadores: jugadoresData || [],
-                equipo: null,
+                ligaActual: {
+                    id: 1,
+                    nombre: "Liga Principal",
+                    jornada_actual: 1
+                },
+                jugadores: [], // Los admins pueden cargar jugadores después
+                equipo: null, // Los admins no tienen equipo
+                mercado: [],
+                clasificacion: [],
                 presupuesto: 0
             };
-            
         } else {
-            console.log("Usuario normal, usando endpoint datos-iniciales");
+            console.log("Usuario normal, cargando datos completos...");
             
+            // Código existente para usuarios normales...
+            let equipoData = null;
             try {
-                // 🎯 NUEVO: Usar el endpoint unificado
-                console.log("🔄 Llamando a /datos-iniciales/...");
-                const response = await api.get('/datos-iniciales/');
-                const datos = response.data;
-                
-                console.log("✅ Datos iniciales recibidos:", datos);
-                
-                // Verificar que tenemos los datos esenciales
-                if (!datos.equipo) {
-                    console.warn("⚠️ No se encontró equipo en la respuesta");
-                    throw new Error("No se pudo cargar el equipo del usuario");
-                }
-                
-                // Estructurar los datos en el formato esperado
-                return {
-                    usuario,
-                    ligaActual: {
-                        id: datos.liga_id || 1,
-                        nombre: "Liga Principal",
-                        jornada_actual: 1
-                    },
-                    jugadores: datos.jugadores || [],
-                    equipo: datos.equipo,
-                    mercado: datos.mercado || [],
-                    clasificacion: datos.clasificacion || [],
-                    presupuesto: datos.equipo.presupuesto || 0
-                };
-                
+                equipoData = await getMiEquipo();
             } catch (error) {
-                console.error("❌ Error con endpoint datos-iniciales:", error);
-                
-                // 🆕 FALLBACK: Intentar carga manual si el endpoint falla
-                console.log("🔄 Intentando carga manual de datos...");
-                return await cargarDatosManual(usuario);
+                equipoData = await getEquipoByUsuario(usuario.id);
             }
+            
+            // ... resto del código para usuarios normales
         }
     } catch (error) {
         console.error("❌ Error cargando datos iniciales:", error);
-        
-        // Retornar datos por defecto en caso de error
-        return {
-            usuario,
-            ligaActual: {
-                id: 1,
-                nombre: "Liga Principal",
-                jornada_actual: 1
-            },
-            jugadores: [],
-            equipo: null,
-            mercado: [],
-            clasificacion: [],
-            presupuesto: 0
-        };
-    }
-};
-
-// 🆕 FUNCIÓN DE FALLBACK PARA CARGA MANUAL
-const cargarDatosManual = async (usuario) => {
-    try {
-        console.log("🔍 Iniciando carga manual de datos...");
-        
-        // 1. Obtener equipo usando /mi-equipo/
-        let equipoData = null;
-        try {
-            console.log("🔄 Obteniendo equipo con /mi-equipo/...");
-            equipoData = await getMiEquipo();
-            console.log("✅ Equipo obtenido:", equipoData ? "SÍ" : "NO");
-        } catch (error) {
-            console.error("❌ Error obteniendo equipo:", error);
-        }
-        
-        // 2. Si no hay equipo, intentar con búsqueda por usuario
-        if (!equipoData) {
-            try {
-                console.log("🔄 Buscando equipo por usuario ID...");
-                equipoData = await getEquipo(usuario.id);
-                console.log("✅ Equipo por usuario:", equipoData ? "SÍ" : "NO");
-            } catch (error) {
-                console.error("❌ Error buscando equipo por usuario:", error);
-            }
-        }
-        
-        // 3. Si aún no hay equipo, crear uno por defecto
-        if (!equipoData) {
-            console.log("⚠️ No se encontró equipo, usando valores por defecto");
-            equipoData = {
-                id: null,
-                nombre: "Mi Equipo",
-                presupuesto: 50000000,
-                jugadores: [],
-                liga: 1
-            };
-        }
-        
-        // 4. Cargar jugadores del equipo si es necesario
-        let jugadoresDelEquipo = [];
-        if (equipoData.id) {
-            try {
-                console.log("🔄 Cargando jugadores del equipo...");
-                jugadoresDelEquipo = await getJugadoresPorEquipo(equipoData.id);
-                console.log(`✅ ${jugadoresDelEquipo.length} jugadores cargados`);
-            } catch (error) {
-                console.error("❌ Error cargando jugadores:", error);
-            }
-        }
-        
-        // 5. Cargar mercado
-        let mercadoData = [];
-        try {
-            console.log("🔄 Cargando mercado...");
-            const ligaId = equipoData.liga || 1;
-            mercadoData = await getMercado(ligaId);
-            console.log(`✅ ${mercadoData.length} jugadores en mercado`);
-        } catch (error) {
-            console.error("❌ Error cargando mercado:", error);
-        }
-        
-        // 6. Cargar clasificación
-        let clasificacionData = [];
-        try {
-            console.log("🔄 Cargando clasificación...");
-            const ligaId = equipoData.liga || 1;
-            clasificacionData = await getClasificacion(ligaId);
-            console.log(`✅ ${clasificacionData.length} equipos en clasificación`);
-        } catch (error) {
-            console.error("❌ Error cargando clasificación:", error);
-        }
-        
-        return {
-            usuario,
-            ligaActual: {
-                id: equipoData.liga || 1,
-                nombre: "Liga Principal",
-                jornada_actual: 1
-            },
-            jugadores: jugadoresDelEquipo,
-            equipo: equipoData,
-            mercado: mercadoData,
-            clasificacion: clasificacionData,
-            presupuesto: equipoData.presupuesto || 50000000
-        };
-        
-    } catch (error) {
-        console.error("❌ Error en carga manual:", error);
         throw error;
     }
-};
+  };

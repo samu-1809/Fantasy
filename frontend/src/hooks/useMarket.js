@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getMercado, ficharJugador } from '../services/api';
 
 export const useMarket = (ligaId) => {
@@ -11,11 +11,9 @@ export const useMarket = (ligaId) => {
     equipoReal: ''
   });
 
-  const API_URL = 'http://127.0.0.1:8000/api';
-
-  // Cargar mercado
-  const cargarMercado = async () => {
+  const cargarMercado = useCallback(async () => {
     if (!ligaId) {
+      console.warn('⚠️ No hay ligaId para cargar mercado');
       setError('No se pudo cargar la información de la liga');
       return;
     }
@@ -23,51 +21,55 @@ export const useMarket = (ligaId) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/mercado/?liga_id=${ligaId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        setMercado(data);
-      } else {
-        throw new Error('Error cargando mercado');
-      }
+      console.log('🔄 Cargando mercado para liga:', ligaId);
+      const data = await getMercado(ligaId);
+      setMercado(data);
+      console.log(`✅ ${data.length} jugadores cargados en mercado`);
     } catch (err) {
-      setError('Error cargando el mercado de jugadores');
+      console.error('❌ Error cargando mercado:', err);
+      setError('Error cargando el mercado de jugadores: ' + err.message);
       setMercado([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [ligaId]);
 
-  // Verificar si un jugador ha expirado
-  const estaExpirado = (fechaMercado) => {
+  const estaExpirado = useCallback((fechaMercado) => {
     if (!fechaMercado) return false;
     
-    const fechaMercadoObj = new Date(fechaMercado);
-    const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
-    const ahora = new Date();
-    
-    return ahora >= expiracion;
-  };
+    try {
+      const fechaMercadoObj = new Date(fechaMercado);
+      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
+      const ahora = new Date();
+      
+      return ahora >= expiracion;
+    } catch (error) {
+      console.error('❌ Error verificando expiración:', error);
+      return false;
+    }
+  }, []);
 
-  // Calcular fecha de expiración formateada
-  const calcularExpiracion = (fechaMercado) => {
+  const calcularExpiracion = useCallback((fechaMercado) => {
     if (!fechaMercado) return 'Fecha no disponible';
     
-    const fechaMercadoObj = new Date(fechaMercado);
-    const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
-    
-    const opciones = { 
-      day: 'numeric', 
-      month: 'short',
-      hour: '2-digit', 
-      minute: '2-digit' 
-    };
-    return expiracion.toLocaleDateString('es-ES', opciones);
-  };
+    try {
+      const fechaMercadoObj = new Date(fechaMercado);
+      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
+      
+      const opciones = { 
+        day: 'numeric', 
+        month: 'short',
+        hour: '2-digit', 
+        minute: '2-digit' 
+      };
+      return expiracion.toLocaleDateString('es-ES', opciones);
+    } catch (error) {
+      console.error('❌ Error calculando expiración:', error);
+      return 'Fecha inválida';
+    }
+  }, []);
 
-  // Fichar jugador
-  const ficharJugadorMercado = async (equipoId, jugadorId) => {
+  const ficharJugadorMercado = useCallback(async (equipoId, jugadorId) => {
     try {
       const jugador = mercado.find(j => j.id === jugadorId);
       
@@ -80,49 +82,49 @@ export const useMarket = (ligaId) => {
         throw new Error('Este jugador ya no está disponible en el mercado');
       }
       
-      // SIEMPRE va al banquillo
-      const vaAlBanquillo = true;
-      
-      await ficharJugador(equipoId, jugadorId, vaAlBanquillo);
+      // Llamar a la API de fichaje
+      await ficharJugador(equipoId, jugadorId);
       await cargarMercado(); // Recargar mercado después del fichaje
       
       return jugador;
     } catch (err) {
-      console.error('Error fichando jugador:', err);
+      console.error('❌ Error fichando jugador:', err);
       throw err;
     }
-  };
+  }, [mercado, estaExpirado, cargarMercado]);
 
-  // Aplicar filtros al mercado
   const mercadoFiltrado = mercado.filter(jugador => {
-    const matchNombre = jugador.nombre.toLowerCase().includes(filtros.nombre.toLowerCase());
+    const matchNombre = filtros.nombre === '' || 
+                       jugador.nombre.toLowerCase().includes(filtros.nombre.toLowerCase());
     const matchPosicion = filtros.posicion === '' || jugador.posicion === filtros.posicion;
     const matchEquipoReal = filtros.equipoReal === '' || 
-                           (jugador.equipo_real_nombre && jugador.equipo_real_nombre.includes(filtros.equipoReal));
+                           (jugador.equipo_real_nombre && 
+                            jugador.equipo_real_nombre.toLowerCase().includes(filtros.equipoReal.toLowerCase()));
     
     return matchNombre && matchPosicion && matchEquipoReal;
   });
 
-  // Actualizar filtros
-  const actualizarFiltro = (campo, valor) => {
+  const actualizarFiltro = useCallback((campo, valor) => {
     setFiltros(prev => ({
       ...prev,
       [campo]: valor
     }));
-  };
+  }, []);
 
-  // Limpiar todos los filtros
-  const limpiarFiltros = () => {
+  const limpiarFiltros = useCallback(() => {
     setFiltros({
       nombre: '',
       posicion: '',
       equipoReal: ''
     });
-  };
+  }, []);
 
   useEffect(() => {
-    cargarMercado();
-  }, [ligaId]);
+    if (ligaId) {
+      console.log('🎯 useEffect useMarket - ligaId:', ligaId);
+      cargarMercado();
+    }
+  }, [ligaId, cargarMercado]); 
 
   return {
     mercado: mercadoFiltrado,

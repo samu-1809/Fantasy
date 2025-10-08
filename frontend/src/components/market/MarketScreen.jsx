@@ -4,34 +4,25 @@ import { useMarket } from '../../hooks/useMarket';
 import { useAuth } from '../../context/AuthContext';
 
 const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
-  const [filtroNombre, setFiltroNombre] = React.useState('');
-  const [filtroPosicion, setFiltroPosicion] = React.useState('');
   const { user } = useAuth();
-
-  const ligaId = datosUsuario?.equipo?.liga;
   const equipoId = datosUsuario?.equipo?.id;
 
-  const {
-    mercado,
-    loading,
-    error,
-    filtros,
-    cargarMercado,
+  // 🎯 CORREGIDO: Obtener TODAS las funciones del hook
+  const { 
+    mercado, 
+    loading, 
+    error, 
+    filtros, 
+    cargarMercado, // 🎯 AÑADIDO
+    actualizarFiltro, 
+    limpiarFiltros,
     ficharJugador,
-    estaExpirado,
-    calcularExpiracion,
-    actualizarFiltro,
-    limpiarFiltros
-  } = useMarket(ligaId);
+    estaExpirado, // 🎯 AÑADIDO
+    calcularExpiracion // 🎯 AÑADIDO
+  } = useMarket(datosUsuario?.ligaActual?.id);
 
-  // Sincronizar filtros locales con el hook
-  React.useEffect(() => {
-    actualizarFiltro('nombre', filtroNombre);
-  }, [filtroNombre, actualizarFiltro]);
-
-  React.useEffect(() => {
-    actualizarFiltro('posicion', filtroPosicion);
-  }, [filtroPosicion, actualizarFiltro]);
+  // 🎯 ELIMINADO: Filtros locales duplicados
+  // Usar directamente filtros del hook
 
   const handleFichar = async (jugadorId) => {
     if (!equipoId) {
@@ -72,16 +63,16 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                 <Search className="absolute left-3 top-3 text-gray-400" size={20} />
                 <input
                   type="text"
-                  value={filtroNombre}
-                  onChange={(e) => setFiltroNombre(e.target.value)}
+                  value={filtros.nombre} // 🎯 CORREGIDO: Usar filtros del hook
+                  onChange={(e) => actualizarFiltro('nombre', e.target.value)} // 🎯 CORREGIDO: Directo
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                   placeholder="Buscar jugador..."
                 />
               </div>
               
               <select
-                value={filtroPosicion}
-                onChange={(e) => setFiltroPosicion(e.target.value)}
+                value={filtros.posicion} // 🎯 CORREGIDO: Usar filtros del hook
+                onChange={(e) => actualizarFiltro('posicion', e.target.value)} // 🎯 CORREGIDO: Directo
                 className="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
               >
                 <option value="">Todas las posiciones</option>
@@ -131,7 +122,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
             <div className="text-center text-gray-500 py-8">
               <p className="text-lg mb-2">No hay jugadores disponibles en el mercado</p>
               <p className="text-sm mb-4">
-                {filtroNombre || filtroPosicion 
+                {filtros.nombre || filtros.posicion // 🎯 CORREGIDO: Usar filtros del hook
                   ? 'Prueba a limpiar los filtros para ver más jugadores'
                   : 'Vuelve más tarde para ver nuevas incorporaciones al mercado'
                 }

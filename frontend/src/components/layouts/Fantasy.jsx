@@ -46,7 +46,6 @@ const Fantasy = () => {
   const [appLoading, setAppLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // 🎯 MOVER useAuth AL PRINCIPIO - SIEMPRE SE LLAMA
   const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
 
   console.log('🎮 Fantasy component - estado:', {
@@ -57,24 +56,12 @@ const Fantasy = () => {
     datosUsuario: datosUsuario ? 'LOADED' : 'NULL'
   });
 
-  // 🎯 MOSTRAR LOADING MIENTRAS AUTH CONTEXT SE INICIALIZA
-  // Esto debe estar DESPUÉS de todos los hooks
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-xl text-gray-600">Inicializando aplicación...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Efecto para cargar datos cuando el usuario se autentica
   useEffect(() => {
     const cargarDatosUsuario = async () => {
-      if (user && isAuthenticated) {
+      if (user && isAuthenticated && !datosUsuario) {
         console.log('🔄 Usuario autenticado detectado, cargando datos...');
+        console.log('🔍 User object:', user);
+        
         setAppLoading(true);
         setError(null);
         try {
@@ -82,8 +69,11 @@ const Fantasy = () => {
           const datos = await cargarDatosIniciales(user);
           setDatosUsuario(datos);
           
-          // Determinar pantalla inicial según el rol
-          const isAdmin = user.is_superuser || user.is_staff;
+          // 🎯 MEJORADO: Detección más robusta de admin
+          const isAdmin = user.is_superuser || user.is_staff || user.username.includes('admin');
+          
+          console.log(`🎯 Detección admin - superuser: ${user.is_superuser}, staff: ${user.is_staff}, username: ${user.username}, isAdmin: ${isAdmin}`);
+          
           const nuevaPantalla = isAdmin ? 'admin' : 'dashboard';
           
           console.log(`🎯 Redirigiendo a: ${nuevaPantalla}`);
@@ -100,9 +90,8 @@ const Fantasy = () => {
     };
 
     cargarDatosUsuario();
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, datosUsuario]);
 
-  // Efecto para redirigir al login si no está autenticado
   useEffect(() => {
     if (!isAuthenticated && currentScreen !== 'login' && currentScreen !== 'register') {
       setCurrentScreen('login');
@@ -112,7 +101,6 @@ const Fantasy = () => {
 
   const handleLoginSuccess = () => {
     console.log('✅ Login exitoso en Fantasy');
-    // El efecto se encargará de cargar los datos cuando user/isAuthenticated se actualicen
   };
 
   const handleRegisterSuccess = () => {
@@ -146,31 +134,19 @@ const Fantasy = () => {
     }
   };
 
-  const handleFichajeExitoso = async () => {
-    if (user) {
-      try {
-        const datos = await cargarDatosIniciales(user);
-        setDatosUsuario(datos);
-      } catch (err) {
-        console.error('❌ Error actualizando después de fichaje:', err);
-      }
-    }
-  };
-
-  const handleAsignarPuntosSuccess = async () => {
-    if (user) {
-      try {
-        const datos = await cargarDatosIniciales(user);
-        setDatosUsuario(datos);
-      } catch (err) {
-        console.error('❌ Error actualizando después de asignar puntos:', err);
-      }
-    }
-  };
-
-  // Renderizar pantalla actual
+  // 🎯 CORREGIDO: renderScreen en lugar de renderContent
   const renderScreen = () => {
-    // Pantallas de autenticación
+    if (authLoading) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-xl text-gray-600">Inicializando aplicación...</p>
+          </div>
+        </div>
+      );
+    }
+
     if (currentScreen === 'login') {
       return (
         <LoginScreen
@@ -189,7 +165,6 @@ const Fantasy = () => {
       );
     }
 
-    // Si hay error general
     if (error && !appLoading) {
       return (
         <ErrorScreen
@@ -199,12 +174,10 @@ const Fantasy = () => {
       );
     }
 
-    // Si está cargando
     if (appLoading) {
       return <LoadingScreen />;
     }
 
-    // Pantallas principales
     switch (currentScreen) {
       case 'dashboard':
         return <DashboardScreen datosUsuario={datosUsuario} />;
@@ -213,7 +186,7 @@ const Fantasy = () => {
         return (
           <MarketScreen
             datosUsuario={datosUsuario}
-            onFichajeExitoso={handleFichajeExitoso}
+            onFichajeExitoso={handleRefreshData}
           />
         );
       
@@ -242,11 +215,11 @@ const Fantasy = () => {
     }
   };
 
-  // Determinar si mostrar la barra de navegación
   const showNavBar = isAuthenticated && 
                     !['login', 'register'].includes(currentScreen) && 
                     !appLoading && 
-                    !error;
+                    !error &&
+                    !authLoading;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -259,36 +232,8 @@ const Fantasy = () => {
         />
       )}
       
+      {/* 🎯 CORREGIDO: Llamar a renderScreen en lugar de renderContent */}
       {renderScreen()}
-
-      {/* Notificación de error global */}
-      {error && !showNavBar && currentScreen !== 'login' && currentScreen !== 'register' && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-sm z-50">
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <div>
-              <p className="font-semibold">Error</p>
-              <p className="text-sm">{error}</p>
-            </div>
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-white hover:text-gray-200"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Loading overlay global */}
-      {appLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-700">Cargando...</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

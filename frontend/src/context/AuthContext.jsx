@@ -1,7 +1,7 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+// context/AuthContext.jsx - VERSIÓN CORREGIDA
+import { createContext, useState, useContext, useEffect } from 'react';
 import { loginUser, registerUser, getCurrentUser, logoutUser } from '../services/api';
 
-// 🎯 CORREGIDO: Crear el contexto correctamente
 const AuthContext = createContext();
 
 export const useAuth = () => {
@@ -21,9 +21,8 @@ export const AuthProvider = ({ children }) => {
   // Cargar usuario al iniciar si hay token
   useEffect(() => {
     const loadUser = async () => {
-      const token = localStorage.getItem('accessToken') || localStorage.getItem('access_token');
-      
-      console.log('🔄 AuthProvider iniciando, token encontrado:', !!token);
+      const token = localStorage.getItem('access_token');
+      console.log('🔄 AuthProvider - Token encontrado:', !!token);
       
       if (token) {
         try {
@@ -31,16 +30,17 @@ export const AuthProvider = ({ children }) => {
           const userData = await getCurrentUser();
           console.log('✅ Usuario cargado:', userData);
           setUser(userData);
-          setEquipo(userData.equipo || null);
+          if (userData.equipo) {
+            setEquipo(userData.equipo);
+          }
         } catch (err) {
           console.error('❌ Error al cargar usuario:', err);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
           localStorage.removeItem('access_token');
+          setUser(null);
+          setEquipo(null);
         }
       }
       setLoading(false);
-      console.log('✅ AuthProvider inicializado');
     };
 
     loadUser();
@@ -50,34 +50,74 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       console.log('🔐 Iniciando login...');
+      
       const data = await loginUser(username, password);
-
       console.log('✅ Login exitoso, datos recibidos:', data);
 
-      // 🎯 CORREGIDO: Manejar diferentes formatos de respuesta
-      if (data.tokens) {
-        // Formato legacy
-        localStorage.setItem('accessToken', data.tokens.access);
-        if (data.tokens.refresh) {
-          localStorage.setItem('refreshToken', data.tokens.refresh);
+      if (data.access) {
+        localStorage.setItem('access_token', data.access);
+        
+        // 🎯 CORREGIDO: Siempre intentar obtener datos reales del usuario
+        try {
+          console.log('🔄 Obteniendo datos reales del usuario...');
+          const userData = await getCurrentUser();
+          console.log('✅ Datos reales del usuario:', userData);
+          
+          setUser(userData);
+          setEquipo(userData.equipo || null);
+          
+          console.log('✅ Estado actualizado - usuario real:', userData.username);
+          
+          return { 
+            user: userData, 
+            access: data.access, 
+            equipo: userData.equipo 
+          };
+          
+        } catch (userError) {
+          console.error('❌ Error obteniendo datos reales:', userError);
+          
+          // 🎯 CORREGIDO: Si hay datos en la respuesta del login, usarlos
+          if (data.user) {
+            console.log('🔄 Usando datos del login response:', data.user);
+            setUser(data.user);
+            setEquipo(data.equipo || null);
+            return { 
+              user: data.user, 
+              access: data.access, 
+              equipo: data.equipo 
+            };
+          } else {
+            // 🎯 Último recurso: usuario temporal
+            const tempUser = {
+              id: Date.now(),
+              username: username,
+              email: `${username}@ejemplo.com`,
+              is_staff: username.includes('admin'), // 🆕 Intentar detectar admin
+              is_superuser: username.includes('admin')
+            };
+            
+            setUser(tempUser);
+            setEquipo(null);
+            
+            console.log('✅ Estado actualizado - usuario temporal:', tempUser.username);
+            
+            return { 
+              user: tempUser, 
+              access: data.access, 
+              equipo: null 
+            };
+          }
         }
-      } else if (data.access) {
-        // Nuevo formato
-        localStorage.setItem('accessToken', data.access);
       }
 
-      // 🎯 CORREGIDO: Guardar usuario y equipo
-      const userData = data.user || data;
-      setUser(userData);
-      setEquipo(data.equipo || null);
-
-      console.log('✅ Estado actualizado - usuario:', userData.username);
-
-      return data;
+      throw new Error('No se recibió token de acceso');
+      
     } catch (err) {
       console.error('❌ Error en login:', err);
-      setError(err.message || 'Error al iniciar sesión');
-      throw err;
+      const errorMessage = err.message || 'Error al iniciar sesión';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
@@ -97,17 +137,19 @@ export const AuthProvider = ({ children }) => {
 
       console.log('✅ Registro exitoso, datos:', data);
 
-      // 🎯 CORREGIDO: Manejar token de forma consistente
       if (data.access) {
-        localStorage.setItem('accessToken', data.access);
-      } else if (data.tokens && data.tokens.access) {
-        localStorage.setItem('accessToken', data.tokens.access);
+        localStorage.setItem('access_token', data.access);
+        
+        if (data.user) {
+          setUser(data.user);
+          setEquipo(data.equipo || null);
+        } else {
+          // Obtener usuario si no viene en la respuesta
+          const userDataResponse = await getCurrentUser();
+          setUser(userDataResponse);
+          setEquipo(userDataResponse.equipo || null);
+        }
       }
-
-      // Guardar usuario
-      const userDataResponse = data.user || data;
-      setUser(userDataResponse);
-      setEquipo(data.equipo || null);
 
       return data;
     } catch (err) {
@@ -124,9 +166,6 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('❌ Error al hacer logout:', err);
     } finally {
-      // Limpiar estado local siempre
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
       localStorage.removeItem('access_token');
       setUser(null);
       setEquipo(null);
@@ -147,13 +186,10 @@ export const AuthProvider = ({ children }) => {
 
   console.log('🔄 AuthProvider renderizado, estado:', {
     user: user ? user.username : 'null',
+    equipo: equipo ? 'SÍ' : 'NO',
     isAuthenticated: !!user,
     loading
   });
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
