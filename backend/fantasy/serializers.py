@@ -23,7 +23,6 @@ class JugadorSerializer(serializers.ModelSerializer):
             'equipo', 'en_banquillo', 'en_venta', 'fecha_mercado', 
         ]
 
-
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
     liga_nombre = serializers.CharField(source='liga.nombre', read_only=True)
@@ -108,10 +107,50 @@ class JornadaSerializer(serializers.ModelSerializer):
 class PartidoSerializer(serializers.ModelSerializer):
     equipo_local_nombre = serializers.CharField(source='equipo_local.nombre', read_only=True)
     equipo_visitante_nombre = serializers.CharField(source='equipo_visitante.nombre', read_only=True)
-    
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+
     class Meta:
         model = Partido
-        fields = ['id', 'jornada', 'equipo_local', 'equipo_visitante', 'equipo_local_nombre', 'equipo_visitante_nombre', 'fecha', 'goles_local', 'goles_visitante', 'jugado']
+        fields = [
+            'id', 'jornada', 'jornada_numero', 'equipo_local', 'equipo_visitante',
+            'equipo_local_nombre', 'equipo_visitante_nombre', 'goles_local', 
+            'goles_visitante', 'fecha', 'jugado'  # 🎯 Quitado 'estado'
+        ]
+
+    def validate(self, data):
+        instance = getattr(self, 'instance', None)
+        
+        if instance and not any(field in data for field in ['equipo_local', 'equipo_visitante']):
+            return data
+
+        equipo_local = data.get('equipo_local', instance.equipo_local if instance else None)
+        equipo_visitante = data.get('equipo_visitante', instance.equipo_visitante if instance else None)
+
+        if equipo_local and equipo_visitante and equipo_local == equipo_visitante:
+            raise serializers.ValidationError("Un equipo no puede jugar contra sí mismo.")
+
+        jornada = data.get('jornada', instance.jornada if instance else None)
+
+        if not jornada:
+            return data
+
+        partidos_query = Partido.objects.filter(jornada=jornada)
+        if instance:
+            partidos_query = partidos_query.exclude(id=instance.id)
+
+        if equipo_local and partidos_query.filter(equipo_local=equipo_local).exists():
+            raise serializers.ValidationError(f"El equipo {equipo_local.nombre} ya tiene un partido como local en esta jornada.")
+
+        if equipo_visitante and partidos_query.filter(equipo_visitante=equipo_visitante).exists():
+            raise serializers.ValidationError(f"El equipo {equipo_visitante.nombre} ya tiene un partido como visitante en esta jornada.")
+
+        if equipo_local and partidos_query.filter(equipo_visitante=equipo_local).exists():
+            raise serializers.ValidationError(f"El equipo {equipo_local.nombre} ya tiene un partido como visitante en esta jornada.")
+
+        if equipo_visitante and partidos_query.filter(equipo_local=equipo_visitante).exists():
+            raise serializers.ValidationError(f"El equipo {equipo_visitante.nombre} ya tiene un partido como local en esta jornada.")
+
+        return data
 
 class AlineacionSerializer(serializers.ModelSerializer):
 

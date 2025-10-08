@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, RefreshCw } from 'lucide-react';
 import { actualizarEstadosBanquillo, getCurrentUser, cargarDatosIniciales, intercambiarJugadores, venderJugador } from '../../services/api';
-import PlayerCard from './PlayerCard';
 import FieldView from './FieldView';
 
 const DashboardScreen = ({ datosUsuario }) => {

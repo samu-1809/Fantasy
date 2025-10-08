@@ -1,4 +1,3 @@
-import React from 'react';
 import PlayerCard from './PlayerCard';
 
 const FieldView = ({

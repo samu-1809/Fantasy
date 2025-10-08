@@ -1,5 +1,7 @@
 const API_URL = 'http://127.0.0.1:8000/api';
 
+// ==================== UTILIDADES ====================
+
 const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token');
   const headers = {
@@ -24,7 +26,6 @@ const handleResponse = async (response) => {
 // ==================== AUTENTICACIÓN ====================
 
 export const registerUser = async (userData) => {
-  // 🟢 Asegúrate de que userData incluya password2
   const requestData = {
     username: userData.username,
     email: userData.email,
@@ -44,7 +45,6 @@ export const registerUser = async (userData) => {
   });
   
   console.log('📥 Respuesta registro:', response.status);
-  
   return handleResponse(response);
 };
 
@@ -66,13 +66,6 @@ export const getCurrentUser = async () => {
   return handleResponse(response);
 };
 
-export const getMiEquipo = async () => {
-  const response = await fetch(`${API_URL}/mi-equipo/`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse(response);
-};
-
 export const logoutUser = async () => {
   const response = await fetch(`${API_URL}/auth/logout/`, {
     method: 'POST',
@@ -88,6 +81,175 @@ export const refreshToken = async () => {
     credentials: 'include',
   });
   return handleResponse(response);
+};
+
+// ==================== DATOS INICIALES ====================
+
+export const getMiEquipo = async () => {
+  const response = await fetch(`${API_URL}/mi-equipo/`, {
+    headers: getAuthHeaders(),
+  });
+  return handleResponse(response);
+};
+
+export const cargarDatosIniciales = async (usuario) => {
+  if (!usuario) {
+    throw new Error("Usuario no definido");
+  }
+  
+  console.log("👨‍💼 Usuario", usuario.username, "Admin:", usuario.is_superuser || usuario.is_staff);
+  
+  try {
+    const isAdmin = usuario.is_superuser || usuario.is_staff;
+    
+    if (isAdmin) {
+      console.log("🎯 Usuario es administrador, cargando datos básicos...");
+      
+      return {
+        usuario,
+        ligaActual: {
+          id: 1,
+          nombre: "Liga Principal", 
+          jornada_actual: 1
+        },
+        jugadores: [],
+        equipo: null,
+        mercado: [],
+        clasificacion: [],
+        presupuesto: 0
+      };
+    } else {
+      console.log("Usuario normal, usando endpoint datos-iniciales...");
+      
+      try {
+        console.log("🔄 Llamando a /datos-iniciales/...");
+        const response = await fetch(`${API_URL}/datos-iniciales/`, {
+          headers: getAuthHeaders(),
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          throw new Error('Error en la petición datos-iniciales');
+        }
+        
+        const datos = await response.json();
+        console.log("✅ Datos iniciales recibidos:", datos);
+        
+        if (!datos.equipo) {
+          console.warn("⚠️ No se encontró equipo en la respuesta");
+          throw new Error("No se pudo cargar el equipo del usuario");
+        }
+        
+        return {
+          usuario,
+          ligaActual: {
+            id: datos.liga_id || 1,
+            nombre: "Liga Principal",
+            jornada_actual: 1
+          },
+          jugadores: datos.jugadores || [],
+          equipo: datos.equipo,
+          mercado: datos.mercado || [],
+          clasificacion: datos.clasificacion || [],
+          presupuesto: datos.equipo.presupuesto || 0
+        };
+        
+      } catch (error) {
+        console.error("❌ Error con endpoint datos-iniciales:", error);
+        return await cargarDatosManual(usuario);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error cargando datos iniciales:", error);
+    return {
+      usuario,
+      ligaActual: { id: 1, nombre: "Liga Principal", jornada_actual: 1 },
+      jugadores: [],
+      equipo: null,
+      mercado: [],
+      clasificacion: [],
+      presupuesto: 0
+    };
+  }
+};
+
+// 🆕 FUNCIÓN DE FALLBACK PARA CARGA MANUAL
+const cargarDatosManual = async (usuario) => {
+  try {
+    console.log("🔍 Iniciando carga manual de datos...");
+    
+    let equipoData = null;
+    try {
+      console.log("🔄 Obteniendo equipo con /mi-equipo/...");
+      equipoData = await getMiEquipo();
+      console.log("✅ Equipo obtenido:", equipoData ? "SÍ" : "NO");
+    } catch (error) {
+      console.error("❌ Error obteniendo equipo:", error);
+    }
+    
+    if (!equipoData) {
+      try {
+        console.log("🔄 Buscando equipo por usuario ID...");
+        equipoData = await getEquipo(usuario.id);
+        console.log("✅ Equipo por usuario:", equipoData ? "SÍ" : "NO");
+      } catch (error) {
+        console.error("❌ Error buscando equipo por usuario:", error);
+      }
+    }
+    
+    if (!equipoData) {
+      console.log("⚠️ No se encontró equipo, usando valores por defecto");
+      equipoData = {
+        id: null,
+        nombre: "Mi Equipo",
+        presupuesto: 50000000,
+        jugadores: [],
+        liga: 1
+      };
+    }
+    
+    let jugadoresDelEquipo = [];
+    if (equipoData.id) {
+      try {
+        console.log("🔄 Cargando jugadores del equipo...");
+        jugadoresDelEquipo = await getJugadoresPorEquipo(equipoData.id);
+        console.log(`✅ ${jugadoresDelEquipo.length} jugadores cargados`);
+      } catch (error) {
+        console.error("❌ Error cargando jugadores:", error);
+      }
+    }
+    
+    let mercadoData = [];
+    let clasificacionData = [];
+    
+    try {
+      console.log("🔄 Cargando mercado...");
+      const ligaId = equipoData.liga || 1;
+      mercadoData = await getMercado(ligaId);
+      clasificacionData = await getClasificacion(ligaId);
+      console.log(`✅ ${mercadoData.length} jugadores en mercado, ${clasificacionData.length} equipos en clasificación`);
+    } catch (error) {
+      console.error("❌ Error cargando datos adicionales:", error);
+    }
+    
+    return {
+      usuario,
+      ligaActual: {
+        id: equipoData.liga || 1,
+        nombre: "Liga Principal",
+        jornada_actual: 1
+      },
+      jugadores: jugadoresDelEquipo,
+      equipo: equipoData,
+      mercado: mercadoData,
+      clasificacion: clasificacionData,
+      presupuesto: equipoData.presupuesto || 50000000
+    };
+    
+  } catch (error) {
+    console.error("❌ Error en carga manual:", error);
+    throw error;
+  }
 };
 
 // ==================== LIGAS ====================
@@ -119,13 +281,113 @@ export const getJugadores = async (posicion = null, equipoId = null) => {
   return handleResponse(response);
 };
 
-// Añade esta función en api.js para obtener jugadores por equipo
 export const getJugadoresPorEquipo = async (equipoId) => {
   const response = await fetch(`${API_URL}/jugadores/?equipo=${equipoId}`);
   return handleResponse(response);
 };
 
-// ==================== INTERCAMBIOS ====================
+// ==================== EQUIPOS ====================
+
+export const getEquipos = async () => {
+  const response = await fetch(`${API_URL}/equipos/`);
+  return handleResponse(response);
+};
+
+export const getEquipo = async (userId) => {
+  try {
+    console.log(`🔍 [Alternativa] Buscando equipo para usuario: ${userId}`);
+    
+    const response = await fetch(`${API_URL}/equipos/?usuario=${userId}`, {
+      headers: getAuthHeaders()
+    });
+    
+    if (response.status === 404) {
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error('Error en la petición');
+    }
+    
+    const data = await response.json();
+    console.log(`📦 [Alternativa] Equipos encontrados: ${data.length}`);
+    return data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error obteniendo equipo por usuario:', error);
+    throw error;
+  }
+};
+
+export const getEquipoById = async (equipoId) => {
+  try {
+    console.log(`🔍 Buscando equipo por ID: ${equipoId}`);
+    
+    const headers = getAuthHeaders();
+    console.log('📤 Headers de autenticación:', headers);
+    
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/detalle`, {
+      headers: headers
+    });
+    
+    console.log('📥 Respuesta del servidor:', response.status, response.statusText);
+    
+    if (response.status === 404) {
+      console.log(`❌ Equipo con ID ${equipoId} no encontrado`);
+      return null;
+    }
+    
+    if (response.status === 401) {
+      console.log('❌ No autorizado - Token inválido o expirado');
+      throw new Error('No autorizado');
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Equipo encontrado por ID:', data);
+    return data;
+  } catch (error) {
+    console.error('Error obteniendo equipo por ID:', error);
+    throw error;
+  }
+};
+
+export const crearEquipo = async (equipoData) => {
+  const response = await fetch(`${API_URL}/equipos/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(equipoData),
+  });
+  return handleResponse(response);
+};
+
+// ==================== OPERACIONES DE EQUIPO ====================
+
+export const ficharJugador = async (equipoId, jugadorId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/fichar_jugador/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ jugador_id: jugadorId }),
+  });
+
+  if (response.ok) {
+    const data = await response.json();
+    return data;
+  } else {
+    const errorText = await response.text();
+    console.error('❌ Error del servidor:', errorText);
+    
+    try {
+      const errorData = JSON.parse(errorText);
+      throw new Error(errorData.error || 'Error al fichar jugador');
+    } catch {
+      throw new Error(errorText || 'Error al fichar jugador');
+    }
+  }
+};
+
 export const intercambiarJugadores = async (equipoId, jugadorOrigenId, jugadorDestinoId) => {
   console.log(`🔍 Llamando API intercambiarJugadores:`);
   console.log(`   Equipo ID: ${equipoId}`);
@@ -165,106 +427,6 @@ export const intercambiarJugadores = async (equipoId, jugadorOrigenId, jugadorDe
   return result;
 };
 
-// ==================== EQUIPOS ====================
-
-export const getEquipos = async () => {
-  const response = await fetch(`${API_URL}/equipos/`);
-  return handleResponse(response);
-};
-
-export const getEquipo = async (userId) => {
-  try {
-    // 🆕 CORREGIDO: Buscar equipos que pertenezcan a este usuario específico
-    const response = await fetch(`${API_URL}/equipos/?usuario=${userId}`, {
-      headers: getAuthHeaders()
-    });
-    
-    console.log(`🔍 Buscando equipo para usuario ${userId}, status:`, response.status);
-    
-    if (response.status === 404) {
-      console.log("❌ No existe equipo para este usuario");
-      return null;
-    }
-    
-    if (!response.ok) {
-      throw new Error('Error en la petición');
-    }
-    
-    const data = await response.json();
-    console.log("📦 Datos recibidos de equipos:", data);
-    
-    // La API debería devolver un array, tomamos el primer equipo del usuario
-    const equipo = data.length > 0 ? data[0] : null;
-    console.log("✅ Equipo encontrado:", equipo);
-    
-    return equipo;
-  } catch (error) {
-    console.error('Error obteniendo equipo:', error);
-    throw error;
-  }
-};
-
-// Función alternativa para buscar equipo por usuario
-export const getEquipoByUsuario = async (userId) => {
-  try {
-    console.log(`🔍 [Alternativa] Buscando equipo para usuario: ${userId}`);
-    
-    // 🆕 Probar diferentes parámetros de búsqueda
-    const response = await fetch(`${API_URL}/equipos/?usuario=${userId}`, {
-      headers: getAuthHeaders()
-    });
-    
-    if (response.status === 404) {
-      return null;
-    }
-    
-    if (!response.ok) {
-      throw new Error('Error en la petición');
-    }
-    
-    const data = await response.json();
-    console.log(`📦 [Alternativa] Equipos encontrados: ${data.length}`);
-    return data.length > 0 ? data[0] : null;
-  } catch (error) {
-    console.error('Error obteniendo equipo por usuario:', error);
-    throw error;
-  }
-};
-
-// Función para crear equipo
-export const crearEquipo = async (equipoData) => {
-  const response = await fetch(`${API_URL}/equipos/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(equipoData),
-  });
-  return handleResponse(response);
-};
-
-export const ficharJugador = async (equipoId, jugadorId) => {
-  const response = await fetch(`${API_URL}/equipos/${equipoId}/fichar_jugador/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ jugador_id: jugadorId }),
-  });
-
-  if (response.ok) {
-    const data = await response.json();
-    return data;
-  } else {
-    const errorText = await response.text();
-    console.error('❌ Error del servidor:', errorText);
-    
-    try {
-      const errorData = JSON.parse(errorText);
-      throw new Error(errorData.error || 'Error al fichar jugador');
-    } catch {
-      throw new Error(errorText || 'Error al fichar jugador');
-    }
-  }
-};
-
-// 🆕 Función para sincronizar estados con el backend
 export const actualizarEstadosBanquillo = async (equipoId, estados) => {
   try {
     console.log(`🔄 Sincronizando estados para equipo ${equipoId}:`, estados);
@@ -287,8 +449,6 @@ export const actualizarEstadosBanquillo = async (equipoId, estados) => {
     throw error;
   }
 };
-
-// ==================== VENTAS EN MERCADO ====================
 
 export const venderJugador = async (equipoId, jugadorId, precio) => {
   const response = await fetch(`${API_URL}/equipos/${equipoId}/vender_jugador/`, {
@@ -322,7 +482,7 @@ export const getClasificacion = async (ligaId) => {
   return handleResponse(response);
 };
 
-// ==================== JORNADAS ====================
+// ==================== JORNADAS Y PARTIDOS ====================
 
 export const getJornadas = async () => {
   const response = await fetch(`${API_URL}/jornadas/`, {
@@ -347,6 +507,83 @@ export const crearJornada = async (numero) => {
   return handleResponse(response);
 };
 
+// ==================== ADMIN - EQUIPOS REALES ====================
+
+export const getEquiposReales = async () => {
+  const response = await fetch(`${API_URL}/equipos-reales/`);
+  return handleResponse(response);
+};
+
+// ==================== ADMIN - EQUIPOS DISPONIBLES ====================
+
+export const getEquiposDisponiblesJornada = async (jornadaId) => {
+  const response = await fetch(`${API_URL}/jornadas/${jornadaId}/equipos-disponibles/`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Error cargando equipos disponibles:', errorText);
+    throw new Error('Error al cargar equipos disponibles para la jornada');
+  }
+  
+  return await response.json();
+};
+
+// ==================== ADMIN - PARTIDOS ====================
+
+export const crearPartido = async (partidoData) => {
+  const response = await fetch(`${API_URL}/partidos/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(partidoData),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Error creando partido:', errorText);
+    throw new Error('Error al crear el partido');
+  }
+  
+  return await response.json();
+};
+
+export const eliminarPartido = async (partidoId) => {
+  const response = await fetch(`${API_URL}/partidos/${partidoId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Error eliminando partido:', errorText);
+    throw new Error('Error al eliminar el partido');
+  }
+  
+  if (response.status === 204) {
+    return { message: 'Partido eliminado correctamente' };
+  }
+  
+  return await response.json();
+};
+
+export const actualizarResultadoPartido = async (partidoId, resultadoData) => {
+  // 🆕 USAR PATCH EN EL ENDPOINT ESTÁNDAR
+  const response = await fetch(`${API_URL}/partidos/${partidoId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(resultadoData),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ Error actualizando resultado:', errorText);
+    throw new Error('Error al actualizar el resultado del partido');
+  }
+  
+  return await response.json();
+};
+
 // ==================== PUNTUACIONES ====================
 
 export const asignarPuntos = async (jornadaId, puntos) => {
@@ -357,49 +594,3 @@ export const asignarPuntos = async (jornadaId, puntos) => {
   });
   return handleResponse(response);
 };
-
-export const cargarDatosIniciales = async (usuario) => {
-    if (!usuario) {
-        throw new Error("Usuario no definido");
-    }
-    
-    console.log("👨‍💼 Usuario", usuario.username, "Admin:", usuario.is_superuser || usuario.is_staff);
-    
-    try {
-        const isAdmin = usuario.is_superuser || usuario.is_staff;
-        
-        if (isAdmin) {
-            console.log("🎯 Usuario es administrador, cargando datos básicos...");
-            
-            // Para admin, no necesitamos equipo pero sí datos básicos
-            return {
-                usuario,
-                ligaActual: {
-                    id: 1,
-                    nombre: "Liga Principal",
-                    jornada_actual: 1
-                },
-                jugadores: [], // Los admins pueden cargar jugadores después
-                equipo: null, // Los admins no tienen equipo
-                mercado: [],
-                clasificacion: [],
-                presupuesto: 0
-            };
-        } else {
-            console.log("Usuario normal, cargando datos completos...");
-            
-            // Código existente para usuarios normales...
-            let equipoData = null;
-            try {
-                equipoData = await getMiEquipo();
-            } catch (error) {
-                equipoData = await getEquipoByUsuario(usuario.id);
-            }
-            
-            // ... resto del código para usuarios normales
-        }
-    } catch (error) {
-        console.error("❌ Error cargando datos iniciales:", error);
-        throw error;
-    }
-  };

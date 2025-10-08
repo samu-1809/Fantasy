@@ -125,18 +125,6 @@ const CalendarScreen = () => {
                   </div>
                 </div>
               </div>
-              
-              {partido.estado && (
-                <div className="text-center mt-2">
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    partido.estado === 'finalizado' ? 'bg-green-100 text-green-800' :
-                    partido.estado === 'en_juego' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {partido.estado}
-                  </span>
-                </div>
-              )}
             </div>
           ))}
         </div>

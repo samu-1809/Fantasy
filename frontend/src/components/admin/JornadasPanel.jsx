@@ -1,306 +1,338 @@
 import React, { useState, useEffect } from 'react';
-import { useAdmin } from '../../hooks/useAdmin';
+import { 
+  getJornadas, 
+  getPartidosJornada, 
+  crearJornada, 
+  crearPartido, 
+  eliminarPartido,
+  getEquiposDisponiblesJornada
+} from '../../services/api';
+import { Trash2, Plus, Calendar, RefreshCw } from 'lucide-react';
 
 const JornadasPanel = () => {
-  const [nuevaJornadaNumero, setNuevaJornadaNumero] = useState('');
-  const [nuevosPartidos, setNuevosPartidos] = useState({});
-  
-  const {
-    jornadas,
-    equiposReales,
-    partidos,
-    loading,
-    error,
-    crearJornada,
-    eliminarJornada,
-    crearPartido,
-    eliminarPartido,
-    cargarJornadas,
-    cargarPartidosJornada
-  } = useAdmin();
+  const [jornadas, setJornadas] = useState([]);
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState(null);
+  const [partidos, setPartidos] = useState([]);
+  const [equiposDisponibles, setEquiposDisponibles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [creandoPartido, setCreandoPartido] = useState(false);
+  const [nuevoPartido, setNuevoPartido] = useState({
+    equipo_local: '',
+    equipo_visitante: '',
+    fecha: ''
+  });
 
-  // Función para verificar si un equipo ya está en un partido de la jornada
-  const equipoYaEnJornada = (jornadaId, equipoId) => {
-    const partidosJornada = partidos[jornadaId] || [];
-    return partidosJornada.some(partido => 
-      partido.equipo_local === equipoId || 
-      partido.equipo_visitante === equipoId
-    );
+  // Cargar jornadas al montar
+  useEffect(() => {
+    cargarJornadas();
+  }, []);
+
+  // Cuando se selecciona una jornada, cargar partidos y equipos disponibles
+  useEffect(() => {
+    if (jornadaSeleccionada) {
+      cargarPartidos(jornadaSeleccionada);
+      cargarEquiposDisponibles(jornadaSeleccionada);
+    }
+  }, [jornadaSeleccionada]);
+
+  const cargarJornadas = async () => {
+    try {
+      setLoading(true);
+      const data = await getJornadas();
+      setJornadas(data);
+      
+      if (data.length > 0 && !jornadaSeleccionada) {
+        setJornadaSeleccionada(data[0].id);
+      }
+    } catch (err) {
+      setError('Error al cargar las jornadas: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Función para obtener equipos disponibles para una jornada
-  const getEquiposDisponibles = (jornadaId) => {
-    const partidosJornada = partidos[jornadaId] || [];
-    const equiposEnJornada = new Set();
-    
-    partidosJornada.forEach(partido => {
-      equiposEnJornada.add(partido.equipo_local);
-      equiposEnJornada.add(partido.equipo_visitante);
-    });
+  const cargarPartidos = async (jornadaId) => {
+    try {
+      setLoading(true);
+      const data = await getPartidosJornada(jornadaId);
+      setPartidos(data);
+    } catch (err) {
+      setError('Error al cargar los partidos: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return equiposReales.filter(equipo => !equiposEnJornada.has(equipo.id));
+  const cargarEquiposDisponibles = async (jornadaId) => {
+    try {
+      const data = await getEquiposDisponiblesJornada(jornadaId);
+      setEquiposDisponibles(data);
+    } catch (err) {
+      setError('Error al cargar equipos disponibles: ' + err.message);
+    }
   };
 
   const handleCrearJornada = async () => {
-    if (!nuevaJornadaNumero) {
-      alert('Ingresa un número de jornada');
+    try {
+      setLoading(true);
+      const nuevaJornadaNumero = jornadas.length + 1;
+      await crearJornada(nuevaJornadaNumero);
+      await cargarJornadas();
+      alert(`✅ Jornada ${nuevaJornadaNumero} creada exitosamente`);
+    } catch (err) {
+      setError('Error al crear la jornada: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEliminarPartido = async (partidoId) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este partido?')) {
       return;
     }
 
     try {
-      await crearJornada(nuevaJornadaNumero);
-      alert('Jornada creada exitosamente');
-      setNuevaJornadaNumero('');
+      setLoading(true);
+      await eliminarPartido(partidoId);
+      await cargarPartidos(jornadaSeleccionada);
+      await cargarEquiposDisponibles(jornadaSeleccionada);
+      alert('✅ Partido eliminado exitosamente');
     } catch (err) {
-      alert('Error al crear jornada: ' + err.message);
+      setError('Error al eliminar el partido: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleEliminarJornada = async (jornadaId) => {
-    if (window.confirm('¿Seguro que quieres eliminar esta jornada? Se eliminarán todos sus partidos.')) {
-      try {
-        await eliminarJornada(jornadaId);
-        alert('Jornada eliminada exitosamente');
-        // Eliminar también del estado nuevosPartidos
-        setNuevosPartidos(prev => {
-          const updated = { ...prev };
-          delete updated[jornadaId];
-          return updated;
-        });
-      } catch (err) {
-        alert('Error al eliminar jornada: ' + err.message);
-      }
-    }
-  };
-
-  const handleCrearPartido = async (jornadaId) => {
-    const nuevoPartido = nuevosPartidos[jornadaId];
-    if (!nuevoPartido?.equipo_local || !nuevoPartido?.equipo_visitante) {
+  const handleCrearPartido = async () => {
+    if (!nuevoPartido.equipo_local || !nuevoPartido.equipo_visitante) {
       alert('Selecciona ambos equipos');
       return;
     }
 
-    // Verificar si los equipos ya están en la jornada
-    if (equipoYaEnJornada(jornadaId, parseInt(nuevoPartido.equipo_local))) {
-      alert('El equipo local ya está participando en otro partido de esta jornada');
-      return;
-    }
-
-    if (equipoYaEnJornada(jornadaId, parseInt(nuevoPartido.equipo_visitante))) {
-      alert('El equipo visitante ya está participando en otro partido de esta jornada');
-      return;
-    }
-
-    // Verificar que no sea el mismo equipo
     if (nuevoPartido.equipo_local === nuevoPartido.equipo_visitante) {
       alert('No puedes seleccionar el mismo equipo como local y visitante');
       return;
     }
 
     try {
-      await crearPartido(jornadaId, nuevoPartido.equipo_local, nuevoPartido.equipo_visitante);
-      alert('Partido creado exitosamente');
-      // Limpiar solo los selectores de esta jornada
-      setNuevosPartidos(prev => ({
-        ...prev,
-        [jornadaId]: { equipo_local: '', equipo_visitante: '' }
-      }));
+      setLoading(true);
+      await crearPartido({
+        jornada: jornadaSeleccionada,
+        equipo_local: nuevoPartido.equipo_local,
+        equipo_visitante: nuevoPartido.equipo_visitante,
+        fecha: nuevoPartido.fecha || new Date().toISOString().split('T')[0]
+      });
+      
+      // Reset y recargar
+      setNuevoPartido({ equipo_local: '', equipo_visitante: '', fecha: '' });
+      setCreandoPartido(false);
+      await cargarPartidos(jornadaSeleccionada);
+      await cargarEquiposDisponibles(jornadaSeleccionada);
+      alert('✅ Partido creado exitosamente');
     } catch (err) {
-      alert('Error al crear partido: ' + err.message);
+      setError('Error al crear el partido: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleEliminarPartido = async (partidoId, jornadaId) => {
-    if (window.confirm('¿Seguro que quieres eliminar este partido?')) {
-      try {
-        await eliminarPartido(partidoId, jornadaId);
-        alert('Partido eliminado exitosamente');
-      } catch (err) {
-        alert('Error al eliminar partido: ' + err.message);
-      }
-    }
-  };
+  const equiposParaLocal = equiposDisponibles.filter(equipo => 
+    equipo.id !== nuevoPartido.equipo_visitante
+  );
 
-  // Función para actualizar nuevo partido de una jornada específica
-  const actualizarNuevoPartido = (jornadaId, campo, valor) => {
-    setNuevosPartidos(prev => ({
-      ...prev,
-      [jornadaId]: {
-        ...prev[jornadaId],
-        [campo]: valor
-      }
-    }));
-  };
-
-  // Inicializar nuevosPartidos cuando se cargan las jornadas
-  useEffect(() => {
-    const inicialNuevosPartidos = {};
-    jornadas.forEach(jornada => {
-      inicialNuevosPartidos[jornada.id] = { equipo_local: '', equipo_visitante: '' };
-    });
-    setNuevosPartidos(inicialNuevosPartidos);
-  }, [jornadas]);
-
-  if (loading && jornadas.length === 0) {
-    return (
-      <div className="flex justify-center items-center py-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  if (error && jornadas.length === 0) {
-    return (
-      <div className="bg-red-50 border border-red-300 p-4 rounded-lg">
-        <p className="text-red-700">{error}</p>
-        <button 
-          onClick={cargarJornadas}
-          className="mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-        >
-          Reintentar
-        </button>
-      </div>
-    );
-  }
+  const equiposParaVisitante = equiposDisponibles.filter(equipo => 
+    equipo.id !== nuevoPartido.equipo_local
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Panel para crear nueva jornada */}
-      <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-        <h3 className="text-xl font-bold mb-4">Crear Nueva Jornada</h3>
-        <div className="flex gap-4 items-end">
-          <div className="flex-1">
-            <label className="block text-sm font-medium mb-2">Número de Jornada</label>
-            <input
-              type="number"
-              value={nuevaJornadaNumero}
-              onChange={(e) => setNuevaJornadaNumero(e.target.value)}
-              className="w-full border-2 border-gray-300 p-3 rounded"
-              placeholder="Ej: 5"
-              min="1"
-            />
-          </div>
+    <div className="bg-white rounded-lg shadow p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-xl font-bold">Gestión de Jornadas y Partidos</h3>
+        <button
+          onClick={handleCrearJornada}
+          disabled={loading}
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+        >
+          <Plus size={16} />
+          Crear Jornada
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Selector de Jornadas */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Seleccionar Jornada:
+        </label>
+        <select
+          value={jornadaSeleccionada || ''}
+          onChange={(e) => {
+            setJornadaSeleccionada(Number(e.target.value));
+            setCreandoPartido(false);
+          }}
+          className="block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="">Selecciona una jornada</option>
+          {jornadas.map((jornada) => (
+            <option key={jornada.id} value={jornada.id}>
+              Jornada {jornada.numero}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Información de disponibilidad */}
+      {jornadaSeleccionada && (
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-700">
+            <strong>Equipos disponibles:</strong> {equiposDisponibles.length}
+            {equiposDisponibles.length < 2 && ' (Se necesitan al menos 2 equipos para crear un partido)'}
+          </p>
+        </div>
+      )}
+
+      {/* Botón para crear partido */}
+      {jornadaSeleccionada && equiposDisponibles.length >= 2 && (
+        <div className="mb-6">
           <button
-            onClick={handleCrearJornada}
-            disabled={loading}
-            className="bg-green-600 text-white p-3 rounded font-medium hover:bg-green-700 disabled:bg-gray-400 whitespace-nowrap"
+            onClick={() => setCreandoPartido(!creandoPartido)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2"
           >
-            {loading ? 'Creando...' : '+ Crear Jornada'}
+            <Calendar size={16} />
+            {creandoPartido ? 'Cancelar' : 'Crear Partido'}
           </button>
         </div>
-      </div>
+      )}
 
-      {/* Panel de jornadas existentes */}
-      <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-        <h3 className="text-xl font-bold mb-4">Jornadas Existentes ({jornadas.length})</h3>
-        
-        {jornadas.length === 0 ? (
-          <p className="text-center text-gray-500 py-4">No hay jornadas creadas</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {jornadas.map((jornada) => (
-              <div key={jornada.id} className="border-2 border-gray-300 rounded-lg p-4 hover:border-yellow-500 transition-colors">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h4 className="font-bold text-lg">Jornada {jornada.numero}</h4>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm font-medium">
-                      {partidos[jornada.id]?.length || 0} partidos
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEliminarJornada(jornada.id);
-                      }}
-                      className="text-red-600 hover:text-red-800 p-1 transition-colors"
-                      title="Eliminar jornada"
-                      disabled={loading}
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Detalles de partidos - SIEMPRE VISIBLES */}
-                <div className="mt-4 space-y-4">
-                  {/* Lista de partidos */}
-                  <div className="space-y-2">
-                    <h5 className="font-semibold text-sm text-gray-700">Partidos:</h5>
-                    {(!partidos[jornada.id] || partidos[jornada.id].length === 0) ? (
-                      <p className="text-sm text-gray-500 text-center py-2">No hay partidos en esta jornada</p>
-                    ) : (
-                      partidos[jornada.id].map((partido) => (
-                        <div key={partido.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-                          <div className="text-sm">
-                            <span className="font-medium">{partido.equipo_local_nombre}</span>
-                            <span className="mx-2">vs</span>
-                            <span className="font-medium">{partido.equipo_visitante_nombre}</span>
-                            {(partido.goles_local !== null && partido.goles_visitante !== null) && (
-                              <span className="ml-2 font-bold">
-                                ({partido.goles_local} - {partido.goles_visitante})
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEliminarPartido(partido.id, jornada.id);
-                            }}
-                            className="text-red-600 hover:text-red-800 text-sm transition-colors"
-                            disabled={loading}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
+      {/* Formulario de creación */}
+      {creandoPartido && (
+        <div className="bg-gray-50 p-4 rounded-lg mb-6 border-2 border-blue-200">
+          <h4 className="font-semibold mb-3 text-lg">Crear Nuevo Partido</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Equipo Local */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Equipo Local *
+              </label>
+              <select
+                value={nuevoPartido.equipo_local}
+                onChange={(e) => setNuevoPartido({...nuevoPartido, equipo_local: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Selecciona equipo local</option>
+                {equiposParaLocal.map(equipo => (
+                  <option key={equipo.id} value={equipo.id}>
+                    {equipo.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  {/* Formulario para crear nuevo partido */}
-                  <div className="border-t pt-3">
-                    <h5 className="font-semibold text-sm text-gray-700 mb-2">Crear Nuevo Partido:</h5>
-                    <div className="flex gap-2 mb-2">
-                      <select
-                        value={nuevosPartidos[jornada.id]?.equipo_local || ''}
-                        onChange={(e) => actualizarNuevoPartido(jornada.id, 'equipo_local', e.target.value)}
-                        className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                        disabled={loading}
-                      >
-                        <option value="">Equipo Local</option>
-                        {getEquiposDisponibles(jornada.id).map(equipo => (
-                          <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={nuevosPartidos[jornada.id]?.equipo_visitante || ''}
-                        onChange={(e) => actualizarNuevoPartido(jornada.id, 'equipo_visitante', e.target.value)}
-                        className="flex-1 border border-gray-300 p-2 rounded text-sm"
-                        disabled={loading}
-                      >
-                        <option value="">Equipo Visitante</option>
-                        {getEquiposDisponibles(jornada.id).map(equipo => (
-                          <option key={equipo.id} value={equipo.id}>{equipo.nombre}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCrearPartido(jornada.id);
-                      }}
-                      className="w-full bg-blue-600 text-white p-2 rounded text-sm hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-                      disabled={loading}
-                    >
-                      {loading ? 'Creando...' : '+ Añadir Partido'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {/* Equipo Visitante */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Equipo Visitante *
+              </label>
+              <select
+                value={nuevoPartido.equipo_visitante}
+                onChange={(e) => setNuevoPartido({...nuevoPartido, equipo_visitante: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Selecciona equipo visitante</option>
+                {equiposParaVisitante.map(equipo => (
+                  <option key={equipo.id} value={equipo.id}>
+                    {equipo.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha
+              </label>
+              <input
+                type="date"
+                value={nuevoPartido.fecha}
+                onChange={(e) => setNuevoPartido({...nuevoPartido, fecha: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              />
+            </div>
           </div>
-        )}
-      </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleCrearPartido}
+              disabled={loading || !nuevoPartido.equipo_local || !nuevoPartido.equipo_visitante}
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+            >
+              {loading ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={16} />}
+              Crear Partido
+            </button>
+            
+            <button
+              onClick={() => setCreandoPartido(false)}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Partidos */}
+      {loading && partidos.length === 0 ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Cargando...</p>
+        </div>
+      ) : partidos.length === 0 ? (
+        <div className="text-center py-8 bg-yellow-50 rounded-lg">
+          <p className="text-yellow-700">
+            {jornadaSeleccionada 
+              ? 'No hay partidos en esta jornada.' 
+              : 'Selecciona una jornada.'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {partidos.map((partido) => (
+            <div key={partido.id} className="border rounded-lg p-4 bg-white shadow-sm">
+              <div className="flex justify-between items-center">
+                <div className="flex-1">
+                  <div className="font-semibold">
+                    {partido.equipo_local_nombre} vs {partido.equipo_visitante_nombre}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {partido.fecha && new Date(partido.fecha).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="text-center mx-4">
+                  <div className="text-xl font-bold">
+                    {partido.goles_local ?? '-'} : {partido.goles_visitante ?? '-'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleEliminarPartido(partido.id)}
+                  className="bg-red-600 text-white p-2 rounded hover:bg-red-700"
+                  title="Eliminar partido"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

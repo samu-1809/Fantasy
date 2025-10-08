@@ -225,6 +225,7 @@ class LoginView(generics.GenericAPIView):
             {'error': 'Credenciales inválidas'}, 
             status=status.HTTP_401_UNAUTHORIZED
         )
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def mi_equipo(request):
@@ -237,6 +238,7 @@ def mi_equipo(request):
             {"error": "No se encontró equipo para este usuario"}, 
             status=status.HTTP_404_NOT_FOUND
         )
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
@@ -257,6 +259,7 @@ def current_user(request):
         'is_superuser': user.is_superuser,
         'equipo': equipo_data
     })
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def datos_iniciales(request):
@@ -327,6 +330,7 @@ def datos_iniciales(request):
             {"error": "Error al cargar datos iniciales: " + str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
 class LigaViewSet(viewsets.ModelViewSet):
     queryset = Liga.objects.all()
     serializer_class = LigaSerializer
@@ -644,6 +648,42 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'destino_en_banquillo': jugador_destino.en_banquillo
         })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def equipo_detalle(request, pk):
+    """
+    Obtener un equipo específico por ID - Cualquier usuario autenticado puede ver cualquier equipo
+    """
+    print(f"🎯 EJECUTANDO equipo_detalle para equipo ID: {pk}")
+    print(f"🔐 Usuario autenticado: {request.user.username} (ID: {request.user.id})")
+    print(f"📤 Headers de la solicitud: {request.headers}")
+    
+    try:
+        equipo = Equipo.objects.get(id=pk)
+        print(f"✅ Equipo encontrado: {equipo.nombre} (Usuario: {equipo.usuario.username})")
+        
+        serializer = EquipoSerializer(equipo, context={'request': request})
+        return Response(serializer.data)
+        
+    except Equipo.DoesNotExist:
+        print(f"❌ Equipo con ID {pk} no encontrado")
+        return Response(
+            {"error": "Equipo no encontrado"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    """
+    Obtener un equipo específico por ID - Cualquier usuario autenticado puede ver cualquier equipo
+    """
+    try:
+        equipo = Equipo.objects.get(id=pk)
+        serializer = EquipoSerializer(equipo, context={'request': request})
+        return Response(serializer.data)
+    except Equipo.DoesNotExist:
+        return Response(
+            {"error": "Equipo no encontrado"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
 class MercadoViewSet(viewsets.ViewSet):
     """
     Endpoint para obtener jugadores disponibles en el mercado:
@@ -804,6 +844,37 @@ class ClasificacionViewSet(viewsets.ViewSet):
             item['posicion'] = idx
 
         return Response(clasificacion)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def equipos_disponibles_jornada(request, jornada_id):
+    """
+    Obtener equipos reales que NO tienen partido en la jornada especificada
+    """
+    try:
+        jornada = Jornada.objects.get(id=jornada_id)
+        
+        # Obtener IDs de equipos que YA tienen partido en esta jornada
+        partidos_jornada = Partido.objects.filter(jornada=jornada)
+        
+        equipos_ocupados_ids = set()
+        for partido in partidos_jornada:
+            if partido.equipo_local:
+                equipos_ocupados_ids.add(partido.equipo_local.id)
+            if partido.equipo_visitante:
+                equipos_ocupados_ids.add(partido.equipo_visitante.id)
+        
+        # Obtener equipos que NO están ocupados
+        equipos_disponibles = EquipoReal.objects.exclude(id__in=equipos_ocupados_ids)
+        
+        serializer = EquipoRealSerializer(equipos_disponibles, many=True)
+        return Response(serializer.data)
+        
+    except Jornada.DoesNotExist:
+        return Response(
+            {'error': 'Jornada no encontrada'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
 
 class JornadaViewSet(viewsets.ModelViewSet):
     queryset = Jornada.objects.all()

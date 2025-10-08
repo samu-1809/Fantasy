@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getClasificacion } from '../../services/api';
 
-const RankingsScreen = ({ datosUsuario }) => {
+const RankingsScreen = ({ datosUsuario, onTeamClick }) => {
   const [clasificacion, setClasificacion] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -9,8 +9,7 @@ const RankingsScreen = ({ datosUsuario }) => {
   useEffect(() => {
     const cargarClasificacion = async () => {
       if (!datosUsuario?.ligaActual?.id) {
-        console.error('❌ No hay ID de liga disponible:', datosUsuario);
-        setError('No se pudo cargar la clasificación: liga no disponible');
+        setError('No se pudo cargar la información de la liga');
         setLoading(false);
         return;
       }
@@ -18,9 +17,8 @@ const RankingsScreen = ({ datosUsuario }) => {
       try {
         setLoading(true);
         setError(null);
-        console.log('🔄 Cargando clasificación para liga:', datosUsuario.ligaActual.id);
-        
         const data = await getClasificacion(datosUsuario.ligaActual.id);
+        console.log('📊 Datos de clasificación recibidos:', data);
         setClasificacion(data);
       } catch (err) {
         console.error('❌ Error cargando clasificación:', err);
@@ -32,6 +30,28 @@ const RankingsScreen = ({ datosUsuario }) => {
 
     cargarClasificacion();
   }, [datosUsuario]);
+
+  const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
+
+  // 🎯 FUNCIÓN MEJORADA: Verificar y manejar el clic en equipos
+  const handleTeamClick = (equipo) => {
+    console.log('🎯 Team clickeado en Rankings:', {
+      equipo_id: equipo.equipo_id,
+      id: equipo.id,
+      nombre: equipo.nombre
+    });
+
+    // 🎯 CORREGIDO: Usar el ID correcto del equipo
+    const equipoId = equipo.id || equipo.equipo_id;
+    
+    if (!equipoId) {
+      console.error('❌ No se pudo determinar el ID del equipo:', equipo);
+      return;
+    }
+
+    console.log('🔄 Navegando a equipo con ID:', equipoId);
+    onTeamClick(equipoId);
+  };
 
   if (loading) {
     return (
@@ -65,28 +85,34 @@ const RankingsScreen = ({ datosUsuario }) => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pos</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Equipo</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Manager</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Puntos</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Presupuesto</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {clasificacion.map((equipo, index) => (
-                <tr key={equipo.equipo_id || index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <tr key={equipo.id || equipo.equipo_id || index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {equipo.posicion}
+                    {equipo.posicion || index + 1}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {equipo.nombre}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {/* 🎯 CORREGIDO: Pasar el objeto equipo completo a handleTeamClick */}
+                    <button
+                      onClick={() => handleTeamClick(equipo)}
+                      className="text-blue-600 hover:text-blue-900 font-medium transition-colors hover:underline"
+                    >
+                      {equipo.nombre}
+                    </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {equipo.usuario}
+                    {equipo.usuario || equipo.usuario_username}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">
                     {equipo.puntos_totales || 0}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    €{(equipo.presupuesto || 0).toLocaleString()}
+                    {formatValue(equipo.presupuesto || 0)}
                   </td>
                 </tr>
               ))}
