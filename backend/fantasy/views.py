@@ -18,7 +18,6 @@ from .serializers import (
     JornadaSerializer, PuntuacionSerializer, EquipoRealSerializer, PartidoSerializer, FicharJugadorSerializer, VenderJugadorSerializer
 )
 
-# RegisterView CORREGIDA
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
@@ -188,6 +187,8 @@ class LoginView(generics.GenericAPIView):
         username = request.data.get('username')
         password = request.data.get('password')
         
+        print(f"🔐 Login attempt: {username}")
+        
         user = authenticate(username=username, password=password)
         
         if user is not None:
@@ -197,27 +198,34 @@ class LoginView(generics.GenericAPIView):
             try:
                 equipo = Equipo.objects.get(usuario=user)
                 equipo_data = EquipoSerializer(equipo).data
+                print(f"✅ Equipo encontrado: {equipo.nombre}")
             except Equipo.DoesNotExist:
                 equipo_data = None
+                print("❌ No se encontró equipo")
             
-            return Response({
+            # 🎯 VERIFICAR QUÉ SE ESTÁ ENVIANDO
+            response_data = {
                 'user': {
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
-                    'is_staff': user.is_staff
+                    'is_staff': user.is_staff,
+                    'is_superuser': user.is_superuser
                 },
                 'equipo': equipo_data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
-            })
+                'access': str(refresh.access_token),
+            }
+            
+            print(f"📤 Enviando respuesta: {response_data}")
+            
+            return Response(response_data)
         
+        print("❌ Autenticación fallida")
         return Response(
             {'error': 'Credenciales inválidas'}, 
             status=status.HTTP_401_UNAUTHORIZED
         )
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def mi_equipo(request):
@@ -230,10 +238,17 @@ def mi_equipo(request):
             {"error": "No se encontró equipo para este usuario"}, 
             status=status.HTTP_404_NOT_FOUND
         )
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
     user = request.user
+    try:
+        equipo = Equipo.objects.get(usuario=user)
+        equipo_data = EquipoSerializer(equipo).data
+    except Equipo.DoesNotExist:
+        equipo_data = None
+        
     return Response({
         'id': user.id,
         'username': user.username,
@@ -241,8 +256,81 @@ def current_user(request):
         'first_name': user.first_name,
         'last_name': user.last_name,
         'is_staff': user.is_staff,
-        'is_superuser': user.is_superuser
+        'is_superuser': user.is_superuser,
+        'equipo': equipo_data
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def datos_iniciales(request):
+    """
+    Endpoint único para cargar todos los datos iniciales del usuario
+    """
+    try:
+        # 1. Obtener equipo del usuario
+        equipo = Equipo.objects.filter(usuario=request.user).first()
+        if not equipo:
+            return Response(
+                {"error": "No se encontró equipo para este usuario"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 2. Serializar datos
+        equipo_data = EquipoSerializer(equipo).data
+        
+        # 3. Obtener jugadores del equipo
+        jugadores = Jugador.objects.filter(equipo=equipo)
+        jugadores_data = JugadorSerializer(jugadores, many=True).data
+        
+        # 4. Obtener mercado
+        mercado_jugadores = []
+        try:
+            # Simular lógica del mercado
+            mercado_jugadores = Jugador.objects.filter(
+                equipo__isnull=True
+            ).order_by('?')[:8]
+            mercado_data = JugadorSerializer(mercado_jugadores, many=True).data
+        except Exception as e:
+            print(f"❌ Error cargando mercado: {e}")
+            mercado_data = []
+        
+        # 5. Obtener clasificación
+        clasificacion_data = []
+        try:
+            equipos_liga = Equipo.objects.filter(liga=equipo.liga)
+            clasificacion = []
+            for eq in equipos_liga:
+                puntos_totales = sum(j.puntos_totales for j in eq.jugadores.all())
+                clasificacion.append({
+                    'equipo_id': eq.id,
+                    'nombre': eq.nombre,
+                    'usuario': eq.usuario.username,
+                    'puntos_totales': puntos_totales,
+                    'presupuesto': eq.presupuesto
+                })
+            clasificacion.sort(key=lambda x: x['puntos_totales'], reverse=True)
+            for idx, item in enumerate(clasificacion, 1):
+                item['posicion'] = idx
+            clasificacion_data = clasificacion
+        except Exception as e:
+            print(f"❌ Error cargando clasificación: {e}")
+            clasificacion_data = []
+        
+        return Response({
+            'equipo': equipo_data,
+            'jugadores': jugadores_data,
+            'mercado': mercado_data,
+            'clasificacion': clasificacion_data,
+            'liga_id': equipo.liga.id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error en datos_iniciales: {e}")
+        return Response(
+            {"error": "Error al cargar datos iniciales: " + str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
 class LigaViewSet(viewsets.ModelViewSet):
     queryset = Liga.objects.all()
     serializer_class = LigaSerializer
@@ -267,6 +355,7 @@ class JugadorViewSet(viewsets.ModelViewSet):
 class EquipoViewSet(viewsets.ModelViewSet):
     queryset = Equipo.objects.all()
     serializer_class = EquipoSerializer
+    permission_classes = [IsAuthenticated] 
 
     def get_queryset(self):
         """Optimiza queries y filtra por usuario si se especifica"""
@@ -274,27 +363,22 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'usuario',
             'liga'
         ).prefetch_related(
-            'jugadores'
+            Prefetch('jugadores', queryset=Jugador.objects.all())
         )
         
-        # 🆕 FILTRADO CRUCIAL - Soporta diferentes parámetros de búsqueda
-        usuario_id = self.request.query_params.get('usuario_id')
-        usuario_param = self.request.query_params.get('usuario')
-        
-        print(f"🔍 Parámetros de búsqueda: usuario_id={usuario_id}, usuario={usuario_param}")
-        
-        if usuario_id:
-            print(f"🎯 Filtrando por usuario_id: {usuario_id}")
-            queryset = queryset.filter(usuario_id=usuario_id)
-        elif usuario_param:
-            print(f"🎯 Filtrando por usuario: {usuario_param}")
-            queryset = queryset.filter(usuario_id=usuario_param)
-        
-        # 🆕 Debug: mostrar resultados de la búsqueda
-        if usuario_id or usuario_param:
-            print(f"✅ Equipos encontrados: {queryset.count()}")
-            for equipo in queryset:
-                print(f"   - {equipo.nombre} (Usuario: {equipo.usuario.username}) - Jugadores: {equipo.jugadores.count()}")
+        # 🆕 FILTRADO POR USUARIO ACTUAL SI NO ES ADMIN
+        if not self.request.user.is_staff and not self.request.user.is_superuser:
+            print(f"🎯 Filtrando equipos para usuario: {self.request.user.username}")
+            queryset = queryset.filter(usuario=self.request.user)
+        else:
+            # Para admin, permitir filtrado manual
+            usuario_id = self.request.query_params.get('usuario_id')
+            usuario_param = self.request.query_params.get('usuario')
+            
+            if usuario_id:
+                queryset = queryset.filter(usuario_id=usuario_id)
+            elif usuario_param:
+                queryset = queryset.filter(usuario_id=usuario_param)
         
         return queryset
 
@@ -564,6 +648,42 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'destino_en_banquillo': jugador_destino.en_banquillo
         })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def equipo_detalle(request, pk):
+    """
+    Obtener un equipo específico por ID - Cualquier usuario autenticado puede ver cualquier equipo
+    """
+    print(f"🎯 EJECUTANDO equipo_detalle para equipo ID: {pk}")
+    print(f"🔐 Usuario autenticado: {request.user.username} (ID: {request.user.id})")
+    print(f"📤 Headers de la solicitud: {request.headers}")
+    
+    try:
+        equipo = Equipo.objects.get(id=pk)
+        print(f"✅ Equipo encontrado: {equipo.nombre} (Usuario: {equipo.usuario.username})")
+        
+        serializer = EquipoSerializer(equipo, context={'request': request})
+        return Response(serializer.data)
+        
+    except Equipo.DoesNotExist:
+        print(f"❌ Equipo con ID {pk} no encontrado")
+        return Response(
+            {"error": "Equipo no encontrado"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    """
+    Obtener un equipo específico por ID - Cualquier usuario autenticado puede ver cualquier equipo
+    """
+    try:
+        equipo = Equipo.objects.get(id=pk)
+        serializer = EquipoSerializer(equipo, context={'request': request})
+        return Response(serializer.data)
+    except Equipo.DoesNotExist:
+        return Response(
+            {"error": "Equipo no encontrado"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
 class MercadoViewSet(viewsets.ViewSet):
     """
     Endpoint para obtener jugadores disponibles en el mercado:
@@ -724,6 +844,37 @@ class ClasificacionViewSet(viewsets.ViewSet):
             item['posicion'] = idx
 
         return Response(clasificacion)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def equipos_disponibles_jornada(request, jornada_id):
+    """
+    Obtener equipos reales que NO tienen partido en la jornada especificada
+    """
+    try:
+        jornada = Jornada.objects.get(id=jornada_id)
+        
+        # Obtener IDs de equipos que YA tienen partido en esta jornada
+        partidos_jornada = Partido.objects.filter(jornada=jornada)
+        
+        equipos_ocupados_ids = set()
+        for partido in partidos_jornada:
+            if partido.equipo_local:
+                equipos_ocupados_ids.add(partido.equipo_local.id)
+            if partido.equipo_visitante:
+                equipos_ocupados_ids.add(partido.equipo_visitante.id)
+        
+        # Obtener equipos que NO están ocupados
+        equipos_disponibles = EquipoReal.objects.exclude(id__in=equipos_ocupados_ids)
+        
+        serializer = EquipoRealSerializer(equipos_disponibles, many=True)
+        return Response(serializer.data)
+        
+    except Jornada.DoesNotExist:
+        return Response(
+            {'error': 'Jornada no encontrada'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
 
 class JornadaViewSet(viewsets.ModelViewSet):
     queryset = Jornada.objects.all()
