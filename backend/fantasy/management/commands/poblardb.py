@@ -135,7 +135,7 @@ class Command(BaseCommand):
     def crear_usuario_admin(self):
         """Crear usuario administrador"""
         user, created = User.objects.get_or_create(
-            username='admin',
+            username='admin1',
             defaults={
                 'email': 'admin@fantasy.com',
                 'is_staff': True,
@@ -143,9 +143,9 @@ class Command(BaseCommand):
             }
         )
         if created:
-            user.set_password('admin')
+            user.set_password('admin1')
             user.save()
-            self.stdout.write(self.style.SUCCESS('✓ Usuario admin creado: admin / admin123'))
+            self.stdout.write(self.style.SUCCESS('✓ Usuario admin creado: admin1 / admin1'))
         else:
             self.stdout.write(self.style.WARNING('⚠ Usuario admin ya existe'))
 

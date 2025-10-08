@@ -28,6 +28,5 @@ urlpatterns = [
     path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
-    
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
 ]

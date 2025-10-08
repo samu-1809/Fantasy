@@ -187,6 +187,8 @@ class LoginView(generics.GenericAPIView):
         username = request.data.get('username')
         password = request.data.get('password')
         
+        print(f"🔐 Login attempt: {username}")
+        
         user = authenticate(username=username, password=password)
         
         if user is not None:
@@ -196,10 +198,13 @@ class LoginView(generics.GenericAPIView):
             try:
                 equipo = Equipo.objects.get(usuario=user)
                 equipo_data = EquipoSerializer(equipo).data
+                print(f"✅ Equipo encontrado: {equipo.nombre}")
             except Equipo.DoesNotExist:
                 equipo_data = None
+                print("❌ No se encontró equipo")
             
-            return Response({
+            # 🎯 VERIFICAR QUÉ SE ESTÁ ENVIANDO
+            response_data = {
                 'user': {
                     'id': user.id,
                     'username': user.username,
@@ -208,12 +213,14 @@ class LoginView(generics.GenericAPIView):
                     'is_superuser': user.is_superuser
                 },
                 'equipo': equipo_data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
-            })
+                'access': str(refresh.access_token),
+            }
+            
+            print(f"📤 Enviando respuesta: {response_data}")
+            
+            return Response(response_data)
         
+        print("❌ Autenticación fallida")
         return Response(
             {'error': 'Credenciales inválidas'}, 
             status=status.HTTP_401_UNAUTHORIZED
@@ -234,6 +241,12 @@ def mi_equipo(request):
 @permission_classes([IsAuthenticated])
 def current_user(request):
     user = request.user
+    try:
+        equipo = Equipo.objects.get(usuario=user)
+        equipo_data = EquipoSerializer(equipo).data
+    except Equipo.DoesNotExist:
+        equipo_data = None
+        
     return Response({
         'id': user.id,
         'username': user.username,
@@ -241,7 +254,8 @@ def current_user(request):
         'first_name': user.first_name,
         'last_name': user.last_name,
         'is_staff': user.is_staff,
-        'is_superuser': user.is_superuser
+        'is_superuser': user.is_superuser,
+        'equipo': equipo_data
     })
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
