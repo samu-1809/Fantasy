@@ -18,7 +18,6 @@ from .serializers import (
     JornadaSerializer, PuntuacionSerializer, EquipoRealSerializer, PartidoSerializer, FicharJugadorSerializer, VenderJugadorSerializer
 )
 
-# RegisterView CORREGIDA
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
@@ -205,7 +204,8 @@ class LoginView(generics.GenericAPIView):
                     'id': user.id,
                     'username': user.username,
                     'email': user.email,
-                    'is_staff': user.is_staff
+                    'is_staff': user.is_staff,
+                    'is_superuser': user.is_superuser
                 },
                 'equipo': equipo_data,
                 'tokens': {
@@ -243,6 +243,76 @@ def current_user(request):
         'is_staff': user.is_staff,
         'is_superuser': user.is_superuser
     })
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def datos_iniciales(request):
+    """
+    Endpoint único para cargar todos los datos iniciales del usuario
+    """
+    try:
+        # 1. Obtener equipo del usuario
+        equipo = Equipo.objects.filter(usuario=request.user).first()
+        if not equipo:
+            return Response(
+                {"error": "No se encontró equipo para este usuario"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 2. Serializar datos
+        equipo_data = EquipoSerializer(equipo).data
+        
+        # 3. Obtener jugadores del equipo
+        jugadores = Jugador.objects.filter(equipo=equipo)
+        jugadores_data = JugadorSerializer(jugadores, many=True).data
+        
+        # 4. Obtener mercado
+        mercado_jugadores = []
+        try:
+            # Simular lógica del mercado
+            mercado_jugadores = Jugador.objects.filter(
+                equipo__isnull=True
+            ).order_by('?')[:8]
+            mercado_data = JugadorSerializer(mercado_jugadores, many=True).data
+        except Exception as e:
+            print(f"❌ Error cargando mercado: {e}")
+            mercado_data = []
+        
+        # 5. Obtener clasificación
+        clasificacion_data = []
+        try:
+            equipos_liga = Equipo.objects.filter(liga=equipo.liga)
+            clasificacion = []
+            for eq in equipos_liga:
+                puntos_totales = sum(j.puntos_totales for j in eq.jugadores.all())
+                clasificacion.append({
+                    'equipo_id': eq.id,
+                    'nombre': eq.nombre,
+                    'usuario': eq.usuario.username,
+                    'puntos_totales': puntos_totales,
+                    'presupuesto': eq.presupuesto
+                })
+            clasificacion.sort(key=lambda x: x['puntos_totales'], reverse=True)
+            for idx, item in enumerate(clasificacion, 1):
+                item['posicion'] = idx
+            clasificacion_data = clasificacion
+        except Exception as e:
+            print(f"❌ Error cargando clasificación: {e}")
+            clasificacion_data = []
+        
+        return Response({
+            'equipo': equipo_data,
+            'jugadores': jugadores_data,
+            'mercado': mercado_data,
+            'clasificacion': clasificacion_data,
+            'liga_id': equipo.liga.id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error en datos_iniciales: {e}")
+        return Response(
+            {"error": "Error al cargar datos iniciales: " + str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 class LigaViewSet(viewsets.ModelViewSet):
     queryset = Liga.objects.all()
     serializer_class = LigaSerializer
@@ -267,6 +337,7 @@ class JugadorViewSet(viewsets.ModelViewSet):
 class EquipoViewSet(viewsets.ModelViewSet):
     queryset = Equipo.objects.all()
     serializer_class = EquipoSerializer
+    permission_classes = [IsAuthenticated] 
 
     def get_queryset(self):
         """Optimiza queries y filtra por usuario si se especifica"""
@@ -274,27 +345,22 @@ class EquipoViewSet(viewsets.ModelViewSet):
             'usuario',
             'liga'
         ).prefetch_related(
-            'jugadores'
+            Prefetch('jugadores', queryset=Jugador.objects.all())
         )
         
-        # 🆕 FILTRADO CRUCIAL - Soporta diferentes parámetros de búsqueda
-        usuario_id = self.request.query_params.get('usuario_id')
-        usuario_param = self.request.query_params.get('usuario')
-        
-        print(f"🔍 Parámetros de búsqueda: usuario_id={usuario_id}, usuario={usuario_param}")
-        
-        if usuario_id:
-            print(f"🎯 Filtrando por usuario_id: {usuario_id}")
-            queryset = queryset.filter(usuario_id=usuario_id)
-        elif usuario_param:
-            print(f"🎯 Filtrando por usuario: {usuario_param}")
-            queryset = queryset.filter(usuario_id=usuario_param)
-        
-        # 🆕 Debug: mostrar resultados de la búsqueda
-        if usuario_id or usuario_param:
-            print(f"✅ Equipos encontrados: {queryset.count()}")
-            for equipo in queryset:
-                print(f"   - {equipo.nombre} (Usuario: {equipo.usuario.username}) - Jugadores: {equipo.jugadores.count()}")
+        # 🆕 FILTRADO POR USUARIO ACTUAL SI NO ES ADMIN
+        if not self.request.user.is_staff and not self.request.user.is_superuser:
+            print(f"🎯 Filtrando equipos para usuario: {self.request.user.username}")
+            queryset = queryset.filter(usuario=self.request.user)
+        else:
+            # Para admin, permitir filtrado manual
+            usuario_id = self.request.query_params.get('usuario_id')
+            usuario_param = self.request.query_params.get('usuario')
+            
+            if usuario_id:
+                queryset = queryset.filter(usuario_id=usuario_id)
+            elif usuario_param:
+                queryset = queryset.filter(usuario_id=usuario_param)
         
         return queryset
 

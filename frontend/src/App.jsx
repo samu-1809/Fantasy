@@ -1,7 +1,14 @@
-import FantasyWireframes from './components/FantasyWireframes'
+import Fantasy from './components/layouts/Fantasy';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
-  return <FantasyWireframes />
+  return (
+    <AuthProvider>
+      <div className="App">
+        <Fantasy />
+      </div>
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;

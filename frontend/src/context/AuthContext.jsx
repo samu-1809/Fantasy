@@ -1,7 +1,8 @@
-import { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { loginUser, registerUser, getCurrentUser, logoutUser } from '../services/api';
 
-const AuthContext = createContext(null);
+// 🎯 CORREGIDO: Crear el contexto correctamente
+const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -20,19 +21,26 @@ export const AuthProvider = ({ children }) => {
   // Cargar usuario al iniciar si hay token
   useEffect(() => {
     const loadUser = async () => {
-      const token = localStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('access_token');
+      
+      console.log('🔄 AuthProvider iniciando, token encontrado:', !!token);
+      
       if (token) {
         try {
+          console.log('🔄 Cargando usuario desde token...');
           const userData = await getCurrentUser();
+          console.log('✅ Usuario cargado:', userData);
           setUser(userData);
-          setEquipo(userData.equipo);
+          setEquipo(userData.equipo || null);
         } catch (err) {
-          console.error('Error al cargar usuario:', err);
+          console.error('❌ Error al cargar usuario:', err);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          localStorage.removeItem('access_token');
         }
       }
       setLoading(false);
+      console.log('✅ AuthProvider inicializado');
     };
 
     loadUser();
@@ -41,51 +49,69 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
+      console.log('🔐 Iniciando login...');
       const data = await loginUser(username, password);
 
-      // 🆕 NUEVO: Solo guardar access token en localStorage
-      // Refresh token está en httpOnly cookie (más seguro)
+      console.log('✅ Login exitoso, datos recibidos:', data);
+
+      // 🎯 CORREGIDO: Manejar diferentes formatos de respuesta
       if (data.tokens) {
-        // Legacy response (RegisterView anterior)
+        // Formato legacy
         localStorage.setItem('accessToken', data.tokens.access);
         if (data.tokens.refresh) {
           localStorage.setItem('refreshToken', data.tokens.refresh);
         }
       } else if (data.access) {
-        // Nueva response (auth_views con cookies)
+        // Nuevo formato
         localStorage.setItem('accessToken', data.access);
       }
 
-      // Guardar usuario y equipo
-      setUser(data.user);
-      setEquipo(data.equipo);
+      // 🎯 CORREGIDO: Guardar usuario y equipo
+      const userData = data.user || data;
+      setUser(userData);
+      setEquipo(data.equipo || null);
+
+      console.log('✅ Estado actualizado - usuario:', userData.username);
 
       return data;
     } catch (err) {
+      console.error('❌ Error en login:', err);
       setError(err.message || 'Error al iniciar sesión');
       throw err;
     }
   };
 
-  const register = async (username, email, password) => {
+  const register = async (userData) => {
     try {
       setError(null);
-      const data = await registerUser(username, email, password);
+      console.log('📝 Iniciando registro...');
+      
+      const data = await registerUser({
+        username: userData.username,
+        email: userData.email,
+        password: userData.password,
+        password2: userData.password2,
+        first_name: userData.first_name,
+        last_name: userData.last_name
+      });
 
-      // 🆕 NUEVO: Solo guardar access token en localStorage
-      // Refresh token está en httpOnly cookie
+      console.log('✅ Registro exitoso, datos:', data);
+
+      // 🎯 CORREGIDO: Manejar token de forma consistente
       if (data.access) {
         localStorage.setItem('accessToken', data.access);
-      } else if (data.tokens?.access) {
-        // Legacy fallback
+      } else if (data.tokens && data.tokens.access) {
         localStorage.setItem('accessToken', data.tokens.access);
       }
 
       // Guardar usuario
-      setUser(data.user);
+      const userDataResponse = data.user || data;
+      setUser(userDataResponse);
+      setEquipo(data.equipo || null);
 
       return data;
     } catch (err) {
+      console.error('❌ Error en registro:', err);
       setError(err.message || 'Error al registrarse');
       throw err;
     }
@@ -93,16 +119,18 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // 🆕 Llamar al endpoint de logout para blacklistear el token
+      console.log('🚪 Cerrando sesión...');
       await logoutUser();
     } catch (err) {
-      console.error('Error al hacer logout:', err);
+      console.error('❌ Error al hacer logout:', err);
     } finally {
-      // Limpiar estado local siempre, incluso si la petición falla
+      // Limpiar estado local siempre
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      localStorage.removeItem('access_token');
       setUser(null);
       setEquipo(null);
+      console.log('✅ Sesión cerrada');
     }
   };
 
@@ -117,5 +145,15 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  console.log('🔄 AuthProvider renderizado, estado:', {
+    user: user ? user.username : 'null',
+    isAuthenticated: !!user,
+    loading
+  });
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

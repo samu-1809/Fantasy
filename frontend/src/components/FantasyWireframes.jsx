@@ -2499,8 +2499,6 @@ const RankingsScreen = () => (
     );
   };
 
-
-
 const renderScreen = () => {
     switch(currentScreen) {
       case 'login': return <LoginScreen />;

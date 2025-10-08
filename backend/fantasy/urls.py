@@ -25,6 +25,7 @@ urlpatterns = [
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', CookieTokenObtainPairView.as_view(), name='login'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
+    path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
     
