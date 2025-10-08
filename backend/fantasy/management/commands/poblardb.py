@@ -20,8 +20,8 @@ class Command(BaseCommand):
         # Crear equipos reales
         equipos_reales = self.crear_equipos_reales()
         
-        # Crear JUGADORES MASIVOS (mínimo 100+)
-        total_jugadores = self.crear_jugadores_masivos(equipos_reales)
+        # Crear JUGADORES con los nombres proporcionados
+        total_jugadores = self.crear_jugadores_proporcionados(equipos_reales)
         
         # Crear usuario admin
         self.crear_usuario_admin()
@@ -57,10 +57,8 @@ class Command(BaseCommand):
     def crear_equipos_reales(self):
         """Crear equipos reales para asignar a jugadores"""
         equipos_reales_nombres = [
-            'Makilakixki', 'Botafumeiro', 'Shalke', 'Viseu', 
-            'San Zoilo', 'Aibares', 'Spolka', 'Internacional',
-            'Barcelona', 'Real Madrid', 'Atlético', 'Sevilla',
-            'Valencia', 'Athletic', 'Villarreal', 'Real Sociedad'
+            'Viseu', 'Shalcke', 'Spolka', 'Pizarrin', 
+            'Barfleur', 'Pikatostes', 'Botafumeiro', 'Rayo Casedano'
         ]
         
         equipos_reales = []
@@ -72,62 +70,94 @@ class Command(BaseCommand):
         
         return equipos_reales
 
-    def crear_jugadores_masivos(self, equipos_reales):
-        """Crear una gran cantidad de jugadores para permitir muchos equipos"""
-        self.stdout.write('\n🎯 Creando jugadores masivos...')
+    def crear_jugadores_proporcionados(self, equipos_reales):
+        """Crear jugadores con los nombres proporcionados"""
+        self.stdout.write('\n🎯 Creando jugadores proporcionados...')
         
-        # Nombres y apellidos para generar combinaciones realistas
-        nombres = [
-            'Carlos', 'Sergio', 'Fernando', 'Miguel', 'Roberto', 'Antonio', 'Luis', 'Jorge',
-            'Manuel', 'Andrés', 'Diego', 'Alberto', 'Francisco', 'Javier', 'Raúl', 'Marcos',
-            'Iván', 'Gabriel', 'David', 'Pablo', 'Ricardo', 'Ángel', 'Daniel', 'Pedro',
-            'Lucas', 'Adrián', 'Mario', 'Juan', 'José', 'Álvaro', 'Rubén', 'Jesús'
-        ]
+        # Mapeo de equipos reales por nombre
+        equipos_dict = {equipo.nombre.lower(): equipo for equipo in equipos_reales}
         
-        apellidos = [
-            'García', 'Martínez', 'López', 'González', 'Rodríguez', 'Fernández', 'Pérez',
-            'Sánchez', 'Ramírez', 'Torres', 'Díaz', 'Vázquez', 'Romero', 'Suárez', 'Muñoz',
-            'Iglesias', 'Santos', 'Castro', 'Ortega', 'Delgado', 'Peña', 'Rojas', 'Mora'
-        ]
-        
-        posiciones = ['POR', 'DEF', 'DEL']
-        
-        # Crear jugadores en diferentes rangos de precio
-        rangos_precio = [
-            # (min_valor, max_valor, cantidad, descripción)
-            (1000000, 3000000, 40, 'Económicos'),      # Jugadores baratos
-            (3000000, 6000000, 50, 'Medios'),          # Jugadores promedio  
-            (6000000, 9000000, 30, 'Caros'),           # Jugadores caros
-            (9000000, 15000000, 20, 'Premium'),        # Jugadores estrella
-        ]
+        # Datos de jugadores por equipo
+        jugadores_por_equipo = {
+            'viseu': [
+                'Íñigo Gutiérrez (pt)', 'Pablo Val', 'Óscar Choco', 'Julen La Casa',
+                'Martín Gallo', 'Rubén Ingelmo', 'Julen Aranguren', 'Iñaki Jiménez',
+                'Adrián Del Castillo', 'Iker Ibáñez', 'Asier Acaro'
+            ],
+            'shalcke': [
+                'Juan Blanco (pt)', 'Xabier Rebole', 'Enaitz Pardo', 'Aimar Ibáñez',
+                'Guillermo Ochoa', 'Unai Ojer', 'Germán Bielsa', 'Dani Gallo',
+                'David Gil', 'Adrián Navarro', 'Aimar Rebole', 'Lucas Garcés'
+            ],
+            'spolka': [
+                'Andrés Iriarte (pt)', 'Alejandro Sanchillas (pt)', 'Tasio Villacampa (pt)',
+                'Adrián Segura', 'Roberto Erro', 'Iñaki Urdin', 'Daniel Montañés',
+                'Daniel Mateo', 'Alejandro Jiménez', 'Adrián Echeverri', 'Sergio Jauregui',
+                'Toñín Valencia', 'Álvaro Muiños', 'Arkaitz Molero'
+            ],
+            'pizarrin': [
+                'Leandro (pt)', 'Ivan Bandrés', 'Iñaki Arina', 'Xabi Errea', 'Jorge',
+                'Eric Molero', 'Sergio Navarro', 'Gonzalo Del Castillo', 'Juan Arbea', 'Samu Arbea'
+            ],
+            'barfleur': [
+                'Íñigo Rebole (pt)', 'Aitzol Puga', 'El Primo de Iván', 'Guti Jr',
+                'Francho Jr', 'Teo Villacampa', 'Pablo Pérez', 'Edu Echegoyen', 'Adrián Soteras'
+            ],
+            'pikatostes': [
+                'Aratz Pardo (pt)', 'Belai García', 'Ivan De Lucas', 'Eneko Carreño',
+                'Hugo Sarvide', 'Hodei Elizalde', 'Alejandro Urrizelqui'
+            ],
+            'botafumeiro': [
+                'Yeison Granda', 'Steven Granda', 'Adrián Guerrero', 'Erik Choco',
+                'Charlie Iriarte', 'Bro Cerijo', 'Maicol', 'Josuxa', 'Jull', 'Marco'
+            ],
+            'rayo casedano': [
+                'Mali (pt)', 'Arturo Jiménez', 'Marcos Jiménez', 'Alin', 'Aritza',
+                'Ivan Torrea', 'Daniel Torrea', 'Rodman'
+            ]
+        }
         
         jugadores_creados = 0
         
-        for min_valor, max_valor, cantidad, descripcion in rangos_precio:
-            self.stdout.write(f'🎯 Creando {cantidad} jugadores {descripcion}...')
+        for equipo_nombre, jugadores in jugadores_por_equipo.items():
+            equipo_real = equipos_dict.get(equipo_nombre.lower())
+            if not equipo_real:
+                self.stdout.write(self.style.WARNING(f'⚠ Equipo no encontrado: {equipo_nombre}'))
+                continue
             
-            for i in range(cantidad):
-                # Generar nombre único
-                nombre = f"{random.choice(nombres)} {random.choice(apellidos)}"
-                contador = 1
-                while Jugador.objects.filter(nombre=nombre).exists():
-                    nombre = f"{random.choice(nombres)} {random.choice(apellidos)} {contador}"
-                    contador += 1
+            self.stdout.write(f'🎯 Creando jugadores para {equipo_nombre}...')
+            
+            for nombre_jugador in jugadores:
+                # Determinar posición y limpiar nombre
+                if '(pt)' in nombre_jugador.lower():
+                    posicion = 'POR'
+                    nombre_limpio = nombre_jugador.replace('(pt)', '').strip()
+                else:
+                    # Asignar posición aleatoria entre DEF y DEL
+                    posicion = random.choice(['DEF', 'DEL'])
+                    nombre_limpio = nombre_jugador.strip()
+                
+                # Asignar valor según posición
+                if posicion == 'POR':
+                    valor = round(random.uniform(1000000, 5000000), 2)
+                elif posicion == 'DEF':
+                    valor = round(random.uniform(500000, 8000000), 2)
+                else:  # DEL
+                    valor = round(random.uniform(1000000, 15000000), 2)
                 
                 # Crear jugador
                 jugador = Jugador.objects.create(
-                    nombre=nombre,
-                    posicion=random.choice(posiciones),
-                    valor=round(random.uniform(min_valor, max_valor), 2),
+                    nombre=nombre_limpio,
+                    posicion=posicion,
+                    valor=valor,
                     puntos_totales=random.randint(0, 80),
-                    equipo_real=random.choice(equipos_reales),
+                    equipo_real=equipo_real,
                     en_venta=False
                 )
                 
                 jugadores_creados += 1
-                
-                if jugadores_creados % 20 == 0:  # Mostrar progreso cada 20 jugadores
-                    self.stdout.write(f'   ✅ {jugadores_creados} jugadores creados...')
+            
+            self.stdout.write(self.style.SUCCESS(f'   ✅ {len(jugadores)} jugadores creados para {equipo_nombre}'))
         
         self.stdout.write(self.style.SUCCESS(f'\n🎉 Total jugadores creados: {jugadores_creados}'))
         return jugadores_creados
@@ -135,7 +165,7 @@ class Command(BaseCommand):
     def crear_usuario_admin(self):
         """Crear usuario administrador"""
         user, created = User.objects.get_or_create(
-            username='admin1',
+            username='admin',
             defaults={
                 'email': 'admin@fantasy.com',
                 'is_staff': True,
@@ -143,9 +173,9 @@ class Command(BaseCommand):
             }
         )
         if created:
-            user.set_password('admin1')
+            user.set_password('admin')
             user.save()
-            self.stdout.write(self.style.SUCCESS('✓ Usuario admin creado: admin1 / admin1'))
+            self.stdout.write(self.style.SUCCESS('✓ Usuario admin creado: admin / admin'))
         else:
             self.stdout.write(self.style.WARNING('⚠ Usuario admin ya existe'))
 
