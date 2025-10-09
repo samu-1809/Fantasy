@@ -39,7 +39,9 @@ class Jugador(models.Model):
     equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores')
     en_banquillo = models.BooleanField(default=True)
     fecha_mercado = models.DateTimeField(null=True, blank=True)
-    fecha_fichaje = models.DateTimeField(null=True, blank=True)  # 🆕 Si no la tienes
+    fecha_fichaje = models.DateTimeField(null=True, blank=True)
+    precio_venta = models.IntegerField(null=True, blank=True)
+    puja_actual = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.nombre} ({self.posicion})"
@@ -63,6 +65,61 @@ class Jugador(models.Model):
         if not self.fecha_mercado:
             return None
         return self.fecha_mercado + timedelta(hours=24)
+
+    @property
+    def expirado(self):
+        """Verifica si la subasta/mercado ha expirado"""
+        if not self.fecha_mercado:
+            return False
+        from django.utils import timezone
+        tiempo_transcurrido = timezone.now() - self.fecha_mercado
+        return tiempo_transcurrido.days >= 1  # 1 día de duración
+
+    def realizar_puja(self, equipo, monto):
+        """Crear una puja por este jugador (solo para jugadores libres)"""
+        if not self.en_mercado:
+            raise ValueError("El jugador no está en el mercado")
+
+        if monto <= (self.puja_actual or 0):
+            raise ValueError("La puja debe ser mayor a la puja actual")
+
+        # Crear nueva puja
+        from .models import Puja  # Import local para evitar circular
+        puja = Puja.objects.create(
+            jugador=self,
+            equipo=equipo,
+            monto=monto
+        )
+
+        # Actualizar puja actual
+        self.puja_actual = monto
+        self.save()
+
+        return puja
+
+    def finalizar_subasta(self):
+        """Finalizar subasta y transferir jugador al mejor postor"""
+        if self.en_mercado and self.puja_actual:
+            # Obtener la puja ganadora (mayor monto)
+            puja_ganadora = self.pujas.filter(monto=self.puja_actual).first()
+
+            if puja_ganadora:
+                # Transferir jugador al equipo ganador
+                self.equipo = puja_ganadora.equipo
+                self.en_mercado = False
+                self.fecha_mercado = None
+
+                # Descontar presupuesto
+                puja_ganadora.equipo.presupuesto -= self.puja_actual
+                puja_ganadora.equipo.save()
+
+                # Marcar puja ganadora
+                puja_ganadora.es_ganadora = True
+                puja_ganadora.save()
+
+                self.save()
+                return True
+        return False
 
 class Equipo(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -166,5 +223,97 @@ class Alineacion(models.Model):
     
     @property
     def total_titulares(self):
-        return len([j for j in [self.portero_titular, self.defensa1_titular, self.defensa2_titular, 
+        return len([j for j in [self.portero_titular, self.defensa1_titular, self.defensa2_titular,
                                self.delantero1_titular, self.delantero2_titular] if j is not None])
+
+class Oferta(models.Model):
+    """Oferta de compra por un jugador que pertenece a otro usuario"""
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aceptada', 'Aceptada'),
+        ('rechazada', 'Rechazada'),
+        ('retirada', 'Retirada'),
+        ('expirada', 'Expirada'),
+    ]
+
+    jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='ofertas')
+    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas')
+    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas')
+    monto = models.IntegerField()
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    fecha_oferta = models.DateTimeField(auto_now_add=True)
+    fecha_respuesta = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-fecha_oferta']
+
+    def __str__(self):
+        return f"{self.equipo_ofertante.nombre} -> {self.jugador.nombre} (€{self.monto})"
+
+    def aceptar(self):
+        """Aceptar la oferta: transferir jugador y dinero"""
+        if self.estado == 'pendiente':
+            from django.utils import timezone
+
+            # Validar que el ofertante tenga presupuesto
+            if self.equipo_ofertante.presupuesto < self.monto:
+                raise ValueError("El equipo ofertante no tiene presupuesto suficiente")
+
+            self.estado = 'aceptada'
+            self.fecha_respuesta = timezone.now()
+            self.save()
+
+            # Transferir jugador
+            self.jugador.equipo = self.equipo_ofertante
+            self.jugador.en_venta = False
+            self.jugador.save()
+
+            # Transferir dinero
+            self.equipo_ofertante.presupuesto -= self.monto
+            self.equipo_ofertante.save()
+
+            self.equipo_receptor.presupuesto += self.monto
+            self.equipo_receptor.save()
+
+            # Cancelar otras ofertas pendientes por este jugador
+            Oferta.objects.filter(
+                jugador=self.jugador,
+                estado='pendiente'
+            ).exclude(id=self.id).update(estado='expirada')
+
+            return True
+        return False
+
+    def rechazar(self):
+        """Rechazar la oferta"""
+        if self.estado == 'pendiente':
+            from django.utils import timezone
+            self.estado = 'rechazada'
+            self.fecha_respuesta = timezone.now()
+            self.save()
+            return True
+        return False
+
+    def retirar(self):
+        """Retirar la oferta (solo el ofertante puede hacerlo)"""
+        if self.estado == 'pendiente':
+            from django.utils import timezone
+            self.estado = 'retirada'
+            self.fecha_respuesta = timezone.now()
+            self.save()
+            return True
+        return False
+
+class Puja(models.Model):
+    """Puja en subasta por un jugador libre (sin equipo)"""
+    jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='pujas')
+    equipo = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='pujas')
+    monto = models.IntegerField()
+    fecha_puja = models.DateTimeField(auto_now_add=True)
+    es_ganadora = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-monto', 'fecha_puja']
+
+    def __str__(self):
+        return f"{self.equipo.nombre} puja €{self.monto} por {self.jugador.nombre}"

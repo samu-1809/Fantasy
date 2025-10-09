@@ -38,10 +38,20 @@ python manage.py flush  # Reset database (caution!)
 ```bash
 cd frontend
 npm install
-npm run dev        # Development server
+npm run dev        # Development server (Vite on http://localhost:5173)
 npm run build      # Production build
 npm run preview    # Preview production build
 npm run lint       # Run ESLint
+```
+
+### Testing
+```bash
+cd backend
+pytest                          # Run all tests
+pytest -v                       # Verbose output
+pytest fantasy/tests/test_models.py  # Run specific test file
+pytest -k "test_name"          # Run tests matching pattern
+pytest --cov                    # Run with coverage report
 ```
 
 ### Database (PostgreSQL via Docker)
@@ -62,33 +72,45 @@ docker-compose down -v    # Stop and remove volumes (resets DB)
 
 **Jugador (Player)** → Can belong to one Equipo per Liga
 - Positions: POR (Portero/Goalkeeper), DEF (Defensa/Defender), DEL (Delantero/Forward)
-- Note: Views.py adds MED (Centrocampista/Midfielder) during player assignment but model only has 3 positions
+- Note: Model only has 3 positions, but readme describes 4 position system with MED
 - valor (market value) updates based on performance: +€100k per point scored
 - puntos_totales accumulates across all Jornadas
+- en_banquillo (boolean) tracks if player is on bench vs field
+- fecha_mercado tracks when player was put on market (24h auction window)
 
 **Equipo (Team)** → Owned by User, participates in Liga
-- ManyToMany relationship with Jugadores
-- Presupuesto tracks available budget (decreases on buys, increases on sales)
+- ForeignKey relationship: Jugadores have FK to Equipo (not ManyToMany)
+- Presupuesto tracks available budget (default: 150M, decreases on buys, increases on sales)
+- Related Alineacion model tracks titulares (5 field players) vs banquillo (bench)
 
 **Jornada (Matchday)** → Represents a game week
 - Admin creates these to track real futsal matches
+- Related Partido model stores actual futsal match results (equipo_local vs equipo_visitante)
 - Used as foreign key in Puntuacion to record player scores
 
 **Puntuacion (Score)** → Links Jugador performance to specific Jornada
 - Unique constraint on (jugador, jornada) prevents duplicate scoring
 - When updating existing score, views.py calculates delta to avoid double-counting
 
+**Alineacion (Lineup)** → OneToOne with Equipo, defines field positions
+- 5 titulares: portero_titular, defensa1/2_titular, delantero1/2_titular
+- banquillo: ManyToMany field for bench players (max 6)
+- Model validation ensures position correctness (e.g., portero must be POR)
+
 ### Critical Business Logic
 
-**Player Assignment on Registration (views.py:23-74)**
-- Auto-assigns 7 random players: 1 POR, 2 DEF, 2 MED, 2 DEL
+**Player Assignment on Registration (auth_views.py RegisterView)**
+- Auto-assigns 7 random players: 1 POR, 3 DEF, 3 DEL (matching README)
+- Budget-aware assignment: only assigns players that fit in 100M allocation
+- Returns error if insufficient players available in any position
 - Deducts player values from team budget
-- Ensures no player is assigned to multiple teams in same league
+- Ensures no player is assigned to multiple teams (equipo FK prevents this)
 
-**Squad Validation (views.py:213-229)**
+**Squad Validation (views.py EquipoViewSet.vender_jugador)**
 - Prevents selling last goalkeeper (min 1 POR required)
-- Prevents selling if only 2 DEF/MED/DEL remain
+- Prevents selling if reducing below minimum for any position
 - Returns specific error messages per position
+- Updates player's equipo FK to None and adds to market
 
 **Point Assignment Delta Calculation (views.py:355-380)**
 - Critical: Checks if Puntuacion exists before update_or_create
@@ -116,14 +138,15 @@ docker-compose down -v    # Stop and remove volumes (resets DB)
 ### API Endpoint Patterns
 
 **ViewSet actions:**
-- Standard CRUD via router: /api/ligas/, /api/jugadores/, /api/equipos/, /api/jornadas/, /api/puntuaciones/
+- Standard CRUD via router: /api/ligas/, /api/jugadores/, /api/equipos/, /api/jornadas/, /api/puntuaciones/, /api/partidos/, /api/alineaciones/
 - Custom actions use @action decorator:
-  - POST /api/equipos/{id}/fichar_jugador/ → Buy player
-  - POST /api/equipos/{id}/vender_jugador/ → Sell player
+  - POST /api/equipos/{id}/fichar_jugador/ → Buy player (requires jugador_id, optional en_banquillo)
+  - POST /api/equipos/{id}/vender_jugador/ → Sell player (requires jugador_id)
   - POST /api/puntuaciones/asignar_puntos/ → Batch score assignment
+  - PUT/PATCH /api/alineaciones/{id}/ → Update lineup (set titulares and banquillo)
 
-**Custom ViewSets (no model):**
-- GET /api/mercado/?liga_id=X → Returns 8 random unowned players
+**Custom endpoints (no ViewSet):**
+- GET /api/mercado/?liga_id=X → Returns 8 random unowned players (equipo__isnull=True)
 - GET /api/clasificacion/?liga_id=X → Returns ranked teams with total points
 
 ### Environment Variables
@@ -138,11 +161,12 @@ Template available in backend/.env.example
 
 ## Important Implementation Details
 
-### Position Mismatch
-The model defines 3 positions (POR, DEF, DEL) but views.py assigns 4 positions including MED (Midfielder). This works because:
-- Model validation only checks against POSICIONES choices
-- DEF is used as catch-all, but business logic treats MED separately
-- **TODO:** Add MED to Jugador.POSICIONES choices for consistency
+### Position System Evolution
+- **Jugador model**: Defines 3 positions (POR, DEF, DEL)
+- **README.md**: Describes 1 POR, 3 DEF, 3 DEL assignment
+- **Current implementation (views.py)**: Assigns 1 POR, 3 DEF, 3 DEL (matches README)
+- **Alineacion model**: Uses 5 field positions (1 POR, 2 DEF, 2 DEL) for futsal formation
+- Previous versions used MED (midfielder) but has been refactored to use 3-position system
 
 ### Auction System (Not Yet Implemented)
 README.md describes a 24-hour auction system with countdown timers. Currently:
@@ -151,11 +175,12 @@ README.md describes a 24-hour auction system with countdown timers. Currently:
 - No Celery/scheduled tasks for auction closing
 - **Planned for Phase 2:** Requires Subasta model, Celery + Redis, WebSockets/polling
 
-### Squad Rules from README.md vs Implementation
-**README states:** 1 POR, 3 DEF, 3 DEL (total 7)
-**Implementation uses:** 1 POR, 2 DEF, 2 MED, 2 DEL (total 7)
-- Implementation is correct for futsal (5-a-side sport)
-- README appears to have outdated position counts
+### Squad Composition
+**Initial assignment (registration):** 1 POR, 3 DEF, 3 DEL (total 7 players)
+**Field positions (Alineacion):** 1 POR, 2 DEF, 2 DEL (total 5 titulares)
+**Bench:** Remaining 2 players + any additional signings (max total 11 players)
+- Futsal uses 5-a-side formations, hence 5 field positions
+- Initial 7-player assignment ensures squad has minimum viable roster
 
 ### Frontend State Management
 Currently uses Context API for auth only. No global state management library (Redux/Zustand).
@@ -168,12 +193,20 @@ Currently uses Context API for auth only. No global state management library (Re
 ```
 backend/
   fantasy/
-    models.py         → 5 core models: Liga, Jugador, Equipo, Jornada, Puntuacion
-    views.py          → ViewSets + auth endpoints + business logic
+    models.py         → 7 models: Liga, Jugador, Equipo, Jornada, Puntuacion, Partido, Alineacion, EquipoReal
+    views.py          → ViewSets for main entities + custom endpoints (mercado, clasificacion)
+    auth_views.py     → RegisterView, LoginView (JWT authentication)
     serializers.py    → DRF serializers for API responses
-    urls.py           → API routing via DefaultRouter
+    urls.py           → API routing via DefaultRouter + auth endpoints
+    admin.py          → Django admin configuration
+    tests/
+      conftest.py     → Pytest fixtures
+      factories.py    → Factory-boy factories for test data
+      test_models.py  → Model tests
+      test_views.py   → API endpoint tests
     management/commands/
       poblar_datos.py → Test data generation script
+      poblardb.py     → Alternative data population script
 
 frontend/
   src/
@@ -210,35 +243,48 @@ python manage.py shell
 
 ## Common Gotchas
 
-1. **Always activate venv before working on backend:** `source venv/bin/activate`
+1. **Always activate venv before working on backend:** `source venv/bin/activate` (Linux/Mac) or `venv\Scripts\activate` (Windows)
 2. **CORS errors:** Backend must run on 127.0.0.1 (not localhost) for CORS config to match
 3. **Token expiry:** Access tokens expire in 5 hours (SIMPLE_JWT config in settings.py)
 4. **PostgreSQL not running:** Check with `docker ps`, start with `docker-compose up -d`
-5. **Migration conflicts:** If models change, always run makemigrations before migrate
-6. **Player value overflow:** Decimal fields are max_digits=10, monitor for very high scores
-7. **Unique constraint violations:** (usuario, liga) and (jugador, jornada) have unique_together constraints
+5. **Migration conflicts:** If models change, always run `makemigrations` before `migrate`
+6. **Player value is IntegerField:** Values stored as integers (e.g., 5000000 = €5M), not Decimal
+7. **Unique constraint violations:**
+   - Equipo: (usuario, liga) ensures one team per user per league
+   - Puntuacion: (jugador, jornada) prevents duplicate scoring
+   - Liga: codigo must be unique
+8. **Player assignment on register:** Requires sufficient unowned players in database, run `poblar_datos` first
+9. **Alineacion validation:** Model clean() method enforces position constraints on titulares
 
 ## Roadmap & Pending Features
 
 **Completed (Phase 1):**
 - PostgreSQL setup with Docker
-- JWT authentication in frontend
-- Auto-assignment of 7 players on registration
-- Squad validation rules
+- JWT authentication (backend + frontend AuthContext)
+- Auto-assignment of 7 players on registration (1 POR, 3 DEF, 3 DEL)
+- Squad validation rules (minimum position requirements)
 - Point assignment delta fix
+- Alineacion model for lineup management (5 field positions + bench)
+- Partido model for tracking real futsal matches
+- Test suite with pytest + factory-boy
+- Budget-aware player assignment
 
 **Pending (Phase 2 - Auction System):**
 - Subasta model with fecha_fin (end date)
 - Celery + Redis for scheduled auction closing
 - WebSockets or polling for real-time bid updates
 - Notification system for auction results
+- Bidding UI in frontend
 
-**Pending (Phase 3+):**
-- Lineup selection (titulares vs banquillo)
-- Only titulares score points
+**Pending (Phase 3 - Scoring System):**
+- Only titulares score points (currently all players in equipo score)
+- Automatic lineup rollover if user doesn't set lineup
+- Weekly deadline for lineup changes
+
+**Pending (Phase 4 - Trading):**
 - Transfer offers between users
 - Automatic "system" bids for unsold players
-- User inactivity handling (auto-lineup from previous week)
+- User inactivity handling
 
 ## Related Documentation
 

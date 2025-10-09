@@ -16,8 +16,13 @@ import {
   loginUser,
   registerUser,
   logoutUser,
-  asignarPuntos  
+  asignarPuntos,
+  getOfertasRecibidas,
+  getMiEquipo,
+  getEquipoByUsuario
 } from '../services/api';
+import MarketScreen from './mercado/MarketScreen';
+import OfertasScreen from './ofertas/OfertasScreen';
 
 const FantasyFutsalWireframes = () => {
   const API_URL = 'http://127.0.0.1:8000/api';
@@ -34,19 +39,50 @@ const FantasyFutsalWireframes = () => {
   const [mercado, setMercado] = useState([]);
   const [clasificacion, setClasificacion] = useState([]);
   const [jugadores, setJugadores] = useState([]);
+  const [ofertasRecibidas, setOfertasRecibidas] = useState([]);
 
   const screens = {
     login: 'Login/Registro',
     dashboard: 'Dashboard',
     market: 'Mercado',
     rankings: 'Clasificación',
-    admin: 'Panel Admin'
+    admin: 'Panel Admin',
+    offersReceived: 'Ofertas'
   };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setCurrentScreen('login');
+  };
+
+  // Cargar ofertas recibidas pendientes
+  const cargarOfertasPendientes = async () => {
+    if (!equipoActual?.id) return;
+    try {
+      const ofertas = await getOfertasRecibidas(equipoActual.id);
+      const pendientes = ofertas.filter(o => o.estado === 'pendiente');
+      setOfertasRecibidas(pendientes);
+    } catch (error) {
+      console.error('Error cargando ofertas:', error);
+    }
+  };
+
+  // Auto-refresh ofertas cada 30 segundos
+  useEffect(() => {
+    if (equipoActual?.id) {
+      cargarOfertasPendientes();
+      const interval = setInterval(cargarOfertasPendientes, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [equipoActual]);
+
+  // Función para actualizar equipo y ofertas
+  const handleUpdateEquipo = async () => {
+    if (!datosUsuario) return;
+    const datos = await cargarDatosIniciales(datosUsuario);
+    setEquipoActual(datos.equipo);
+    await cargarOfertasPendientes();
   };
 
 const cargarDatosIniciales = async (usuario) => {
@@ -233,8 +269,19 @@ const cargarDatosIniciales = async (usuario) => {
         <button onClick={() => setCurrentScreen('calendar')} className="hover:text-gray-300 flex items-center gap-1">
           📅 Calendario
         </button>
+        <button
+          onClick={() => setCurrentScreen('offersReceived')}
+          className="hover:text-gray-300 flex items-center gap-1 relative"
+        >
+          💸 Ofertas
+          {ofertasRecibidas.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+              {ofertasRecibidas.length}
+            </span>
+          )}
+        </button>
         <div className="w-px h-6 bg-gray-600"></div>
-        <button 
+        <button
           onClick={cargarDatosIniciales}
           className="hover:text-gray-300 flex items-center gap-1"
           title="Recargar datos"
@@ -1294,176 +1341,6 @@ const DashboardScreen = () => {
   );
 };
 
-  const MarketScreen = () => {
-    const [filtro, setFiltro] = useState('');
-    const [posicionFiltro, setPosicionFiltro] = useState('');
-    const [mercado, setMercado] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-
-    // Calcular fecha de expiración formateada
-    const calcularExpiracion = (fechaMercado) => {
-        if (!fechaMercado) return 'Fecha no disponible';
-        
-        const fechaMercadoObj = new Date(fechaMercado);
-        const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000)); // +24 horas
-        
-        // Formatear como "15 Oct a las 14:30"
-        const opciones = { 
-            day: 'numeric', 
-            month: 'short',
-            hour: '2-digit', 
-            minute: '2-digit' 
-        };
-        return expiracion.toLocaleDateString('es-ES', opciones);
-    };
-
-    // Verificar si un jugador ha expirado
-    const estaExpirado = (fechaMercado) => {
-        if (!fechaMercado) return false;
-        
-        const fechaMercadoObj = new Date(fechaMercado);
-        const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
-        const ahora = new Date();
-        
-        return ahora >= expiracion;
-    };
-
-    // Cargar mercado solo al montar el componente
-    useEffect(() => {
-        cargarMercado();
-    }, []);
-
-    const cargarMercado = async () => {
-        setLoading(true);
-        setError('');
-        try {
-            if (!equipoActual || !equipoActual.liga) {
-                setError('No se pudo cargar la información del equipo');
-                return;
-            }
-            
-            const response = await fetch(`${API_URL}/mercado/?liga_id=${equipoActual.liga}`);
-            
-            if (response.ok) {
-                const data = await response.json();
-                setMercado(data);
-            } else {
-                throw new Error('Error cargando mercado');
-            }
-        } catch (error) {
-            setError('Error cargando el mercado de jugadores');
-            setMercado([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
-
-    const handleFichar = async (jugadorId) => {
-        try {
-            const jugador = mercado.find(j => j.id === jugadorId);
-            
-            if (!jugador) {
-                alert('Jugador no encontrado');
-                return;
-            }
-            
-            // Verificar si el jugador ya expiró
-            if (estaExpirado(jugador.fecha_mercado)) {
-                alert('Este jugador ya no está disponible en el mercado');
-                return;
-            }
-            
-            // SIEMPRE va al banquillo
-            const vaAlBanquillo = true;
-            
-            // Llamar a la API de fichaje
-            await ficharJugador(equipoActual.id, jugadorId, vaAlBanquillo);
-            await cargarDatosIniciales();
-            
-            // Recargar el mercado después de fichar
-            await cargarMercado();
-            
-            alert(`✅ ${jugador.nombre} fichado para el banquillo`);
-            
-        } catch (err) {
-            alert('❌ Error al fichar: ' + err.message);
-        }
-    };
-
-    const mercadoFiltrado = mercado.filter(j => {
-        const matchNombre = j.nombre.toLowerCase().includes(filtro.toLowerCase());
-        const matchPosicion = posicionFiltro === '' || j.posicion === posicionFiltro;
-        return matchNombre && matchPosicion;
-    });
-
-    return (
-        <div className="min-h-screen bg-gray-100">
-            <NavBar role={isAdmin ? 'admin' : 'user'} />
-            <div className="p-6">
-                <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
-                    <h3 className="text-xl font-bold mb-4">Mercado de Fichajes ({mercadoFiltrado.length})</h3>
-
-                    {loading ? (
-                        <p className="text-center text-gray-500 py-8">Cargando jugadores disponibles...</p>
-                    ) : mercadoFiltrado.length === 0 ? (
-                        <p className="text-center text-gray-500 py-8">
-                            No hay jugadores disponibles en el mercado
-                        </p>
-                    ) : (
-                        <div className="space-y-3">
-                            {mercadoFiltrado.map((player) => {
-                                const expirado = player.expirado;
-                                const esVentaUsuario = player.tipo === 'venta_usuario';
-                                
-                                return (
-                                    <div key={player.id} className="flex items-center justify-between p-4 bg-gray-50 rounded border-2 border-gray-300 hover:bg-gray-100">
-                                        <div className="flex-1">
-                                            <div className="font-medium">{player.nombre}</div>
-                                            <div className="text-sm text-gray-600">
-                                                {player.posicion_display} • {player.equipo_real_nombre} • {formatValue(player.valor)} • {player.puntos_totales} pts
-                                            </div>
-                                            {/* 🆕 INFORMACIÓN DE PROCEDENCIA */}
-                                            <div className={`text-xs mt-1 ${
-                                                esVentaUsuario 
-                                                    ? 'text-purple-600 font-medium' 
-                                                    : expirado 
-                                                        ? 'text-red-600 font-bold' 
-                                                        : 'text-green-600'
-                                            }`}>
-                                                {esVentaUsuario ? (
-                                                    <>🏷️ <span className="font-medium">{player.procedencia}</span></>
-                                                ) : expirado ? (
-                                                    <>❌ <span className="font-medium">Expirado - Ya no disponible</span></>
-                                                ) : (
-                                                    <>🆓 <span className="font-medium">{player.procedencia} • Hasta: {player.fecha_expiracion}</span></>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleFichar(player.id)}
-                                            disabled={expirado}
-                                            className={`px-4 py-2 rounded flex items-center gap-2 transition-all ${
-                                                expirado
-                                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                                    : 'bg-green-600 text-white hover:bg-green-700 hover:scale-105'
-                                            }`}
-                                        >
-                                            <Plus size={16} />
-                                            {expirado ? 'Expirado' : 'Fichar'}
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-  };
 
 const AdminScreen = ({ jugadores, ligaActual, setCurrentScreen, asignarPuntos, cargarDatosIniciales }) => {
       const [puntuaciones, setPuntuaciones] = useState({});
@@ -2506,11 +2383,31 @@ const renderScreen = () => {
       case 'login': return <LoginScreen />;
       case 'dashboard': return <DashboardScreen />;
       case 'register': return <RegisterScreen />;
-      case 'market': return <MarketScreen />;
+      case 'market':
+        return (
+          <>
+            <NavBar role={isAdmin ? 'admin' : 'user'} />
+            <MarketScreen
+              equipoActual={equipoActual}
+              ligaActual={ligaActual}
+              onUpdateEquipo={handleUpdateEquipo}
+            />
+          </>
+        );
+      case 'offersReceived':
+        return (
+          <>
+            <NavBar role={isAdmin ? 'admin' : 'user'} />
+            <OfertasScreen
+              equipoId={equipoActual?.id}
+              onUpdateEquipo={handleUpdateEquipo}
+            />
+          </>
+        );
       case 'calendar': return <CalendarScreen />;
       case 'rankings': return <RankingsScreen />;
       case 'admin': return (
-        <AdminScreen 
+        <AdminScreen
           jugadores={jugadores}
           ligaActual={ligaActual}
           setCurrentScreen={setCurrentScreen}

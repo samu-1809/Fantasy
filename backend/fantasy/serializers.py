@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion, Oferta, Puja
 
 class FicharJugadorSerializer(serializers.Serializer):
     jugador_id = serializers.IntegerField()
@@ -133,3 +133,62 @@ class FicharJugadorSerializer(serializers.Serializer):
 
 class VenderJugadorSerializer(serializers.Serializer):
     jugador_id = serializers.IntegerField()
+
+class OfertaSerializer(serializers.ModelSerializer):
+    """Serializer para ofertas de compra"""
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+    jugador_posicion = serializers.CharField(source='jugador.posicion', read_only=True)
+    jugador_valor = serializers.IntegerField(source='jugador.valor', read_only=True)
+    equipo_ofertante_nombre = serializers.CharField(source='equipo_ofertante.nombre', read_only=True)
+    equipo_receptor_nombre = serializers.CharField(source='equipo_receptor.nombre', read_only=True)
+
+    class Meta:
+        model = Oferta
+        fields = [
+            'id', 'jugador', 'jugador_nombre', 'jugador_posicion', 'jugador_valor',
+            'equipo_ofertante', 'equipo_ofertante_nombre',
+            'equipo_receptor', 'equipo_receptor_nombre',
+            'monto', 'estado', 'fecha_oferta', 'fecha_respuesta'
+        ]
+        read_only_fields = ['fecha_oferta', 'fecha_respuesta', 'estado']
+
+class PujaSerializer(serializers.ModelSerializer):
+    """Serializer para pujas en subastas"""
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+
+    class Meta:
+        model = Puja
+        fields = ['id', 'jugador', 'jugador_nombre', 'equipo', 'equipo_nombre', 'monto', 'fecha_puja', 'es_ganadora']
+        read_only_fields = ['fecha_puja', 'es_ganadora']
+
+class JugadorMercadoSerializer(serializers.ModelSerializer):
+    """Serializer extendido para jugadores en el mercado"""
+    equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
+    equipo_dueno_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    expirado = serializers.SerializerMethodField()
+    tiempo_restante = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Jugador
+        fields = [
+            'id', 'nombre', 'posicion', 'equipo_real', 'equipo_real_nombre',
+            'valor', 'puntos_totales', 'en_mercado', 'en_venta',
+            'fecha_mercado', 'precio_venta', 'puja_actual',
+            'equipo', 'equipo_dueno_nombre', 'expirado', 'tiempo_restante'
+        ]
+
+    def get_expirado(self, obj):
+        return obj.expirado if hasattr(obj, 'expirado') else False
+
+    def get_tiempo_restante(self, obj):
+        """Calcula el tiempo restante en horas"""
+        if obj.fecha_mercado:
+            from django.utils import timezone
+            from datetime import timedelta
+            expiracion = obj.fecha_mercado + timedelta(hours=24)
+            ahora = timezone.now()
+            if ahora < expiracion:
+                diff = expiracion - ahora
+                return int(diff.total_seconds() / 3600)  # Retorna horas
+        return 0
