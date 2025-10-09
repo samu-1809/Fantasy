@@ -18,6 +18,8 @@ router.register(r'jornadas', views.JornadaViewSet)
 router.register(r'puntuaciones', views.PuntuacionViewSet)
 router.register(r'equipos-reales', views.EquipoRealViewSet)
 router.register(r'partidos', views.PartidoViewSet)
+router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
+router.register(r'pujas', views.PujaViewSet, basename='pujas')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -27,6 +29,14 @@ urlpatterns = [
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
-    
+
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
+
+    # URLs del sistema de subastas y ofertas
+    path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
+    path('equipos/<int:equipo_id>/ofertas_recibidas/', views.ofertas_recibidas, name='ofertas_recibidas'),
+    path('equipos/<int:equipo_id>/ofertas_realizadas/', views.ofertas_realizadas, name='ofertas_realizadas'),
+    path('ofertas/<int:oferta_id>/aceptar/', views.aceptar_oferta, name='aceptar_oferta'),
+    path('ofertas/<int:oferta_id>/rechazar/', views.rechazar_oferta, name='rechazar_oferta'),
+    path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
 ]
