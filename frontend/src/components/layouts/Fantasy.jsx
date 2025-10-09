@@ -213,10 +213,13 @@ const Fantasy = () => {
     if (appLoading) {
       return <LoadingScreen />;
     }
-
-        switch (currentScreen) {
-          case 'dashboard':
-            return <DashboardScreen datosUsuario={datosUsuario} />;
+    
+      switch (currentScreen) {
+        case 'dashboard':
+          return <DashboardScreen 
+            datosUsuario={datosUsuario} 
+            onRefresh={handleRefreshData}
+          />;
           
           case 'market':
             return (

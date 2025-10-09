@@ -110,12 +110,20 @@ export const getMiEquipo = async () => {
   return handleResponse(response);
 };
 
-export const cargarDatosIniciales = async (usuario) => {
+export const cargarDatosIniciales = async (usuario, forzarRecarga = false) => {
   if (!usuario) {
     throw new Error("Usuario no definido");
   }
   
   console.log("👨‍💼 Usuario", usuario.username, "Admin:", usuario.is_superuser || usuario.is_staff);
+  
+  // Si forzamos recarga, limpiar cualquier cache
+  if (forzarRecarga) {
+    console.log("🔄 Forzando recarga completa de datos...");
+    // Limpiar cache local si existe
+    const cacheKeys = ['datosUsuarioCache', 'equipoCache', 'jugadoresCache'];
+    cacheKeys.forEach(key => localStorage.removeItem(key));
+  }
   
   try {
     const isAdmin = usuario.is_superuser || usuario.is_staff;
@@ -141,13 +149,16 @@ export const cargarDatosIniciales = async (usuario) => {
       
       try {
         console.log("🔄 Llamando a /datos-iniciales/...");
-        const response = await fetch(`${API_URL}/datos-iniciales/`, {
+        
+        // Añadir timestamp para evitar cache del navegador
+        const timestamp = forzarRecarga ? `?t=${Date.now()}` : '';
+        const response = await fetch(`${API_URL}/datos-iniciales/${timestamp}`, {
           headers: getAuthHeaders(),
           credentials: 'include',
         });
         
         if (!response.ok) {
-          throw new Error('Error en la petición datos-iniciales');
+          throw new Error(`Error ${response.status} en la petición datos-iniciales`);
         }
         
         const datos = await response.json();
@@ -170,8 +181,8 @@ export const cargarDatosIniciales = async (usuario) => {
           usuario,
           ligaActual: {
             id: datos.liga_id || equipoConLiga.liga_id || 1,
-            nombre: "Liga Principal",
-            jornada_actual: 1
+            nombre: datos.liga_nombre || "Liga Principal",
+            jornada_actual: datos.jornada_actual || 1
           },
           jugadores: datos.jugadores || [],
           equipo: equipoConLiga, // 🆕 Usar equipo con liga_id asegurado
@@ -182,11 +193,19 @@ export const cargarDatosIniciales = async (usuario) => {
         
       } catch (error) {
         console.error("❌ Error con endpoint datos-iniciales:", error);
+        // Si hay error y forzamos recarga, relanzar el error
+        if (forzarRecarga) {
+          throw error;
+        }
         return await cargarDatosManual(usuario);
       }
     }
   } catch (error) {
     console.error("❌ Error cargando datos iniciales:", error);
+    // Si forzamos recarga y hay error, relanzarlo
+    if (forzarRecarga) {
+      throw error;
+    }
     return {
       usuario,
       ligaActual: { id: 1, nombre: "Liga Principal", jornada_actual: 1 },
@@ -198,6 +217,7 @@ export const cargarDatosIniciales = async (usuario) => {
     };
   }
 };
+
 
 // 🆕 FUNCIÓN DE FALLBACK PARA CARGA MANUAL - MEJORADA
 const cargarDatosManual = async (usuario) => {
@@ -397,6 +417,23 @@ export const crearEquipo = async (equipoData) => {
 };
 
 // ==================== OPERACIONES DE EQUIPO ====================
+// Agrega esta función al final de services/api.js
+export const guardarAlineacion = async (equipoId, jugadoresData) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/guardar_alineacion/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify({ jugadores: jugadoresData })
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al guardar alineación');
+  }
+
+  return response.json();
+};
 
 export const intercambiarJugadores = async (equipoId, jugadorOrigenId, jugadorDestinoId) => {
   console.log(`🔍 Llamando API intercambiarJugadores:`);
@@ -460,13 +497,15 @@ export const actualizarEstadosBanquillo = async (equipoId, estados) => {
   }
 };
 
-export const venderJugador = async (equipoId, jugadorId, precio) => {
-  const response = await fetch(`${API_URL}/equipos/${equipoId}/vender_jugador/`, {
+export const ponerEnVenta = async (equipoId, jugadorId, precio) => {
+  console.log(`🔄 Poniendo en venta: equipo=${equipoId}, jugador=${jugadorId}, precio=${precio}`);
+  
+  // ✅ URL CORREGIDA - usar el endpoint correcto del backend
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/poner_en_venta/`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify({ 
-      jugador_id: jugadorId, 
-      precio_venta: precio 
+      precio_venta: precio  // ✅ Ahora el body solo necesita el precio_venta
     }),
   });
 
@@ -717,20 +756,22 @@ export const ponerJugadorEnVenta = async (equipoId, jugadorId, precioVenta = nul
 
   return await response.json();
 };
-
 export const quitarJugadorDelMercado = async (equipoId, jugadorId) => {
+  console.log(`🔄 Retirando del mercado: equipo=${equipoId}, jugador=${jugadorId}`);
+  
+  // ✅ URL CORREGIDA
   const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/quitar-del-mercado/`, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
-    throw new Error('Error al quitar jugador del mercado');
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al retirar jugador del mercado');
   }
 
   return await response.json();
 };
-
 
 export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
   console.log(`🎯 Realizando puja:`, {
@@ -773,7 +814,6 @@ export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
   }
 };
 
-// Obtener pujas realizadas por un equipo
 export const getPujasRealizadas = async (equipoId) => {
   const response = await fetch(`${API_URL}/equipos/${equipoId}/pujas_realizadas/`, {
     headers: getAuthHeaders(),
@@ -786,7 +826,6 @@ export const getPujasRealizadas = async (equipoId) => {
   return await response.json();
 };
 
-// Retirar una puja
 export const retirarPuja = async (pujaId) => {
   const response = await fetch(`${API_URL}/pujas/${pujaId}/retirar/`, {
     method: 'POST',

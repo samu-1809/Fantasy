@@ -18,7 +18,6 @@ router.register(r'jornadas', views.JornadaViewSet)
 router.register(r'partidos', views.PartidoViewSet)
 router.register(r'equipos-reales', views.EquipoRealViewSet)
 router.register(r'puntuaciones', views.PuntuacionViewSet)
-router.register(r'alineaciones', views.AlineacionViewSet)
 router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
 router.register(r'pujas', views.PujaViewSet, basename='pujas')
 
@@ -42,9 +41,9 @@ urlpatterns = [
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
 
-
+    path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
     path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
-    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/poner-en-venta/', views.poner_en_venta, name='poner_en_venta'),
+    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/poner_en_venta/', views.poner_en_venta, name='poner_en_venta'),
     path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
     path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/quitar-del-mercado/', views.quitar_del_mercado, name='quitar_del_mercado'),
     path('equipos/<int:equipo_id>/intercambiar_jugadores/', views.intercambiar_jugadores, name='intercambiar_jugadores'),

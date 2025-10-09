@@ -24,7 +24,7 @@ const PlayerCard = ({
     const etiquetas = {
       'POR': 'POR',
       'DEF': 'DEF', 
-      'DEL': 'ATA'  // 🎯 DEL se muestra como ATA
+      'DEL': 'ATA' 
     };
     return etiquetas[posicion] || posicion;
   };

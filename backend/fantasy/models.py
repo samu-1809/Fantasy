@@ -200,56 +200,6 @@ class Partido(models.Model):
             return "Pendiente"
         return f"{self.goles_local} - {self.goles_visitante}"
 
-class Alineacion(models.Model):
-    equipo = models.OneToOneField(Equipo, on_delete=models.CASCADE, related_name='alineacion')
-    
-    # Titulares (posición específica en el campo)
-    portero_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='portero_titular', null=True, blank=True)
-    defensa1_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='defensa1_titular', null=True, blank=True)
-    defensa2_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='defensa2_titular', null=True, blank=True)
-    delantero1_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='delantero1_titular', null=True, blank=True)
-    delantero2_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='delantero2_titular', null=True, blank=True)
-    
-    # Banquillo (máximo 6 jugadores)
-    banquillo = models.ManyToManyField(Jugador, related_name='banquillo', blank=True)
-    
-    def __str__(self):
-        return f"Alineación de {self.equipo.nombre}"
-    
-    def clean(self):
-        """Validar que los titulares estén en la posición correcta"""
-        if self.portero_titular and self.portero_titular.posicion != 'POR':
-            raise ValidationError('El portero titular debe ser un PORTERO')
-        if self.defensa1_titular and self.defensa1_titular.posicion != 'DEF':
-            raise ValidationError('Los defensas titulares deben ser DEFENSAS')
-        if self.defensa2_titular and self.defensa2_titular.posicion != 'DEF':
-            raise ValidationError('Los defensas titulares deben ser DEFENSAS')
-        if self.delantero1_titular and self.delantero1_titular.posicion != 'DEL':
-            raise ValidationError('Los delanteros titulares deben ser DELANTEROS')
-        if self.delantero2_titular and self.delantero2_titular.posicion != 'DEL':
-            raise ValidationError('Los delanteros titulares deben ser DELANTEROS')
-    
-    @property
-    def titulares(self):
-        """Devuelve todos los titulares"""
-        titulares = []
-        if self.portero_titular:
-            titulares.append(self.portero_titular)
-        if self.defensa1_titular:
-            titulares.append(self.defensa1_titular)
-        if self.defensa2_titular:
-            titulares.append(self.defensa2_titular)
-        if self.delantero1_titular:
-            titulares.append(self.delantero1_titular)
-        if self.delantero2_titular:
-            titulares.append(self.delantero2_titular)
-        return titulares
-    
-    @property
-    def total_titulares(self):
-        return len([j for j in [self.portero_titular, self.defensa1_titular, self.defensa2_titular, 
-                               self.delantero1_titular, self.delantero2_titular] if j is not None])
-
 class Oferta(models.Model):
     ESTADO_CHOICES = [
         ('pendiente', 'Pendiente'),

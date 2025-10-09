@@ -3,9 +3,24 @@ import { Search, RefreshCw, DollarSign, Users, Clock } from 'lucide-react';
 import { useMarket } from '../../hooks/useMarket';
 import { useAuth } from '../../context/AuthContext';
 
+// Hook personalizado para manejar refresh
+const useRefresh = () => {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  return {
+    refreshKey,
+    refresh
+  };
+};
+
 const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const { user } = useAuth();
   const equipoId = datosUsuario?.equipo?.id;
+  const { refreshKey, refresh } = useRefresh();
   
   const [pestañaActiva, setPestañaActiva] = useState('mercado');
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
@@ -13,6 +28,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const [montoPuja, setMontoPuja] = useState('');
   const [montoPujaFormateado, setMontoPujaFormateado] = useState('');
   const [loadingPuja, setLoadingPuja] = useState(false);
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
 
   const { 
     mercado, 
@@ -37,15 +53,8 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   // Función para formatear números con separadores de miles
   const formatNumber = (number) => {
     if (!number && number !== 0) return '';
-    
     const num = parseInt(number) || 0;
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  };
-
-  // Función para quitar formato y obtener el número puro
-  const unformatNumber = (formattedNumber) => {
-    if (!formattedNumber) return '';
-    return formattedNumber.toString().replace(/\./g, '');
   };
 
   // Efecto para sincronizar montoPuja y montoPujaFormateado
@@ -55,15 +64,46 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   }, [montoPuja]);
 
-  // Cargar ofertas y pujas cuando cambia la pestaña
+  // Efecto principal para recargar datos cuando cambia refreshKey
   useEffect(() => {
-    if (pestañaActiva === 'ofertas-recibidas' && equipoId) {
+    console.log('🔄 Refresh key cambiada, recargando datos...');
+    
+    if (pestañaActiva === 'mercado') {
+      cargarMercado();
+    } else if (pestañaActiva === 'ofertas-recibidas' && equipoId) {
       cargarOfertasRecibidas(equipoId);
     } else if (pestañaActiva === 'ofertas-realizadas' && equipoId) {
       cargarOfertasRealizadas(equipoId);
       cargarPujasRealizadas(equipoId);
     }
-  }, [pestañaActiva, equipoId, cargarOfertasRecibidas, cargarOfertasRealizadas, cargarPujasRealizadas]);
+
+    // Actualizar timestamp de última actualización
+    setUltimaActualizacion(new Date().toLocaleTimeString());
+  }, [refreshKey, pestañaActiva, equipoId, cargarMercado, cargarOfertasRecibidas, cargarOfertasRealizadas, cargarPujasRealizadas]);
+
+  // Efecto para recargar cuando cambia la pestaña
+  useEffect(() => {
+    refresh();
+  }, [pestañaActiva]);
+
+  // Escuchar eventos personalizados para refresh
+  useEffect(() => {
+    const handleMercadoUpdate = () => {
+      console.log('📢 Evento de actualización recibido, refrescando mercado...');
+      refresh();
+    };
+
+    // Escuchar eventos personalizados
+    window.addEventListener('mercadoShouldUpdate', handleMercadoUpdate);
+    window.addEventListener('jugadorVendido', handleMercadoUpdate);
+    window.addEventListener('fichajeExitoso', handleMercadoUpdate);
+
+    return () => {
+      window.removeEventListener('mercadoShouldUpdate', handleMercadoUpdate);
+      window.removeEventListener('jugadorVendido', handleMercadoUpdate);
+      window.removeEventListener('fichajeExitoso', handleMercadoUpdate);
+    };
+  }, []);
 
   const handleRetirarPuja = async (pujaId) => {
     if (!window.confirm('¿Estás seguro de que quieres retirar esta puja? Se te devolverá el dinero.')) {
@@ -75,13 +115,12 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
       alert('✅ Puja retirada correctamente. El dinero ha sido devuelto a tu presupuesto.');
       
       // Recargar los datos
+      refresh();
       if (equipoId) {
         cargarPujasRealizadas(equipoId);
-        cargarMercado();
-        // También recargar datos del equipo para actualizar presupuesto
-        if (onFichajeExitoso) {
-          onFichajeExitoso();
-        }
+      }
+      if (onFichajeExitoso) {
+        onFichajeExitoso();
       }
     } catch (err) {
       alert('❌ Error al retirar la puja: ' + err.message);
@@ -90,7 +129,6 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
 
   const handlePujar = (jugador) => {
     setJugadorSeleccionado(jugador);
-    // Puja mínima: valor actual + 10% o valor del jugador si no hay pujas
     const pujaMinima = Math.floor((jugador.puja_actual || jugador.valor) * 1.1);
     setMontoPuja(pujaMinima.toString());
     setMostrarModalPuja(true);
@@ -98,11 +136,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
 
   const handleChangeMontoPuja = (e) => {
     const valor = e.target.value;
-    
-    // Permitir solo números y eliminar puntos existentes
     const soloNumeros = valor.replace(/[^\d]/g, '');
-    
-    // Actualizar ambos estados
     setMontoPuja(soloNumeros);
   };
 
@@ -130,7 +164,12 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
       setJugadorSeleccionado(null);
       setMontoPuja('');
       setMontoPujaFormateado('');
-      onFichajeExitoso?.();
+      
+      // Recarga después de puja exitosa
+      refresh();
+      if (onFichajeExitoso) {
+        onFichajeExitoso();
+      }
     } catch (err) {
       alert('❌ Error al realizar la puja: ' + err.message);
     } finally {
@@ -145,9 +184,12 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     setMontoPujaFormateado('');
   };
 
-  const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
+  const handleActualizar = () => {
+    console.log('🔄 Actualizando mercado...');
+    refresh();
+  };
 
-  // Función para formatear valores normales (no en millones)
+  const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
   const formatNormalValue = (value) => `€${formatNumber(value)}`;
 
   const totalJugadores = datosUsuario?.equipo?.jugadores?.length || 0;
@@ -167,7 +209,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
             }
           </p>
           <button 
-            onClick={cargarMercado}
+            onClick={handleActualizar}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Reintentar
@@ -181,7 +223,6 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
         {mercado.map((player) => {
           const expirado = estaExpirado(player.fecha_mercado);
           const esVentaUsuario = player.tipo === 'venta_usuario';
-          const esLibreRotatorio = player.tipo === 'libre_rotatorio';
           const pujaMinima = Math.floor((player.puja_actual || player.valor) * 1.1);
           const puedePujar = !expirado && totalJugadores < maxJugadores && presupuesto >= pujaMinima;
 
@@ -195,22 +236,18 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                   {player.equipo_real_nombre} • Valor: {formatValue(player.valor)} • {player.puntos_totales} pts
                 </div>
                 
-                {/* Información de subasta */}
                 <div className="text-xs mt-1 space-y-1">
                   <div className={`font-medium ${
                     esVentaUsuario ? 'text-purple-600' : 'text-green-600'
                   }`}>
                     {esVentaUsuario ? (
-                      <>🏷️ Venta por usuario</>
+                      <>🏷️ En venta por ti</>
+                    ) : player.usuario_vendedor ? (
+                      <>👤 Venta por: {player.usuario_vendedor}</>
                     ) : (
                       <>🏟️ Agente libre • Renueva en: {player.tiempo_restante_minutos || calcularExpiracion(player.fecha_mercado)}</>
                     )}
                   </div>
-                  {player.puja_actual && (
-                    <div className="text-blue-600">
-                      Puja actual: {formatNormalValue(player.puja_actual)} por {player.pujador_actual}
-                    </div>
-                  )}
                 </div>
               </div>
               
@@ -410,6 +447,11 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                 {pestañaActiva === 'ofertas-recibidas' && `Ofertas recibidas por tus jugadores (${ofertasRecibidas.length})`}
                 {pestañaActiva === 'ofertas-realizadas' && `Tus ofertas y pujas realizadas (${ofertasRealizadas.length + pujasRealizadas.length})`}
               </p>
+              {ultimaActualizacion && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Última actualización: {ultimaActualizacion}
+                </p>
+              )}
             </div>
             
             {/* Pestañas */}
@@ -481,7 +523,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                   Limpiar
                 </button>
                 <button
-                  onClick={cargarMercado}
+                  onClick={handleActualizar}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
                   disabled={loading}
                 >
@@ -496,7 +538,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {error}
               <button 
-                onClick={cargarMercado}
+                onClick={handleActualizar}
                 className="ml-4 bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
               >
                 Reintentar
@@ -553,7 +595,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
           </div>
         )}
 
-        {/* Modal de Puja */}
+        {/* Modal de Puja (se mantiene igual) */}
         {mostrarModalPuja && jugadorSeleccionado && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">

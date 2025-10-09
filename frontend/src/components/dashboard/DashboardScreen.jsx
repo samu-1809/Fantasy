@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Users, RefreshCw, Trophy } from 'lucide-react';
 import { 
-  actualizarEstadosBanquillo, 
-  getCurrentUser, 
-  cargarDatosIniciales, 
-  intercambiarJugadores, 
-  venderJugador,
-  getClasificacion 
+  getClasificacion
 } from '../../services/api';
+import { useTeam } from '../../hooks/useTeam';
 import FieldView from './FieldView';
 
-const DashboardScreen = ({ datosUsuario }) => {
-  const [equipoActual, setEquipoActual] = useState(datosUsuario?.equipo || null);
-  const [loading, setLoading] = useState(false);
+const DashboardScreen = ({ datosUsuario, onRefresh }) => {
+  
+  // Usar el hook useTeam para gestionar el estado del equipo
+  const { 
+    equipo, 
+    jugadores, 
+    loading, 
+    error, 
+    cargarEquipo,
+    determinarAlineacion,
+    realizarCambio,
+    venderJugador,
+    puedeVenderJugador,
+    retirarJugadorDelMercado,
+  } = useTeam(datosUsuario?.equipo?.id);
+
+  // Estados para la UI
   const [loadingAlineacion, setLoadingAlineacion] = useState(false);
   const [loadingPosicion, setLoadingPosicion] = useState(false);
-  const [error, setError] = useState(null);
   const [posicionLiga, setPosicionLiga] = useState(null);
   
   // Estados para gestión de cambios
@@ -23,32 +32,43 @@ const DashboardScreen = ({ datosUsuario }) => {
   const [modoCambio, setModoCambio] = useState(false);
   const [jugadorOrigenCambio, setJugadorOrigenCambio] = useState(null);
   const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
-  const [precioVenta, setPrecioVenta] = useState('');
   const [jugadorAVender, setJugadorAVender] = useState(null);
   const [mostrarModalOpciones, setMostrarModalOpciones] = useState(false);
+  const [loadingVenta, setLoadingVenta] = useState(false);
+  
+  // Estados para retirar del mercado
+  const [mostrarModalRetirar, setMostrarModalRetirar] = useState(false);
+  const [jugadorARetirar, setJugadorARetirar] = useState(null);
+  const [loadingRetirar, setLoadingRetirar] = useState(false);
   
   // Estados para la alineación
-  const [portero_titular, setPorteroTitular] = useState(null);
-  const [defensas_titulares, setDefensasTitulares] = useState([]);
-  const [delanteros_titulares, setDelanterosTitulares] = useState([]);
-  const [banquillo, setBanquillo] = useState([]);
+  const [alineacion, setAlineacion] = useState({
+    portero_titular: null,
+    defensas_titulares: [],
+    delanteros_titulares: [],
+    banquillo: []
+  });
   const [alineacionCargada, setAlineacionCargada] = useState(false);
 
-  // Effect para cargar la posición en la liga - CORREGIDO
+  // Effect para cargar la posición en la liga
   useEffect(() => {
     const cargarPosicionLiga = async () => {
       console.log('🏆 Intentando cargar posición en liga...');
       
-      // 🆕 BUSCAR LIGA_ID EN MÚLTIPLES UBICACIONES
-      const ligaId = equipoActual?.liga_id || datosUsuario?.ligaActual?.id;
+      const ligaId = equipo?.liga_id || datosUsuario?.ligaActual?.id;
       
-      console.log('   Equipo actual:', equipoActual);
-      console.log('   Liga ID from equipo:', equipoActual?.liga_id);
-      console.log('   Liga ID from datosUsuario:', datosUsuario?.ligaActual?.id);
       console.log('   Liga ID final:', ligaId);
+      console.log('   Equipo actual:', equipo?.nombre, 'ID:', equipo?.id);
       
       if (!ligaId) {
         console.log('❌ No hay liga_id disponible');
+        setPosicionLiga(null);
+        return;
+      }
+      
+      // Si no hay equipo, no podemos buscar posición
+      if (!equipo || !equipo.id) {
+        console.log('⏸️  No hay equipo cargado, esperando...');
         setPosicionLiga(null);
         return;
       }
@@ -67,7 +87,7 @@ const DashboardScreen = ({ datosUsuario }) => {
         
         // Buscar la posición del equipo actual en la clasificación
         const equipoEnClasificacion = clasificacion.find(
-          equipo => equipo.equipo_id === equipoActual?.id
+          equipoClasif => equipoClasif.equipo_id === equipo.id
         );
         
         if (equipoEnClasificacion) {
@@ -75,15 +95,15 @@ const DashboardScreen = ({ datosUsuario }) => {
           setPosicionLiga(equipoEnClasificacion.posicion);
         } else {
           console.log('⚠️ Equipo no encontrado en la clasificación por ID. Buscando por nombre...');
-          // Intentar buscar por nombre como fallback
           const equipoPorNombre = clasificacion.find(
-            equipo => equipo.nombre_equipo === equipoActual?.nombre
+            equipoClasif => equipoClasif.nombre_equipo === equipo.nombre
           );
           if (equipoPorNombre) {
             console.log(`✅ Equipo encontrado por nombre en posición: ${equipoPorNombre.posicion}`);
             setPosicionLiga(equipoPorNombre.posicion);
           } else {
             console.log('❌ Equipo no encontrado en clasificación (ni por ID ni por nombre)');
+            console.log('   Equipos en clasificación:', clasificacion.map(e => ({ id: e.equipo_id, nombre: e.nombre_equipo })));
             setPosicionLiga(null);
           }
         }
@@ -95,164 +115,83 @@ const DashboardScreen = ({ datosUsuario }) => {
       }
     };
 
-    // 🆕 SOLO CARGAR SI TENEMOS EQUIPO Y LIGA_ID
-    const ligaId = equipoActual?.liga_id || datosUsuario?.ligaActual?.id;
-    if (equipoActual && equipoActual.id && ligaId) {
+    // Recargar posición cuando cambie el equipo o los datos del usuario
+    const ligaId = equipo?.liga_id || datosUsuario?.ligaActual?.id;
+    if (equipo && equipo.id && ligaId) {
+      console.log('🚀 Iniciando carga de posición en liga...');
       cargarPosicionLiga();
     } else {
       console.log('⏸️  No se puede cargar posición: falta equipo o liga_id');
-      console.log('   Equipo:', equipoActual ? 'SÍ' : 'NO');
-      console.log('   Equipo ID:', equipoActual?.id ? 'SÍ' : 'NO');
-      console.log('   Liga ID:', ligaId ? 'SÍ' : 'NO');
+      console.log('   Equipo:', equipo);
+      console.log('   Liga ID disponible:', ligaId);
       setPosicionLiga(null);
     }
-  }, [equipoActual, datosUsuario]);
+  }, [equipo, datosUsuario]);
 
-  // 🆕 EFFECT MEJORADO PARA CARGAR ALINEACIÓN
+  // Effect para recargar datos cuando el componente se hace visible
   useEffect(() => {
-    const cargarAlineacion = async () => {
-      // Verificar que tenemos datos completos
-      if (!datosUsuario) {
-        console.log('❌ No hay datosUsuario cargados');
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('🔄 Dashboard visible - verificando si necesito recargar...');
+        // Podemos considerar recargar datos si es necesario
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Effect para escuchar eventos de actualización
+  useEffect(() => {
+    const handleMercadoUpdate = () => {
+      console.log('📢 Evento mercadoShouldUpdate recibido - recargando datos...');
+      cargarEquipo();
+    };
+
+    window.addEventListener('mercadoShouldUpdate', handleMercadoUpdate);
+    
+    return () => {
+      window.removeEventListener('mercadoShouldUpdate', handleMercadoUpdate);
+    };
+  }, [cargarEquipo]);
+
+  // Effect para calcular la alineación cuando cambian los jugadores
+  useEffect(() => {
+    const calcularAlineacion = () => {
+      if (!jugadores || jugadores.length === 0) {
+        console.log('❌ No hay jugadores para calcular alineación');
         return;
       }
 
-      if (!datosUsuario.equipo || !datosUsuario.equipo.id) {
-        console.log('❌ No hay equipo cargado o equipo sin ID');
-        return;
-      }
-
-      if (!datosUsuario.jugadores || datosUsuario.jugadores.length === 0) {
-        console.log('❌ No hay jugadores cargados');
-        return;
-      }
-
-      console.log('🔄 Cargando alineación desde datosUsuario...');
+      console.log('🔄 Calculando alineación con useTeam...');
       setLoadingAlineacion(true);
+      
       try {
-        await determinarAlineacion();
-        console.log('✅ Alineación cargada correctamente');
+        const nuevaAlineacion = determinarAlineacion(jugadores);
+        console.log('✅ Alineación calculada:', nuevaAlineacion);
+        
+        setAlineacion(nuevaAlineacion);
+        setAlineacionCargada(true);
       } catch (err) {
-        console.error('❌ Error cargando alineación:', err);
+        console.error('❌ Error calculando alineación:', err);
       } finally {
         setLoadingAlineacion(false);
       }
     };
 
-    cargarAlineacion();
-  }, [datosUsuario]);
-
-  // Recargar datos del equipo - CORREGIDO
-  const recargarDatosEquipo = async () => {
-    try {
-      console.log('🔄 Recargando datos del equipo...');
-      setLoading(true);
-      const userData = await getCurrentUser();
-      const nuevosDatos = await cargarDatosIniciales(userData);
-      
-      console.log('✅ Nuevos datos recibidos:', nuevosDatos);
-      
-      // 🆕 ACTUALIZAR ESTADO PRINCIPAL
-      setEquipoActual(nuevosDatos.equipo);
-      
-      // 🆕 ACTUALIZAR ALINEACIÓN INMEDIATAMENTE
-      if (nuevosDatos.equipo && nuevosDatos.jugadores) {
-        console.log('🔄 Actualizando alineación con nuevos datos...');
-        await determinarAlineacionConDatos(nuevosDatos.equipo.jugadores || nuevosDatos.jugadores, nuevosDatos.equipo.id);
-      }
-      
-      console.log('✅ Datos recargados correctamente');
-      return nuevosDatos;
-    } catch (error) {
-      console.error('❌ Error recargando datos:', error);
-      setError(error.message);
-      throw error;
-    } finally {
-      setLoading(false);
+    // Solo calcular si tenemos jugadores y no estamos ya cargando
+    if (jugadores && jugadores.length > 0 && !loadingAlineacion) {
+      calcularAlineacion();
     }
-  };
+  }, [jugadores, determinarAlineacion, loadingAlineacion]);
 
-  // 🆕 FUNCIÓN MEJORADA PARA DETERMINAR ALINEACIÓN
-  const determinarAlineacion = async () => {
-    if (!datosUsuario?.equipo || !datosUsuario?.jugadores) {
-      console.log('❌ No hay datos para determinar alineación');
-      return;
-    }
-
-    await determinarAlineacionConDatos(datosUsuario.jugadores, datosUsuario.equipo.id);
-  };
-
-  // 🆕 FUNCIÓN REUTILIZABLE PARA DETERMINAR ALINEACIÓN
-  const determinarAlineacionConDatos = async (jugadores, equipoId) => {
-    console.log('🎯 Determinando alineación con datos...');
-    
-    const portero = jugadores.find(j => j.posicion === 'POR');
-    const defensas = jugadores.filter(j => j.posicion === 'DEF');
-    const delanteros = jugadores.filter(j => j.posicion === 'DEL');
-
-    console.log(`📊 Jugadores por posición: POR:${portero ? 1 : 0}, DEF:${defensas.length}, DEL:${delanteros.length}`);
-
-    // Lógica mejorada: Usar en_banquillo si está definido, si no usar puntos
-    let defensas_titulares, delanteros_titulares;
-
-    const defensasEnCampo = defensas.filter(d => d.en_banquillo === false);
-    const delanterosEnCampo = delanteros.filter(d => d.en_banquillo === false);
-
-    if (defensasEnCampo.length >= 2) {
-      defensas_titulares = defensasEnCampo.slice(0, 2);
-    } else {
-      defensas_titulares = [...defensas]
-        .sort((a, b) => b.puntos_totales - a.puntos_totales)
-        .slice(0, 2);
-    }
-
-    if (delanterosEnCampo.length >= 2) {
-      delanteros_titulares = delanterosEnCampo.slice(0, 2);
-    } else {
-      delanteros_titulares = [...delanteros]
-        .sort((a, b) => b.puntos_totales - a.puntos_totales)
-        .slice(0, 2);
-    }
-
-    const portero_titular = portero;
-
-    console.log('🏆 Titulares seleccionados:');
-    console.log('   POR:', portero_titular?.nombre);
-    console.log('   DEF:', defensas_titulares.map(d => d.nombre));
-    console.log('   DEL:', delanteros_titulares.map(d => d.nombre));
-
-    // Determinar banquillo
-    const titulares = [portero_titular, ...defensas_titulares, ...delanteros_titulares].filter(Boolean);
-    const banquillo = jugadores.filter(jugador => !titulares.includes(jugador));
-
-    console.log('🪑 Banquillo:', banquillo.map(b => b.nombre));
-
-    // Sincronizar con el backend
-    const estadosParaSincronizar = jugadores.map(jugador => ({
-      jugador_id: jugador.id,
-      en_banquillo: !titulares.includes(jugador)
-    }));
-
-    try {
-      console.log('🔄 Sincronizando estados con el backend...');
-      await actualizarEstadosBanquillo(equipoId, estadosParaSincronizar);
-      console.log('✅ Estados sincronizados correctamente');
-    } catch (error) {
-      console.error('❌ Error sincronizando estados:', error);
-    }
-
-    // 🆕 ACTUALIZAR ESTADOS DE ALINEACIÓN
-    setPorteroTitular(portero_titular);
-    setDefensasTitulares(defensas_titulares);
-    setDelanterosTitulares(delanteros_titulares);
-    setBanquillo(banquillo);
-    setAlineacionCargada(true);
-  };
-
-  // Funciones de gestión de jugadores - REVISADAS
+  // Funciones de gestión de jugadores
   const handleClicJugador = (jugador) => {
     if (modoCambio && jugadorOrigenCambio) {
-      realizarCambio(jugadorOrigenCambio, jugador);
+      realizarCambioJugadores(jugadorOrigenCambio, jugador);
     } else {
       setJugadorSeleccionado(jugador);
       setMostrarModalOpciones(true);
@@ -271,15 +210,20 @@ const DashboardScreen = ({ datosUsuario }) => {
     setJugadorOrigenCambio(null);
   };
 
-  // 🆕 FUNCIÓN REALIZAR CAMBIO MEJORADA
-  const realizarCambio = async (origen, destino) => {
+  const realizarCambioJugadores = async (origen, destino) => {
     console.log('🔄 REALIZAR CAMBIO - Datos completos:');
     console.log('   Origen:', origen);
     console.log('   Destino:', destino);
-    console.log('   Equipo ID:', equipoActual?.id);
     
-    if (!equipoActual?.id) {
+    if (!equipo?.id) {
       alert('❌ Error: No se pudo identificar el equipo');
+      cancelarModoCambio();
+      return;
+    }
+    
+    // ✅ Validar que el jugador destino no esté en venta
+    if (destino.en_venta) {
+      alert('❌ No puedes cambiar con un jugador que está en venta. Primero retíralo del mercado.');
       cancelarModoCambio();
       return;
     }
@@ -291,13 +235,12 @@ const DashboardScreen = ({ datosUsuario }) => {
     }
 
     try {
-      console.log('📡 Llamando a intercambiarJugadores...');
-      await intercambiarJugadores(equipoActual.id, origen.id, destino.id);
+      console.log('📡 Llamando a realizarCambio...');
+      await realizarCambio(origen.id, destino.id);
       
-      console.log('🔄 Recargando datos después del cambio...');
-      await recargarDatosEquipo();
-      
+      console.log('✅ Cambio completado');
       alert(`✅ Cambio realizado: ${origen.nombre} ↔ ${destino.nombre}`);
+      
     } catch (err) {
       console.error('❌ Error en realizarCambio:', err);
       alert('❌ Error al realizar el cambio: ' + err.message);
@@ -307,10 +250,14 @@ const DashboardScreen = ({ datosUsuario }) => {
   };
 
   const getEstadoJugador = (jugador) => {
-    if (modoCambio) {
+    if (modoCambio && jugadorOrigenCambio) {
       if (jugador.id === jugadorOrigenCambio?.id) {
         return 'origen-cambio';
       } else if (jugador.posicion === jugadorOrigenCambio?.posicion) {
+        // ✅ NO permitir cambio con jugadores en venta
+        if (jugador.en_venta) {
+          return 'no-apto-cambio';
+        }
         return 'apto-cambio';
       } else {
         return 'no-apto-cambio';
@@ -321,9 +268,9 @@ const DashboardScreen = ({ datosUsuario }) => {
     return 'normal';
   };
 
+  // Función para abrir modal de venta
   const abrirModalVenta = (jugador) => {
     setJugadorAVender(jugador);
-    setPrecioVenta(jugador.valor.toString());
     setMostrarModalVenta(true);
     setJugadorSeleccionado(null);
     setMostrarModalOpciones(false);
@@ -332,46 +279,89 @@ const DashboardScreen = ({ datosUsuario }) => {
   const cerrarModalVenta = () => {
     setMostrarModalVenta(false);
     setJugadorAVender(null);
-    setPrecioVenta('');
+    setLoadingVenta(false);
   };
 
-  const confirmarVentaMercado = async () => {
-    if (!jugadorAVender || !precioVenta) return;
+  // Funciones para retirar del mercado
+  const abrirModalRetirar = (jugador) => {
+    setJugadorARetirar(jugador);
+    setMostrarModalRetirar(true);
+    setJugadorSeleccionado(null);
+    setMostrarModalOpciones(false);
+  };
 
+  const cerrarModalRetirar = () => {
+    setMostrarModalRetirar(false);
+    setJugadorARetirar(null);
+    setLoadingRetirar(false);
+  };
+
+  const confirmarPonerEnVenta = async () => {
+    if (!jugadorAVender || !equipo?.id) {
+      alert('❌ Error: Datos incompletos');
+      return;
+    }
+
+    setLoadingVenta(true);
     try {
-      await venderJugador(equipoActual.id, jugadorAVender.id, parseInt(precioVenta));
-      await recargarDatosEquipo();
+      console.log(`🔄 Poniendo en venta jugador: ${jugadorAVender.nombre}`);
+      
+      await venderJugador(jugadorAVender.id, jugadorAVender.valor);
+      
+      console.log('✅ Jugador puesto en venta correctamente');
+      
+      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+      
+      alert(`✅ ${jugadorAVender.nombre} ha sido puesto en venta en el mercado`);
       cerrarModalVenta();
-      alert('✅ Jugador puesto en venta en el mercado');
+      
     } catch (err) {
+      console.error('❌ Error al poner en venta:', err);
       alert('❌ Error al poner en venta: ' + err.message);
+    } finally {
+      setLoadingVenta(false);
     }
   };
 
-  const puedeVenderJugador = (jugador) => {
-    if (!equipoActual || !equipoActual.jugadores) return false;
+  const confirmarRetirarDelMercado = async () => {
+    if (!jugadorARetirar || !equipo?.id) {
+      alert('❌ Error: Datos incompletos');
+      return;
+    }
 
-    const jugadores = equipoActual.jugadores;
-    
-    const contarPorPosicion = {
-      'POR': jugadores.filter(j => j.posicion === 'POR').length,
-      'DEF': jugadores.filter(j => j.posicion === 'DEF').length,
-      'DEL': jugadores.filter(j => j.posicion === 'DEL').length
-    };
+    setLoadingRetirar(true);
+    try {
+      console.log(`🔄 Retirando del mercado: ${jugadorARetirar.nombre}`);
+      
+      await retirarJugadorDelMercado(jugadorARetirar.id); 
 
-    if (jugador.posicion === 'POR' && contarPorPosicion.POR === 1) return false;
-    if (jugador.posicion === 'DEF' && contarPorPosicion.DEF === 2) return false;
-    if (jugador.posicion === 'DEL' && contarPorPosicion.DEL === 2) return false;
-
-    return true;
+      console.log('✅ Jugador retirado del mercado correctamente');
+      
+      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+      
+      alert(`✅ ${jugadorARetirar.nombre} ha sido retirado del mercado`);
+      cerrarModalRetirar();
+      
+    } catch (err) {
+      console.error('❌ Error al retirar del mercado:', err);
+      alert('❌ Error al retirar del mercado: ' + err.message);
+    } finally {
+      setLoadingRetirar(false);
+    }
   };
 
   const handleVenderJugador = (jugador) => {
+    // Verificar si el jugador está en el campo (no en el banquillo)
+    if (!jugador.en_banquillo) {
+      alert('❌ Para vender un jugador, debe estar en el banquillo. Por favor, colócalo en el banquillo primero.');
+      return;
+    }
+
     if (!puedeVenderJugador(jugador)) {
       const mensajesError = {
-        'POR': 'No puedes vender a tu único portero.',
-        'DEF': 'No puedes vender este defensa (mínimo 2).',
-        'DEL': 'No puedes vender este delantero (mínimo 2).'
+        'POR': 'No puedes vender a tu único portero. Necesitas al menos 1 portero en el equipo.',
+        'DEF': 'No puedes vender este defensa. Necesitas al menos 2 defensas en el equipo.',
+        'DEL': 'No puedes vender este delantero. Necesitas al menos 2 delanteros en el equipo.'
       };
       alert(mensajesError[jugador.posicion]);
       return;
@@ -381,14 +371,12 @@ const DashboardScreen = ({ datosUsuario }) => {
 
   // Helpers
   const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
-  const calcularPuntosTotales = () => equipoActual?.jugadores?.reduce((sum, j) => sum + j.puntos_totales, 0) || 0;
-  const totalJugadores = equipoActual?.jugadores?.length || 0;
+  const calcularPuntosTotales = () => jugadores?.reduce((sum, j) => sum + j.puntos_totales, 0) || 0;
+  const totalJugadores = jugadores?.length || 0;
   const maxJugadores = 13;
 
   // Función para formatear la posición de manera elegante
   const formatearPosicion = (posicion) => {
-    console.log('📊 Formateando posición:', posicion);
-    
     if (posicion === null || posicion === undefined) {
       return 'Sin datos';
     }
@@ -417,7 +405,7 @@ const DashboardScreen = ({ datosUsuario }) => {
         <div className="bg-red-50 border-2 border-red-300 p-6 rounded-lg">
           <p className="text-red-600 font-bold">Error: {error}</p>
           <button 
-            onClick={recargarDatosEquipo}
+            onClick={cargarEquipo}
             className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
           >
             Reintentar
@@ -427,7 +415,7 @@ const DashboardScreen = ({ datosUsuario }) => {
     );
   }
 
-  if (!equipoActual) {
+  if (!equipo) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <p>No hay equipo disponible</p>
@@ -504,7 +492,7 @@ const DashboardScreen = ({ datosUsuario }) => {
         <div className="mb-6 grid grid-cols-3 gap-4">
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
             <div className="text-sm text-gray-600">Presupuesto</div>
-            <div className="text-2xl font-bold text-blue-600">{formatValue(equipoActual.presupuesto)}</div>
+            <div className="text-2xl font-bold text-blue-600">{formatValue(equipo.presupuesto)}</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
             <div className="text-sm text-gray-600">Puntos Totales</div>
@@ -522,9 +510,9 @@ const DashboardScreen = ({ datosUsuario }) => {
                 formatearPosicion(posicionLiga)
               )}
             </div>
-            {!loadingPosicion && (!equipoActual.liga_id || !posicionLiga) && (
+            {!loadingPosicion && (!equipo.liga_id || !posicionLiga) && (
               <div className="text-xs text-gray-500 mt-1">
-                {!equipoActual.liga_id ? 'Sin liga asignada' : 'Posición no disponible'}
+                {!equipo.liga_id ? 'Sin liga asignada' : 'Posición no disponible'}
               </div>
             )}
           </div>
@@ -532,15 +520,15 @@ const DashboardScreen = ({ datosUsuario }) => {
 
         <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
           <Users size={28} />
-          {equipoActual.nombre}
+          {equipo.nombre}
         </h2>
 
         {/* Campo de fútbol */}
         <FieldView
-          portero_titular={portero_titular}
-          defensas_titulares={defensas_titulares}
-          delanteros_titulares={delanteros_titulares}
-          banquillo={banquillo}
+          portero_titular={alineacion.portero_titular}
+          defensas_titulares={alineacion.defensas_titulares}
+          delanteros_titulares={alineacion.delanteros_titulares}
+          banquillo={alineacion.banquillo}
           onPlayerClick={handleClicJugador}
           onSellPlayer={handleVenderJugador}
           getPlayerState={getEstadoJugador}
@@ -561,34 +549,46 @@ const DashboardScreen = ({ datosUsuario }) => {
                 </p>
                 <p className="text-sm">Valor: {formatValue(jugadorSeleccionado.valor)}</p>
                 <p className="text-sm">Puntos: {jugadorSeleccionado.puntos_totales}</p>
+                <p className={`text-sm ${jugadorSeleccionado.en_banquillo ? 'text-blue-600' : 'text-green-600'}`}>
+                  {jugadorSeleccionado.en_banquillo ? '🪑 En banquillo' : '⚽ Titular'}
+                </p>
+                {jugadorSeleccionado.en_venta && (
+                  <p className="text-sm text-orange-600 font-semibold">
+                    💰 Actualmente en venta
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-2 flex-col">
-                <button
-                  onClick={() => iniciarModoCambio(jugadorSeleccionado)}
-                  className="bg-blue-600 text-white py-3 px-4 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
-                >
-                  <RefreshCw size={16} />
-                  Cambiar
-                </button>
-                <button
-                  onClick={() => {
-                    if (!puedeVenderJugador(jugadorSeleccionado)) {
-                      const mensajesError = {
-                        'POR': 'No puedes vender a tu único portero.',
-                        'DEF': 'No puedes vender este defensa (mínimo 2).',
-                        'DEL': 'No puedes vender este delantero (mínimo 2).'
-                      };
-                      alert(mensajesError[jugadorSeleccionado.posicion]);
-                      return;
-                    }
-                    abrirModalVenta(jugadorSeleccionado);
-                  }}
-                  className="bg-red-600 text-white py-3 px-4 rounded text-sm hover:bg-red-700 flex items-center justify-center gap-2"
-                >
-                  <span>💰</span>
-                  Poner en el mercado
-                </button>
+                {/* JUGADOR EN VENTA - Solo mostrar opción de retirar */}
+                {jugadorSeleccionado.en_venta ? (
+                  <button
+                    onClick={() => abrirModalRetirar(jugadorSeleccionado)}
+                    className="bg-yellow-600 text-white py-3 px-4 rounded text-sm hover:bg-yellow-700 flex items-center justify-center gap-2"
+                  >
+                    <span>↩️</span>
+                    Retirar del mercado
+                  </button>
+                ) : (
+                  /* JUGADOR NO EN VENTA - Mostrar opciones normales */
+                  <>
+                    <button
+                      onClick={() => iniciarModoCambio(jugadorSeleccionado)}
+                      className="bg-blue-600 text-white py-3 px-4 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw size={16} />
+                      Cambiar
+                    </button>
+                    <button
+                      onClick={() => handleVenderJugador(jugadorSeleccionado)}
+                      className="bg-red-600 text-white py-3 px-4 rounded text-sm hover:bg-red-700 flex items-center justify-center gap-2"
+                    >
+                      <span>💰</span>
+                      Poner en el mercado
+                    </button>
+                  </>
+                )}
+                
                 <button
                   onClick={() => {
                     setJugadorSeleccionado(null);
@@ -616,36 +616,99 @@ const DashboardScreen = ({ datosUsuario }) => {
                   {jugadorAVender.posicion === 'POR' ? 'Portero' : 
                    jugadorAVender.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
                 </p>
-                <p className="text-sm">Valor actual: {formatValue(jugadorAVender.valor)}</p>
+                <p className="text-sm">Valor: {formatValue(jugadorAVender.valor)}</p>
+                <p className="text-sm">Puntos: {jugadorAVender.puntos_totales}</p>
+                <p className="text-sm text-blue-600">
+                  {jugadorAVender.en_banquillo ? '🪑 En banquillo' : '⚽ Titular'}
+                </p>
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Precio de venta:
-                </label>
-                <input
-                  type="number"
-                  value={precioVenta}
-                  onChange={(e) => setPrecioVenta(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
-                  placeholder="Ej: 5000000"
-                  min={0}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Precio sugerido: {formatValue(jugadorAVender.valor)}
+                <p className="text-sm text-gray-700">
+                  ¿Estás seguro de que quieres poner a <strong>{jugadorAVender.nombre}</strong> en el mercado?
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  📢 El jugador aparecerá en el mercado para que otros equipos puedan pujar por él.
+                  Podrás retirarlo del mercado en cualquier momento.
                 </p>
               </div>
 
               <div className="flex gap-2">
                 <button
-                  onClick={confirmarVentaMercado}
-                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
+                  onClick={confirmarPonerEnVenta}
+                  disabled={loadingVenta}
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:bg-green-400 flex items-center justify-center gap-2"
                 >
-                  Confirmar Venta
+                  {loadingVenta ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <span>✅</span>
+                      Confirmar
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={cerrarModalVenta}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700"
+                  disabled={loadingVenta}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700 disabled:bg-gray-400"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de retirar del mercado */}
+        {mostrarModalRetirar && jugadorARetirar && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
+              <h3 className="text-xl font-bold mb-4">Retirar del Mercado</h3>
+              
+              <div className="mb-4 p-3 bg-gray-50 rounded">
+                <p className="font-semibold">{jugadorARetirar.nombre}</p>
+                <p className="text-sm text-gray-600">
+                  {jugadorARetirar.posicion === 'POR' ? 'Portero' : 
+                   jugadorARetirar.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
+                </p>
+                <p className="text-sm">Precio actual: {formatValue(jugadorARetirar.precio_venta)}</p>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-sm text-gray-700">
+                  ¿Estás seguro de que quieres retirar a <strong>{jugadorARetirar.nombre}</strong> del mercado?
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  📢 El jugador dejará de estar disponible para otros equipos y volverá a tu plantilla.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmarRetirarDelMercado}
+                  disabled={loadingRetirar}
+                  className="flex-1 bg-yellow-600 text-white py-2 px-4 rounded hover:bg-yellow-700 disabled:bg-yellow-400 flex items-center justify-center gap-2"
+                >
+                  {loadingRetirar ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <span>↩️</span>
+                      Retirar del mercado
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={cerrarModalRetirar}
+                  disabled={loadingRetirar}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700 disabled:bg-gray-400"
                 >
                   Cancelar
                 </button>

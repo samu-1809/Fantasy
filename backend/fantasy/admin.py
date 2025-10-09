@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido
 
 @admin.register(Liga)
 class LigaAdmin(admin.ModelAdmin):
@@ -48,15 +48,3 @@ class JornadaAdmin(admin.ModelAdmin):
     def total_partidos(self, obj):
         return obj.partidos.count()
     total_partidos.short_description = 'Partidos'
-
-
-@admin.register(Alineacion)
-class AlineacionAdmin(admin.ModelAdmin):
-    list_display = ('equipo', 'portero_titular', 'defensa1_titular', 'defensa2_titular', 
-                   'delantero1_titular', 'delantero2_titular', 'total_banquillo')
-    list_filter = ('equipo__liga',)
-    search_fields = ('equipo__nombre', 'equipo__usuario__username')
-    
-    def total_banquillo(self, obj):
-        return obj.banquillo.count()
-    total_banquillo.short_description = 'Jugadores en banquillo'

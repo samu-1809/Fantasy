@@ -1,4 +1,7 @@
 from rest_framework import viewsets, status, generics
+from django.core.cache import cache
+import hashlib
+from datetime import datetime
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.permissions import IsAuthenticated
@@ -13,9 +16,9 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db.models import Q
 import random
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion, Oferta, Puja
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja
 from .serializers import (
-    LigaSerializer, JugadorSerializer, EquipoSerializer, AlineacionSerializer, OfertaSerializer, PujaSerializer, JugadorMercadoSerializer,
+    LigaSerializer, JugadorSerializer, EquipoSerializer, OfertaSerializer, PujaSerializer, JugadorMercadoSerializer,
     JornadaSerializer, PuntuacionSerializer, EquipoRealSerializer, PartidoSerializer, FicharJugadorSerializer, VenderJugadorSerializer
 )
 
@@ -278,23 +281,6 @@ class EquipoViewSet(viewsets.ModelViewSet):
         
         return queryset
 
-    def puede_vender_jugador(self, equipo, jugador):
-        """
-        Verifica si se puede vender un jugador sin dejar posiciones vacías
-        """
-        jugadores_en_campo = Jugador.objects.filter(equipo=equipo, en_banquillo=False)
-        
-        contar_posiciones = {
-            'POR': jugadores_en_campo.filter(posicion='POR').count(),
-            'DEF': jugadores_en_campo.filter(posicion='DEF').count(),
-            'DEL': jugadores_en_campo.filter(posicion='DEL').count(),
-        }
-        
-        limites = {'POR': 1, 'DEF': 2, 'DEL': 2}
-        
-        # Si al vender este jugador quedaría menos del mínimo requerido, no se puede vender
-        return contar_posiciones[jugador.posicion] > limites[jugador.posicion]
-
     def actualizar_estadisticas_equipo(self, equipo):
         """
         Actualiza las estadísticas del equipo cuando se fichan/venden jugadores
@@ -306,112 +292,28 @@ class EquipoViewSet(viewsets.ModelViewSet):
         
         equipo.save()
 
-    @action(detail=True, methods=['post'])
-    def vender_jugador(self, request, pk=None):
-        """Vender un jugador del equipo"""
-        equipo = self.get_object()
-        serializer = VenderJugadorSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def puede_vender_jugador(equipo, jugador):
+        """Validar si se puede vender un jugador sin dejar posiciones vacías"""
+        jugadores_equipo = Jugador.objects.filter(equipo=equipo)
         
-        jugador_id = serializer.validated_data['jugador_id']
+        contar_por_posicion = {
+            'POR': jugadores_equipo.filter(posicion='POR', en_venta=False).count(),
+            'DEF': jugadores_equipo.filter(posicion='DEF', en_venta=False).count(),
+            'DEL': jugadores_equipo.filter(posicion='DEL', en_venta=False).count()
+        }
         
-        try:
-            jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
-        except Jugador.DoesNotExist:
-            return Response(
-                {'error': 'Jugador no encontrado en tu equipo'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validar que no se quede ninguna posición vacía
-        if not self.puede_vender_jugador(equipo, jugador):
-            posicion_display = {
-                'POR': 'portero',
-                'DEF': 'defensa', 
-                'DEL': 'delantero'
-            }
-            return Response({
-                'error': f'No puedes vender este {posicion_display[jugador.posicion]}, dejarías una posición vacía'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Realizar la venta (75% del valor)
-        valor_venta = int(jugador.valor * 0.75)
-        equipo.presupuesto += valor_venta
+        if jugador.en_venta:
+            return True
         
-        # Liberar jugador
-        jugador.equipo = None
-        jugador.en_banquillo = True
-        jugador.fecha_fichaje = None
-        jugador.en_venta = False  # Quitar de venta si estaba en venta
+        minimos = {
+            'POR': 1,
+            'DEF': 2,
+            'DEL': 2
+        }
         
-        equipo.save()
-        jugador.save()
-        
-        # Actualizar estadísticas
-        self.actualizar_estadisticas_equipo(equipo)
-        
-        return Response({
-            'message': f'Jugador vendido por {valor_venta}', 
-            'valor_venta': valor_venta,
-            'nuevo_presupuesto': equipo.presupuesto
-        })
-
-    @action(detail=True, methods=['post'])
-    def poner_en_venta(self, request, pk=None):
-        """Poner un jugador del equipo en venta"""
-        equipo = self.get_object()
-        jugador_id = request.data.get('jugador_id')
-        
-        try:
-            jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
-        except Jugador.DoesNotExist:
-            return Response(
-                {'error': 'Jugador no encontrado en tu equipo'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Poner en venta
-        jugador.en_venta = True
-        jugador.save()
-        
-        return Response({
-            'message': f'{jugador.nombre} puesto en venta',
-            'jugador': JugadorSerializer(jugador).data
-        })
-
-    @action(detail=True, methods=['post'])
-    def quitar_de_venta(self, request, pk=None):
-        """Quitar un jugador de la venta"""
-        equipo = self.get_object()
-        jugador_id = request.data.get('jugador_id')
-        
-        try:
-            jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
-        except Jugador.DoesNotExist:
-            return Response(
-                {'error': 'Jugador no encontrado en tu equipo'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Quitar de venta
-        jugador.en_venta = False
-        jugador.save()
-        
-        return Response({
-            'message': f'{jugador.nombre} quitado de venta',
-            'jugador': JugadorSerializer(jugador).data
-        })
-
-from django.utils import timezone
-from django.db import transaction
-from datetime import timedelta
-from rest_framework import viewsets
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.core.cache import cache
-import hashlib
-from datetime import datetime
+        posicion = jugador.posicion
+        quedarian = contar_por_posicion[posicion] - 1
+        return quedarian >= minimos[posicion]
 
 class MercadoViewSet(viewsets.ViewSet):
     """
@@ -695,129 +597,6 @@ class PuntuacionViewSet(viewsets.ModelViewSet):
             'resultados': resultados
         })
 
-class AlineacionViewSet(viewsets.ModelViewSet):
-    queryset = Alineacion.objects.all()
-    serializer_class = AlineacionSerializer
-    
-    @action(detail=True, methods=['post'])
-    def asignar_titular(self, request, pk=None):
-        alineacion = self.get_object()
-        jugador_id = request.data.get('jugador_id')
-        posicion = request.data.get('posicion')
-        
-        try:
-            jugador = Jugador.objects.get(id=jugador_id)
-        except Jugador.DoesNotExist:
-            return Response({'error': 'Jugador no encontrado'}, status=404)
-        
-        # Verificar que el jugador pertenece al equipo
-        if jugador not in alineacion.equipo.jugadores.all():
-            return Response({'error': 'El jugador no pertenece a tu equipo'}, status=400)
-        
-        # Verificar posición correcta
-        if posicion == 'POR' and jugador.posicion != 'POR':
-            return Response({'error': 'Solo puedes asignar porteros a la posición de portero'}, status=400)
-        elif posicion in ['DEF1', 'DEF2'] and jugador.posicion != 'DEF':
-            return Response({'error': 'Solo puedes asignar defensas a la posición de defensa'}, status=400)
-        elif posicion in ['DEL1', 'DEL2'] and jugador.posicion != 'DEL':
-            return Response({'error': 'Solo puedes asignar delanteros a la posición de delantero'}, status=400)
-        
-        # Asignar a la posición correspondiente
-        if posicion == 'POR':
-            alineacion.portero_titular = jugador
-        elif posicion == 'DEF1':
-            alineacion.defensa1_titular = jugador
-        elif posicion == 'DEF2':
-            alineacion.defensa2_titular = jugador
-        elif posicion == 'DEL1':
-            alineacion.delantero1_titular = jugador
-        elif posicion == 'DEL2':
-            alineacion.delantero2_titular = jugador
-        
-        alineacion.save()
-        return Response({'message': 'Jugador asignado como titular'})
-    @action(detail=True, methods=['post'])
-    def cambiar_jugador(self, request, pk=None):
-        alineacion = self.get_object()
-        jugador_sale_id = request.data.get('jugador_sale_id')  # ID del jugador que sale
-        jugador_entra_id = request.data.get('jugador_entra_id')  # ID del jugador que entra
-        
-        try:
-            jugador_sale = Jugador.objects.get(id=jugador_sale_id)
-            jugador_entra = Jugador.objects.get(id=jugador_entra_id)
-        except Jugador.DoesNotExist:
-            return Response({'error': 'Jugador no encontrado'}, status=404)
-        
-        # Verificar que ambos jugadores pertenecen al equipo
-        if (jugador_sale not in alineacion.equipo.jugadores.all() or 
-            jugador_entra not in alineacion.equipo.jugadores.all()):
-            return Response({'error': 'Los jugadores deben pertenecer al equipo'}, status=400)
-        
-        # Verificar que son de la misma posición
-        if jugador_sale.posicion != jugador_entra.posicion:
-            return Response({'error': 'Solo puedes cambiar jugadores de la misma posición'}, status=400)
-        
-        # Buscar en qué posición está el jugador que sale
-        posicion_sale = None
-        if alineacion.portero_titular == jugador_sale:
-            posicion_sale = 'POR'
-        elif alineacion.defensa1_titular == jugador_sale:
-            posicion_sale = 'DEF1'
-        elif alineacion.defensa2_titular == jugador_sale:
-            posicion_sale = 'DEF2'
-        elif alineacion.delantero1_titular == jugador_sale:
-            posicion_sale = 'DEL1'
-        elif alineacion.delantero2_titular == jugador_sale:
-            posicion_sale = 'DEL2'
-        
-        if not posicion_sale:
-            return Response({'error': 'El jugador no está en la alineación titular'}, status=400)
-        
-        # Verificar que el jugador que entra está en el banquillo
-        if jugador_entra not in alineacion.banquillo.all():
-            return Response({'error': 'El jugador que entra debe estar en el banquillo'}, status=400)
-        
-        # Realizar el cambio
-        if posicion_sale == 'POR':
-            alineacion.portero_titular = jugador_entra
-        elif posicion_sale == 'DEF1':
-            alineacion.defensa1_titular = jugador_entra
-        elif posicion_sale == 'DEF2':
-            alineacion.defensa2_titular = jugador_entra
-        elif posicion_sale == 'DEL1':
-            alineacion.delantero1_titular = jugador_entra
-        elif posicion_sale == 'DEL2':
-            alineacion.delantero2_titular = jugador_entra
-        
-        # Mover el jugador que sale al banquillo y quitar el que entra
-        alineacion.banquillo.remove(jugador_entra)
-        alineacion.banquillo.add(jugador_sale)
-        
-        alineacion.save()
-        
-        return Response({
-            'message': f'Cambio realizado: {jugador_sale.nombre} ↔ {jugador_entra.nombre}',
-            'alineacion': AlineacionSerializer(alineacion).data
-        })
-    @action(detail=True, methods=['post'])
-    def quitar_titular(self, request, pk=None):
-        alineacion = self.get_object()
-        posicion = request.data.get('posicion')
-        
-        if posicion == 'POR':
-            alineacion.portero_titular = None
-        elif posicion == 'DEF1':
-            alineacion.defensa1_titular = None
-        elif posicion == 'DEF2':
-            alineacion.defensa2_titular = None
-        elif posicion == 'DEL1':
-            alineacion.delantero1_titular = None
-        elif posicion == 'DEL2':
-            alineacion.delantero2_titular = None
-        
-        alineacion.save()
-        return Response({'message': 'Jugador quitado de la alineación titular'})
-
 class OfertaViewSet(viewsets.ModelViewSet):
     queryset = Oferta.objects.all()
     serializer_class = OfertaSerializer
@@ -1033,6 +812,47 @@ def finalizar_subastas(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def rechazar_oferta(request, oferta_id):
+    try:
+        oferta = Oferta.objects.get(id=oferta_id)
+        
+        # Verificar que la oferta es para el usuario
+        if oferta.equipo_receptor.usuario != request.user:
+            return Response({'error': 'No tienes permisos para rechazar esta oferta'}, status=403)
+        
+        # Verificar que la oferta está pendiente
+        if oferta.estado != 'pendiente':
+            return Response({'error': 'La oferta ya fue procesada'}, status=400)
+        
+        with transaction.atomic():
+            # Usar el método del modelo si existe, o hacerlo manualmente
+            if hasattr(oferta, 'rechazar') and callable(oferta.rechazar):
+                if oferta.rechazar():
+                    return Response({
+                        'success': True,
+                        'mensaje': 'Oferta rechazada'
+                    })
+                else:
+                    return Response({'error': 'No se pudo rechazar la oferta'}, status=400)
+            else:
+                # Implementación manual si no existe el método
+                oferta.estado = 'rechazada'
+                oferta.fecha_respuesta = timezone.now()
+                oferta.save()
+                
+                return Response({
+                    'success': True,
+                    'mensaje': 'Oferta rechazada'
+                })
+                
+    except Oferta.DoesNotExist:
+        return Response({'error': 'Oferta no encontrada'}, status=404)
+    except Exception as e:
+        print(f"❌ Error inesperado en rechazar_oferta: {str(e)}")
+        return Response({'error': 'Error interno del servidor'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def poner_en_venta(request, equipo_id, jugador_id):
     """
     Poner un jugador del equipo en venta en el mercado
@@ -1043,18 +863,73 @@ def poner_en_venta(request, equipo_id, jugador_id):
     except (Equipo.DoesNotExist, Jugador.DoesNotExist):
         return Response({'error': 'Jugador o equipo no encontrado'}, status=404)
     
-    precio_venta = request.data.get('precio_venta')
+    # Si no se envía precio_venta, usar el valor actual del jugador
+    precio_venta = request.data.get('precio_venta', jugador.valor)
     
-    if precio_venta and precio_venta < jugador.valor * 0.5:
-        return Response({'error': 'El precio de venta debe ser al menos el 50% del valor del jugador'}, status=400)
+    # Validar que el precio no sea menor del 50% del valor
+    if precio_venta < jugador.valor * 0.5:
+        return Response({
+            'error': f'El precio de venta (€{precio_venta:,}) debe ser al menos el 50% del valor del jugador (€{jugador.valor * 0.5:,.0f})'
+        }, status=400)
     
-    jugador.poner_en_mercado(precio_venta)
+    # Poner en venta - usar el método del modelo si existe, o hacerlo manualmente
+    try:
+        # Si existe el método poner_en_mercado
+        jugador.poner_en_mercado(precio_venta)
+    except AttributeError:
+        # Si no existe, hacerlo manualmente
+        jugador.en_venta = True
+        jugador.precio_venta = precio_venta
+        jugador.fecha_mercado = timezone.now()
+        jugador.save()
     
     return Response({
-        'message': f'{jugador.nombre} puesto en venta en el mercado',
-        'precio_venta': jugador.precio_venta,
-        'expiracion': jugador.expiracion_mercado
+        'message': f'{jugador.nombre} puesto en venta en el mercado por €{precio_venta:,}',
+        'precio_venta': precio_venta,
+        'jugador': {
+            'id': jugador.id,
+            'nombre': jugador.nombre,
+            'en_venta': True
+        }
     })
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def quitar_del_mercado(request, equipo_id, jugador_id):
+    """
+    Quitar un jugador del mercado (solo si es del equipo del usuario)
+    """
+    try:
+        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
+        jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
+    except Equipo.DoesNotExist:
+        return Response({'error': 'Equipo no encontrado'}, status=404)
+    except Jugador.DoesNotExist:
+        return Response({'error': 'Jugador no encontrado en tu equipo'}, status=404)
+    
+    if not jugador.en_venta:
+        return Response({'error': 'El jugador no está en el mercado'}, status=400)
+    
+    try:
+        # Usar método del modelo si existe
+        if hasattr(jugador, 'quitar_del_mercado') and callable(jugador.quitar_del_mercado):
+            jugador.quitar_del_mercado()
+        else:
+            # Implementación manual
+            jugador.en_venta = False
+            jugador.precio_venta = None
+            # Mantener en banquillo al retirar del mercado
+            jugador.en_banquillo = True
+            jugador.save()
+        
+        return Response({
+            'message': f'{jugador.nombre} quitado del mercado',
+            'jugador': JugadorSerializer(jugador).data
+        })
+        
+    except Exception as e:
+        print(f"❌ Error inesperado en quitar_del_mercado: {str(e)}")
+        return Response({'error': 'Error interno del servidor'}, status=500)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1265,54 +1140,6 @@ def aceptar_oferta(request, oferta_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def rechazar_oferta(request, oferta_id):
-    try:
-        oferta = Oferta.objects.get(id=oferta_id)
-        
-        # Verificar que la oferta es para el usuario
-        if oferta.equipo_receptor.usuario != request.user:
-            return Response({'error': 'No tienes permisos para rechazar esta oferta'}, status=403)
-        
-        # Verificar que la oferta está pendiente
-        if oferta.estado != 'pendiente':
-            return Response({'error': 'La oferta ya fue procesada'}, status=400)
-        
-        with transaction.atomic():
-            if oferta.rechazar():
-                return Response({
-                    'success': True,
-                    'mensaje': 'Oferta rechazada'
-                })
-            else:
-                return Response({'error': 'No se pudo rechazar la oferta'}, status=400)
-                
-    except Oferta.DoesNotExist:
-        return Response({'error': 'Oferta no encontrada'}, status=404)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def quitar_del_mercado(request, equipo_id, jugador_id):
-    """
-    Quitar un jugador del mercado (solo si es del equipo del usuario)
-    """
-    try:
-        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
-        jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
-    except (Equipo.DoesNotExist, Jugador.DoesNotExist):
-        return Response({'error': 'Jugador o equipo no encontrado'}, status=404)
-    
-    if not jugador.en_venta:
-        return Response({'error': 'El jugador no está en el mercado'}, status=400)
-    
-    jugador.quitar_del_mercado()
-    
-    return Response({
-        'message': f'{jugador.nombre} quitado del mercado',
-        'jugador': JugadorSerializer(jugador).data
-    })
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def intercambiar_jugadores(request, equipo_id):
     """Intercambiar dos jugadores del equipo (misma posición)"""
     try:
@@ -1496,6 +1323,38 @@ def retirar_puja(request, puja_id):
             {'error': f'Error interno del servidor: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+# En views.py
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def guardar_alineacion(request, equipo_id):
+    """
+    Guardar la alineación completa de un equipo
+    """
+    try:
+        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
+        jugadores_data = request.data.get('jugadores', [])
+        
+        with transaction.atomic():
+            for jugador_data in jugadores_data:
+                jugador = Jugador.objects.get(
+                    id=jugador_data['jugador_id'], 
+                    equipo=equipo
+                )
+                jugador.en_banquillo = jugador_data['en_banquillo']
+                jugador.save()
+            
+            return Response({
+                'message': 'Alineación guardada correctamente',
+                'equipo': EquipoSerializer(equipo).data
+            })
+            
+    except Equipo.DoesNotExist:
+        return Response({'error': 'Equipo no encontrado'}, status=404)
+    except Jugador.DoesNotExist:
+        return Response({'error': 'Jugador no encontrado'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

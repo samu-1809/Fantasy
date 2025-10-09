@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion, Oferta, Puja
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -8,16 +8,15 @@ class LigaSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'codigo', 'jornada_actual']
 
 class JugadorSerializer(serializers.ModelSerializer):
-    posicion_display = serializers.CharField(source='get_posicion_display', read_only=True)
-    equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    usuario_vendedor = serializers.CharField(source='equipo.usuario.username', read_only=True)
+    usuario_vendedor_id = serializers.IntegerField(source='equipo.usuario.id', read_only=True)
     
     class Meta:
         model = Jugador
-        fields = [
-            'id', 'nombre', 'posicion', 'posicion_display', 
-            'valor', 'puntos_totales', 'equipo_real', 'equipo_real_nombre',
-            'equipo', 'en_banquillo', 'en_venta', 'fecha_mercado', 
-        ]
+        fields = ['id', 'nombre', 'posicion', 'valor', 'precio_venta', 'en_venta', 
+                 'fecha_mercado', 'equipo_nombre', 'usuario_vendedor', 'usuario_vendedor_id',
+                 'puntos_totales', 'en_banquillo']
 
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
@@ -147,20 +146,6 @@ class PartidoSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"El equipo {equipo_visitante.nombre} ya tiene un partido como local en esta jornada.")
 
         return data
-
-class AlineacionSerializer(serializers.ModelSerializer):
-
-    portero_titular_info = JugadorSerializer(source='portero_titular', read_only=True)
-    defensa1_titular_info = JugadorSerializer(source='defensa1_titular', read_only=True)
-    defensa2_titular_info = JugadorSerializer(source='defensa2_titular', read_only=True)
-    delantero1_titular_info = JugadorSerializer(source='delantero1_titular', read_only=True)
-    delantero2_titular_info = JugadorSerializer(source='delantero2_titular', read_only=True)
-    banquillo_info = JugadorSerializer(source='banquillo', many=True, read_only=True)
-    total_titulares = serializers.ReadOnlyField()
-    
-    class Meta:
-        model = Alineacion
-        fields = '__all__'
 
 class FicharJugadorSerializer(serializers.Serializer):
     jugador_id = serializers.IntegerField()
