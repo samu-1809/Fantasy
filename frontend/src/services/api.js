@@ -342,3 +342,109 @@ export const asignarPuntos = async (jornadaId, puntos) => {
   });
   return handleResponse(response);
 };
+
+// ==================== SISTEMA DE SUBASTAS Y OFERTAS ====================
+
+/**
+ * Pujar/Ofertar por un jugador
+ * - Si el jugador NO tiene equipo → Crea PUJA (subasta)
+ * - Si el jugador SÍ tiene equipo → Crea OFERTA (propuesta al dueño)
+ */
+export const pujarJugador = async (equipoId, jugadorId, monto) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/pujar_jugador/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      jugador_id: jugadorId,
+      monto: monto
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Error al pujar' }));
+    throw new Error(errorData.error || 'Error al realizar la puja/oferta');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Obtener ofertas recibidas (pendientes) por mi equipo
+ */
+export const getOfertasRecibidas = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/ofertas_recibidas/`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al cargar ofertas recibidas');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Obtener ofertas realizadas por mi equipo
+ */
+export const getOfertasRealizadas = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/ofertas_realizadas/`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al cargar ofertas realizadas');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Aceptar una oferta recibida
+ */
+export const aceptarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/aceptar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Error al aceptar oferta' }));
+    throw new Error(errorData.error || 'Error al aceptar la oferta');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Rechazar una oferta recibida
+ */
+export const rechazarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/rechazar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Error al rechazar oferta' }));
+    throw new Error(errorData.error || 'Error al rechazar la oferta');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Retirar una oferta realizada (solo si está pendiente)
+ */
+export const retirarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/retirar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Error al retirar oferta' }));
+    throw new Error(errorData.error || 'Error al retirar la oferta');
+  }
+
+  return await response.json();
+};
