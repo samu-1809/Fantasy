@@ -1,10 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
-
-class FicharJugadorSerializer(serializers.Serializer):
-    jugador_id = serializers.IntegerField()
-    en_banquillo = serializers.BooleanField(required=False, allow_null=True)
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion, Oferta, Puja
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -172,3 +168,54 @@ class FicharJugadorSerializer(serializers.Serializer):
 
 class VenderJugadorSerializer(serializers.Serializer):
     jugador_id = serializers.IntegerField()
+    precio_venta = serializers.IntegerField(required=False, allow_null=True)
+    
+    def validate_precio_venta(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("El precio de venta debe ser mayor a 0")
+        return value
+
+class OfertaSerializer(serializers.ModelSerializer):
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+    jugador_posicion = serializers.CharField(source='jugador.posicion', read_only=True)
+    jugador_equipo = serializers.CharField(source='jugador.equipo.nombre', read_only=True)
+    equipo_ofertante_nombre = serializers.CharField(source='equipo_ofertante.nombre', read_only=True)
+    equipo_receptor_nombre = serializers.CharField(source='equipo_receptor.nombre', read_only=True)
+    
+    class Meta:
+        model = Oferta
+        fields = [
+            'id', 'jugador', 'jugador_nombre', 'jugador_posicion', 'jugador_equipo',
+            'equipo_ofertante', 'equipo_ofertante_nombre', 'equipo_receptor', 'equipo_receptor_nombre',
+            'monto', 'estado', 'fecha_oferta', 'fecha_respuesta'
+        ]
+
+class PujaSerializer(serializers.ModelSerializer):
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+    jugador_posicion = serializers.CharField(source='jugador.posicion', read_only=True)
+    jugador_equipo_real_nombre = serializers.CharField(source='jugador.equipo_real.nombre', read_only=True)
+    
+    class Meta:
+        model = Puja
+        fields = [
+            'id', 'jugador', 'jugador_nombre', 'jugador_posicion', 
+            'jugador_equipo_real_nombre', 'equipo', 'equipo_nombre', 
+            'monto', 'fecha_puja', 'es_ganadora'
+        ]
+
+class JugadorMercadoSerializer(serializers.ModelSerializer):
+    equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
+    pujador_actual = serializers.CharField(source='equipo_pujador.nombre', read_only=True)
+    expirado = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Jugador
+        fields = [
+            'id', 'nombre', 'posicion', 'equipo_real', 'equipo_real_nombre', 
+            'valor', 'puntos_totales', 'en_mercado', 'fecha_mercado',
+            'precio_venta', 'puja_actual', 'pujador_actual', 'expirado'
+        ]
+    
+    def get_expirado(self, obj):
+        return obj.expirado

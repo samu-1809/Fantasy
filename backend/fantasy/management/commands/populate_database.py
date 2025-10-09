@@ -4,6 +4,7 @@ from fantasy.models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoRea
 import random
 from datetime import datetime, timedelta
 from decimal import Decimal
+from django.utils import timezone
 
 class Command(BaseCommand):
     help = 'Poblar la base de datos con datos de prueba extensos'
@@ -11,8 +12,8 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('🏗️ Creando datos de prueba extensos...')
 
-        # Limpiar datos existentes (opcional - cuidado en producción)
-        # self.clean_database()
+        # Limpiar datos existentes
+        self.clean_database()
 
         # Crear liga principal
         liga = self.crear_liga()
@@ -23,8 +24,14 @@ class Command(BaseCommand):
         # Crear JUGADORES con los nombres proporcionados
         total_jugadores = self.crear_jugadores_proporcionados(equipos_reales)
         
+        # 🆕 PONER JUGADORES EN EL MERCADO
+        self.poner_jugadores_en_mercado()
+        
         # Crear usuario admin
         self.crear_usuario_admin()
+        
+        # Crear algunos usuarios de prueba con equipos
+        self.crear_usuarios_y_equipos_prueba(liga)
         
         # Crear jornadas y partidos
         self.crear_calendario_completo(liga, equipos_reales)
@@ -33,11 +40,14 @@ class Command(BaseCommand):
         self.mostrar_estadisticas()
 
     def clean_database(self):
-        """Opcional: Limpiar base de datos (CUIDADO en producción)"""
+        """Limpiar base de datos"""
         self.stdout.write('🧹 Limpiando base de datos...')
         Jugador.objects.all().delete()
         Equipo.objects.all().delete()
         User.objects.filter(is_superuser=False).delete()
+        EquipoReal.objects.all().delete()
+        Liga.objects.all().delete()
+        Jornada.objects.all().delete()
 
     def crear_liga(self):
         """Crear liga principal"""
@@ -139,20 +149,22 @@ class Command(BaseCommand):
                 
                 # Asignar valor según posición
                 if posicion == 'POR':
-                    valor = round(random.uniform(1000000, 5000000), 2)
+                    valor = random.randint(1000000, 5000000)
                 elif posicion == 'DEF':
-                    valor = round(random.uniform(500000, 8000000), 2)
+                    valor = random.randint(500000, 8000000)
                 else:  # DEL
-                    valor = round(random.uniform(1000000, 15000000), 2)
+                    valor = random.randint(1000000, 15000000)
                 
-                # Crear jugador
+                # Crear jugador - 🆕 TODOS los jugadores comienzan SIN equipo
                 jugador = Jugador.objects.create(
                     nombre=nombre_limpio,
                     posicion=posicion,
                     valor=valor,
                     puntos_totales=random.randint(0, 80),
                     equipo_real=equipo_real,
-                    en_venta=False
+                    equipo=None,  # 🆕 IMPORTANTE: Sin equipo fantasy
+                    en_venta=False,  # Por defecto no en venta
+                    en_banquillo=True
                 )
                 
                 jugadores_creados += 1
@@ -162,10 +174,98 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'\n🎉 Total jugadores creados: {jugadores_creados}'))
         return jugadores_creados
 
+    def poner_jugadores_en_mercado(self):
+        """Poner jugadores libres en el mercado automáticamente"""
+        self.stdout.write('\n🏪 Poniendo jugadores en el mercado...')
+        
+        # 🆕 Obtener jugadores libres (sin equipo fantasy)
+        jugadores_libres = Jugador.objects.filter(equipo__isnull=True)
+        
+        # 🆕 Seleccionar al menos 12 jugadores aleatorios para poner en el mercado
+        num_jugadores_mercado = min(12, jugadores_libres.count())
+        jugadores_para_mercado = random.sample(list(jugadores_libres), num_jugadores_mercado)
+        
+        for jugador in jugadores_para_mercado:
+            jugador.en_venta = True
+            jugador.fecha_mercado = timezone.now()
+            jugador.save()
+            self.stdout.write(f'   ✅ {jugador.nombre} puesto en mercado - {jugador.posicion} - €{jugador.valor:,}')
+        
+        self.stdout.write(self.style.SUCCESS(f'🎯 {num_jugadores_mercado} jugadores puestos en el mercado'))
+
+    def crear_usuarios_y_equipos_prueba(self, liga):
+        """Crear algunos usuarios de prueba con equipos"""
+        self.stdout.write('\n👥 Creando usuarios de prueba...')
+        
+        usuarios_prueba = [
+            {'username': 'aaa', 'email': 'manager1@test.com', 'equipo_nombre': 'Los Tigres'},
+            {'username': 'aaaa', 'email': 'manager2@test.com', 'equipo_nombre': 'Dragones FC'},
+        ]
+        
+        for usuario_data in usuarios_prueba:
+            try:
+                user = User.objects.create_user(
+                    username=usuario_data['username'],
+                    email=usuario_data['email'],
+                    password='aaaaaa'
+                )
+                
+                # Crear equipo para el usuario
+                equipo = Equipo.objects.create(
+                    usuario=user,
+                    liga=liga,
+                    nombre=usuario_data['equipo_nombre'],
+                    presupuesto=50000000
+                )
+                
+                # 🆕 ASIGNAR JUGADORES A ESTE EQUIPO (máximo 7)
+                self.asignar_jugadores_a_equipo(equipo)
+                
+                self.stdout.write(self.style.SUCCESS(f'   ✅ Usuario {usuario_data["username"]} creado con equipo'))
+                
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f'   ⚠ Error creando usuario {usuario_data["username"]}: {e}'))
+
+    def asignar_jugadores_a_equipo(self, equipo):
+        """Asignar jugadores libres a un equipo (1 POR, 3 DEF, 3 DEL)"""
+        # 🆕 Buscar jugadores libres por posición
+        portero = Jugador.objects.filter(
+            equipo__isnull=True, 
+            posicion='POR'
+        ).order_by('?').first()
+        
+        defensas = Jugador.objects.filter(
+            equipo__isnull=True, 
+            posicion='DEF'
+        ).order_by('?')[:3]
+        
+        delanteros = Jugador.objects.filter(
+            equipo__isnull=True, 
+            posicion='DEL'
+        ).order_by('?')[:3]
+        
+        # Asignar jugadores al equipo
+        if portero:
+            portero.equipo = equipo
+            portero.en_banquillo = False  # Portero titular
+            portero.save()
+        
+        for defensa in defensas:
+            if defensa:
+                defensa.equipo = equipo
+                defensa.en_banquillo = random.choice([True, False])  # Aleatorio banquillo/campo
+                defensa.save()
+        
+        for delantero in delanteros:
+            if delantero:
+                delantero.equipo = equipo
+                delantero.en_banquillo = random.choice([True, False])  # Aleatorio banquillo/campo
+                delantero.save()
+
     def crear_usuario_admin(self):
         """Crear usuario administrador"""
         user, created = User.objects.get_or_create(
-            username='admin',
+            username='admin1',
             defaults={
                 'email': 'admin@fantasy.com',
                 'is_staff': True,
@@ -173,7 +273,7 @@ class Command(BaseCommand):
             }
         )
         if created:
-            user.set_password('admin')
+            user.set_password('admin1')
             user.save()
             self.stdout.write(self.style.SUCCESS('✓ Usuario admin creado: admin / admin'))
         else:
@@ -198,14 +298,14 @@ class Command(BaseCommand):
         equipos_mezclados = equipos_reales.copy()
         random.shuffle(equipos_mezclados)
         
-        # Crear partidos (máximo 8 partidos por jornada)
-        for i in range(0, min(len(equipos_mezclados), 16), 2):
+        # Crear partidos (máximo 4 partidos por jornada)
+        for i in range(0, min(len(equipos_mezclados), 8), 2):
             if i + 1 < len(equipos_mezclados):
                 local = equipos_mezclados[i]
                 visitante = equipos_mezclados[i + 1]
                 
                 # Fecha aleatoria en el futuro
-                fecha_base = datetime.now() + timedelta(days=random.randint(1, 60))
+                fecha_base = timezone.now() + timedelta(days=random.randint(1, 60))
                 
                 partido, created = Partido.objects.get_or_create(
                     jornada=jornada,
@@ -228,37 +328,46 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('📊 ESTADÍSTICAS FINALES DE LA BASE DE DATOS'))
         self.stdout.write('='*60)
         
+        # 🆕 Estadísticas mejoradas del mercado
+        jugadores_en_mercado = Jugador.objects.filter(en_venta=True)
+        jugadores_libres = Jugador.objects.filter(equipo__isnull=True)
+        jugadores_libres_en_mercado = jugadores_libres.filter(en_venta=True)
+        
         stats = {
             'Usuarios': User.objects.count(),
             'Ligas': Liga.objects.count(),
             'Equipos Reales': EquipoReal.objects.count(),
             'Jugadores Totales': Jugador.objects.count(),
-            'Jugadores Disponibles': Jugador.objects.filter(equipo__isnull=True).count(),
+            'Jugadores Libres (sin equipo)': jugadores_libres.count(),
+            'Jugadores en Equipos': Jugador.objects.filter(equipo__isnull=False).count(),
+            'JUGADORES EN MERCADO': jugadores_en_mercado.count(),
+            'Jugadores Libres en Mercado': jugadores_libres_en_mercado.count(),
             'Equipos Fantasy': Equipo.objects.count(),
             'Jornadas': Jornada.objects.count(),
             'Partidos': Partido.objects.count(),
         }
         
         for item, cantidad in stats.items():
-            self.stdout.write(self.style.SUCCESS(f'   • {item}: {cantidad}'))
+            if 'MERCADO' in item:
+                self.stdout.write(self.style.SUCCESS(f'   🎯 {item}: {cantidad}'))
+            else:
+                self.stdout.write(self.style.SUCCESS(f'   • {item}: {cantidad}'))
         
         # Estadísticas de jugadores por posición
-        self.stdout.write('\n🎯 JUGADORES POR POSICIÓN:')
+        self.stdout.write('\n🎯 JUGADORES EN MERCADO POR POSICIÓN:')
         for posicion in ['POR', 'DEF', 'DEL']:
-            count = Jugador.objects.filter(posicion=posicion).count()
-            disponibles = Jugador.objects.filter(posicion=posicion, equipo__isnull=True).count()
-            self.stdout.write(f'   • {posicion}: {count} totales, {disponibles} disponibles')
+            count_total = jugadores_en_mercado.filter(posicion=posicion).count()
+            count_libres = jugadores_libres_en_mercado.filter(posicion=posicion).count()
+            self.stdout.write(f'   • {posicion}: {count_total} totales, {count_libres} libres')
         
-        # Rango de precios de jugadores disponibles
-        jugadores_disponibles = Jugador.objects.filter(equipo__isnull=True)
-        if jugadores_disponibles.exists():
-            precios = [float(j.valor) for j in jugadores_disponibles]
-            self.stdout.write(f'\n💰 RANGO DE PRECIOS: €{min(precios):,.0f} - €{max(precios):,.0f}')
+        # Rango de precios de jugadores en mercado
+        if jugadores_en_mercado.exists():
+            precios = [j.valor for j in jugadores_en_mercado]
+            self.stdout.write(f'\n💰 RANGO DE PRECIOS EN MERCADO: €{min(precios):,} - €{max(precios):,}')
             self.stdout.write(f'   Precio promedio: €{sum(precios)/len(precios):,.0f}')
         
         self.stdout.write('\n🎮 INSTRUCCIONES PARA PROBAR:')
-        self.stdout.write('   1. Registra nuevos usuarios → Se crearán equipos automáticamente')
-        self.stdout.write('   2. Cada equipo tendrá 7 jugadores (1 POR, 3 DEF, 3 DEL)')
+        self.stdout.write('   1. Login con: admin/admin o manager1/password123')
+        self.stdout.write('   2. Ve al mercado → Deberías ver jugadores disponibles')
         self.stdout.write('   3. Presupuesto inicial: €50M')
-        self.stdout.write('   4. Los equipos cuestan entre €25M-€30M')
-        self.stdout.write('   5. ¡Puedes crear muchos equipos diferentes!')
+        self.stdout.write('   4. ¡Puja por los jugadores que quieras!')

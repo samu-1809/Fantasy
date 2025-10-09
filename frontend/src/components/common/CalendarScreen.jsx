@@ -102,7 +102,6 @@ const CalendarScreen = () => {
           {partidos.map((partido) => (
             <div key={partido.id} className="bg-white rounded-lg shadow p-4 border">
               <div className="text-center mb-4">
-                <div className="text-sm text-gray-500">Jornada {partido.jornada_numero}</div>
                 <div className="text-xs text-gray-400">
                   {partido.fecha ? new Date(partido.fecha).toLocaleDateString() : 'Fecha por definir'}
                 </div>

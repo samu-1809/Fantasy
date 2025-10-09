@@ -1,15 +1,33 @@
 const API_URL = 'http://127.0.0.1:8000/api';
 
-// ==================== UTILIDADES ====================
+// ==================== UTENTICACIÓN ====================
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('access_token');
+  let token = localStorage.getItem('access_token');
+  
+  // Si no hay token, intenta obtenerlo de diferentes formas
+  if (!token) {
+    console.warn('⚠️ No se encontró access_token en localStorage');
+    
+    // Verifica si hay un token en sessionStorage o cookies
+    token = sessionStorage.getItem('access_token') || 
+            document.cookie.match(/access_token=([^;]+)/)?.[1];
+    
+    if (token) {
+      console.log('✅ Token encontrado en sessionStorage/cookies');
+      localStorage.setItem('access_token', token);
+    }
+  }
+  
   const headers = {
     'Content-Type': 'application/json',
   };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    console.log('✅ Token añadido a headers');
+  } else {
+    console.error('❌ No hay token disponible');
   }
 
   return headers;
@@ -140,15 +158,23 @@ export const cargarDatosIniciales = async (usuario) => {
           throw new Error("No se pudo cargar el equipo del usuario");
         }
         
+        // 🆕 MEJORA: Asegurarnos de que el equipo tenga liga_id
+        const equipoConLiga = {
+          ...datos.equipo,
+          liga_id: datos.equipo.liga_id || datos.liga_id || 1 // Prioridad: equipo.liga_id > datos.liga_id > default 1
+        };
+        
+        console.log("🏆 Equipo con liga_id:", equipoConLiga.liga_id);
+        
         return {
           usuario,
           ligaActual: {
-            id: datos.liga_id || 1,
+            id: datos.liga_id || equipoConLiga.liga_id || 1,
             nombre: "Liga Principal",
             jornada_actual: 1
           },
           jugadores: datos.jugadores || [],
-          equipo: datos.equipo,
+          equipo: equipoConLiga, // 🆕 Usar equipo con liga_id asegurado
           mercado: datos.mercado || [],
           clasificacion: datos.clasificacion || [],
           presupuesto: datos.equipo.presupuesto || 0
@@ -173,7 +199,7 @@ export const cargarDatosIniciales = async (usuario) => {
   }
 };
 
-// 🆕 FUNCIÓN DE FALLBACK PARA CARGA MANUAL
+// 🆕 FUNCIÓN DE FALLBACK PARA CARGA MANUAL - MEJORADA
 const cargarDatosManual = async (usuario) => {
   try {
     console.log("🔍 Iniciando carga manual de datos...");
@@ -182,7 +208,7 @@ const cargarDatosManual = async (usuario) => {
     try {
       console.log("🔄 Obteniendo equipo con /mi-equipo/...");
       equipoData = await getMiEquipo();
-      console.log("✅ Equipo obtenido:", equipoData ? "SÍ" : "NO");
+      console.log("✅ Equipo obtenido:", equipoData);
     } catch (error) {
       console.error("❌ Error obteniendo equipo:", error);
     }
@@ -191,7 +217,7 @@ const cargarDatosManual = async (usuario) => {
       try {
         console.log("🔄 Buscando equipo por usuario ID...");
         equipoData = await getEquipo(usuario.id);
-        console.log("✅ Equipo por usuario:", equipoData ? "SÍ" : "NO");
+        console.log("✅ Equipo por usuario:", equipoData);
       } catch (error) {
         console.error("❌ Error buscando equipo por usuario:", error);
       }
@@ -204,15 +230,22 @@ const cargarDatosManual = async (usuario) => {
         nombre: "Mi Equipo",
         presupuesto: 50000000,
         jugadores: [],
-        liga: 1
+        liga: 1,
+        liga_id: 1 // 🆕 Asegurar liga_id por defecto
       };
     }
     
+    // 🆕 Asegurar que el equipo tenga liga_id
+    const equipoConLiga = {
+      ...equipoData,
+      liga_id: equipoData.liga_id || equipoData.liga || 1
+    };
+    
     let jugadoresDelEquipo = [];
-    if (equipoData.id) {
+    if (equipoConLiga.id) {
       try {
         console.log("🔄 Cargando jugadores del equipo...");
-        jugadoresDelEquipo = await getJugadoresPorEquipo(equipoData.id);
+        jugadoresDelEquipo = await getJugadoresPorEquipo(equipoConLiga.id);
         console.log(`✅ ${jugadoresDelEquipo.length} jugadores cargados`);
       } catch (error) {
         console.error("❌ Error cargando jugadores:", error);
@@ -223,8 +256,8 @@ const cargarDatosManual = async (usuario) => {
     let clasificacionData = [];
     
     try {
-      console.log("🔄 Cargando mercado...");
-      const ligaId = equipoData.liga || 1;
+      console.log("🔄 Cargando mercado y clasificación...");
+      const ligaId = equipoConLiga.liga_id;
       mercadoData = await getMercado(ligaId);
       clasificacionData = await getClasificacion(ligaId);
       console.log(`✅ ${mercadoData.length} jugadores en mercado, ${clasificacionData.length} equipos en clasificación`);
@@ -235,15 +268,15 @@ const cargarDatosManual = async (usuario) => {
     return {
       usuario,
       ligaActual: {
-        id: equipoData.liga || 1,
+        id: equipoConLiga.liga_id,
         nombre: "Liga Principal",
         jornada_actual: 1
       },
       jugadores: jugadoresDelEquipo,
-      equipo: equipoData,
+      equipo: equipoConLiga, // 🆕 Usar equipo con liga_id asegurado
       mercado: mercadoData,
       clasificacion: clasificacionData,
-      presupuesto: equipoData.presupuesto || 50000000
+      presupuesto: equipoConLiga.presupuesto || 50000000
     };
     
   } catch (error) {
@@ -310,7 +343,7 @@ export const getEquipo = async (userId) => {
     }
     
     const data = await response.json();
-    console.log(`📦 [Alternativa] Equipos encontrados: ${data.length}`);
+    console.log(`📦 [Alternativa] Equipos encontrados:`, data);
     return data.length > 0 ? data[0] : null;
   } catch (error) {
     console.error('Error obteniendo equipo por usuario:', error);
@@ -364,29 +397,6 @@ export const crearEquipo = async (equipoData) => {
 };
 
 // ==================== OPERACIONES DE EQUIPO ====================
-
-export const ficharJugador = async (equipoId, jugadorId) => {
-  const response = await fetch(`${API_URL}/equipos/${equipoId}/fichar_jugador/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ jugador_id: jugadorId }),
-  });
-
-  if (response.ok) {
-    const data = await response.json();
-    return data;
-  } else {
-    const errorText = await response.text();
-    console.error('❌ Error del servidor:', errorText);
-    
-    try {
-      const errorData = JSON.parse(errorText);
-      throw new Error(errorData.error || 'Error al fichar jugador');
-    } catch {
-      throw new Error(errorText || 'Error al fichar jugador');
-    }
-  }
-};
 
 export const intercambiarJugadores = async (equipoId, jugadorOrigenId, jugadorDestinoId) => {
   console.log(`🔍 Llamando API intercambiarJugadores:`);
@@ -471,15 +481,41 @@ export const venderJugador = async (equipoId, jugadorId, precio) => {
 // ==================== MERCADO ====================
 
 export const getMercado = async (ligaId) => {
-  const response = await fetch(`${API_URL}/mercado/?liga_id=${ligaId}`);
+  console.log('🔐 Token en localStorage:', localStorage.getItem('access_token'));
+  console.log('🔍 Llamando a:', `${API_URL}/mercado/?liga_id=${ligaId}`);
+  
+  const headers = getAuthHeaders();
+  console.log('📤 Headers enviados:', headers);
+  
+  const response = await fetch(`${API_URL}/mercado/?liga_id=${ligaId}`, {
+    headers: headers
+  });
+  
+  console.log('📥 Status response:', response.status);
+  console.log('📥 Response ok:', response.ok);
+  
   return handleResponse(response);
 };
 
 // ==================== CLASIFICACIÓN ====================
 
 export const getClasificacion = async (ligaId) => {
-  const response = await fetch(`${API_URL}/clasificacion/?liga_id=${ligaId}`);
-  return handleResponse(response);
+  try {
+    console.log(`🏆 Obteniendo clasificación para liga_id: ${ligaId}`);
+    const response = await fetch(`${API_URL}/clasificacion/?liga_id=${ligaId}`);
+    
+    if (!response.ok) {
+      console.error(`❌ Error HTTP ${response.status} obteniendo clasificación`);
+      throw new Error(`Error obteniendo clasificación: ${response.status}`);
+    }
+    
+    const clasificacion = await response.json();
+    console.log(`✅ Clasificación obtenida: ${clasificacion.length} equipos`);
+    return clasificacion;
+  } catch (error) {
+    console.error('❌ Error en getClasificacion:', error);
+    throw error;
+  }
 };
 
 // ==================== JORNADAS Y PARTIDOS ====================
@@ -593,4 +629,174 @@ export const asignarPuntos = async (jornadaId, puntos) => {
     body: JSON.stringify({ jornada_id: jornadaId, puntos }),
   });
   return handleResponse(response);
+};
+
+// ==================== SISTEMA DE SUBASTAS ====================
+
+export const pujarJugador = async (equipoId, jugadorId, montoPuja) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/pujar_jugador/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ 
+      jugador_id: jugadorId, 
+      monto_puja: montoPuja 
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al realizar la puja');
+  }
+
+  return await response.json();
+};
+
+export const getOfertasRecibidas = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/ofertas_recibidas/`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al cargar ofertas recibidas');
+  }
+  
+  return await response.json();
+};
+
+export const getOfertasRealizadas = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/ofertas_realizadas/`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al cargar ofertas realizadas');
+  }
+  
+  return await response.json();
+};
+
+export const aceptarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/aceptar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al aceptar la oferta');
+  }
+  
+  return await response.json();
+};
+
+export const rechazarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/rechazar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al rechazar la oferta');
+  }
+  
+  return await response.json();
+};
+
+export const ponerJugadorEnVenta = async (equipoId, jugadorId, precioVenta = null) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/poner-en-venta/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ 
+      precio_venta: precioVenta 
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al poner jugador en venta');
+  }
+
+  return await response.json();
+};
+
+export const quitarJugadorDelMercado = async (equipoId, jugadorId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/quitar-del-mercado/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al quitar jugador del mercado');
+  }
+
+  return await response.json();
+};
+
+
+export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
+  console.log(`🎯 Realizando puja:`, {
+    equipoId,
+    jugadorId, 
+    montoPuja
+  });
+
+  try {
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/pujar_jugador/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ 
+        jugador_id: jugadorId,
+        monto_puja: montoPuja
+      }),
+    });
+
+    console.log(`📊 Status response: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ Puja exitosa:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('❌ Error en realizarPuja:', error);
+    throw error;
+  }
+};
+
+// Obtener pujas realizadas por un equipo
+export const getPujasRealizadas = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/pujas_realizadas/`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Error al cargar pujas realizadas');
+  }
+  
+  return await response.json();
+};
+
+// Retirar una puja
+export const retirarPuja = async (pujaId) => {
+  const response = await fetch(`${API_URL}/pujas/${pujaId}/retirar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al retirar puja');
+  }
+  
+  return await response.json();
 };

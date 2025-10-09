@@ -1,12 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Users, RefreshCw } from 'lucide-react';
-import { actualizarEstadosBanquillo, getCurrentUser, cargarDatosIniciales, intercambiarJugadores, venderJugador } from '../../services/api';
+import { Users, RefreshCw, Trophy } from 'lucide-react';
+import { 
+  actualizarEstadosBanquillo, 
+  getCurrentUser, 
+  cargarDatosIniciales, 
+  intercambiarJugadores, 
+  venderJugador,
+  getClasificacion 
+} from '../../services/api';
 import FieldView from './FieldView';
 
 const DashboardScreen = ({ datosUsuario }) => {
   const [equipoActual, setEquipoActual] = useState(datosUsuario?.equipo || null);
   const [loading, setLoading] = useState(false);
+  const [loadingAlineacion, setLoadingAlineacion] = useState(false);
+  const [loadingPosicion, setLoadingPosicion] = useState(false);
   const [error, setError] = useState(null);
+  const [posicionLiga, setPosicionLiga] = useState(null);
   
   // Estados para gestión de cambios
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
@@ -24,10 +34,84 @@ const DashboardScreen = ({ datosUsuario }) => {
   const [banquillo, setBanquillo] = useState([]);
   const [alineacionCargada, setAlineacionCargada] = useState(false);
 
-  // DashboardScreen.jsx - Manejar mejor el estado
+  // Effect para cargar la posición en la liga - CORREGIDO
+  useEffect(() => {
+    const cargarPosicionLiga = async () => {
+      console.log('🏆 Intentando cargar posición en liga...');
+      
+      // 🆕 BUSCAR LIGA_ID EN MÚLTIPLES UBICACIONES
+      const ligaId = equipoActual?.liga_id || datosUsuario?.ligaActual?.id;
+      
+      console.log('   Equipo actual:', equipoActual);
+      console.log('   Liga ID from equipo:', equipoActual?.liga_id);
+      console.log('   Liga ID from datosUsuario:', datosUsuario?.ligaActual?.id);
+      console.log('   Liga ID final:', ligaId);
+      
+      if (!ligaId) {
+        console.log('❌ No hay liga_id disponible');
+        setPosicionLiga(null);
+        return;
+      }
+      
+      setLoadingPosicion(true);
+      try {
+        console.log(`📡 Obteniendo clasificación para liga_id: ${ligaId}`);
+        const clasificacion = await getClasificacion(ligaId);
+        console.log('📊 Clasificación obtenida:', clasificacion);
+        
+        if (!clasificacion || !Array.isArray(clasificacion)) {
+          console.log('❌ Clasificación no es un array válido');
+          setPosicionLiga(null);
+          return;
+        }
+        
+        // Buscar la posición del equipo actual en la clasificación
+        const equipoEnClasificacion = clasificacion.find(
+          equipo => equipo.equipo_id === equipoActual?.id
+        );
+        
+        if (equipoEnClasificacion) {
+          console.log(`✅ Equipo encontrado en posición: ${equipoEnClasificacion.posicion}`);
+          setPosicionLiga(equipoEnClasificacion.posicion);
+        } else {
+          console.log('⚠️ Equipo no encontrado en la clasificación por ID. Buscando por nombre...');
+          // Intentar buscar por nombre como fallback
+          const equipoPorNombre = clasificacion.find(
+            equipo => equipo.nombre_equipo === equipoActual?.nombre
+          );
+          if (equipoPorNombre) {
+            console.log(`✅ Equipo encontrado por nombre en posición: ${equipoPorNombre.posicion}`);
+            setPosicionLiga(equipoPorNombre.posicion);
+          } else {
+            console.log('❌ Equipo no encontrado en clasificación (ni por ID ni por nombre)');
+            setPosicionLiga(null);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error cargando posición en liga:', error);
+        setPosicionLiga(null);
+      } finally {
+        setLoadingPosicion(false);
+      }
+    };
+
+    // 🆕 SOLO CARGAR SI TENEMOS EQUIPO Y LIGA_ID
+    const ligaId = equipoActual?.liga_id || datosUsuario?.ligaActual?.id;
+    if (equipoActual && equipoActual.id && ligaId) {
+      cargarPosicionLiga();
+    } else {
+      console.log('⏸️  No se puede cargar posición: falta equipo o liga_id');
+      console.log('   Equipo:', equipoActual ? 'SÍ' : 'NO');
+      console.log('   Equipo ID:', equipoActual?.id ? 'SÍ' : 'NO');
+      console.log('   Liga ID:', ligaId ? 'SÍ' : 'NO');
+      setPosicionLiga(null);
+    }
+  }, [equipoActual, datosUsuario]);
+
+  // 🆕 EFFECT MEJORADO PARA CARGAR ALINEACIÓN
   useEffect(() => {
     const cargarAlineacion = async () => {
-      // 🎯 MEJORADO: Verificar que tenemos datos completos
+      // Verificar que tenemos datos completos
       if (!datosUsuario) {
         console.log('❌ No hay datosUsuario cargados');
         return;
@@ -43,7 +127,7 @@ const DashboardScreen = ({ datosUsuario }) => {
         return;
       }
 
-      console.log('🔄 Cargando alineación...');
+      console.log('🔄 Cargando alineación desde datosUsuario...');
       setLoadingAlineacion(true);
       try {
         await determinarAlineacion();
@@ -58,25 +142,49 @@ const DashboardScreen = ({ datosUsuario }) => {
     cargarAlineacion();
   }, [datosUsuario]);
 
-  // Recargar datos del equipo
+  // Recargar datos del equipo - CORREGIDO
   const recargarDatosEquipo = async () => {
     try {
       console.log('🔄 Recargando datos del equipo...');
+      setLoading(true);
       const userData = await getCurrentUser();
       const nuevosDatos = await cargarDatosIniciales(userData);
       
+      console.log('✅ Nuevos datos recibidos:', nuevosDatos);
+      
+      // 🆕 ACTUALIZAR ESTADO PRINCIPAL
       setEquipoActual(nuevosDatos.equipo);
+      
+      // 🆕 ACTUALIZAR ALINEACIÓN INMEDIATAMENTE
+      if (nuevosDatos.equipo && nuevosDatos.jugadores) {
+        console.log('🔄 Actualizando alineación con nuevos datos...');
+        await determinarAlineacionConDatos(nuevosDatos.equipo.jugadores || nuevosDatos.jugadores, nuevosDatos.equipo.id);
+      }
+      
       console.log('✅ Datos recargados correctamente');
       return nuevosDatos;
     } catch (error) {
       console.error('❌ Error recargando datos:', error);
+      setError(error.message);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Determinar alineación
-  const determinarAlineacion = async (jugadores, equipoId) => {
-    console.log('🎯 Determinando alineación...');
+  // 🆕 FUNCIÓN MEJORADA PARA DETERMINAR ALINEACIÓN
+  const determinarAlineacion = async () => {
+    if (!datosUsuario?.equipo || !datosUsuario?.jugadores) {
+      console.log('❌ No hay datos para determinar alineación');
+      return;
+    }
+
+    await determinarAlineacionConDatos(datosUsuario.jugadores, datosUsuario.equipo.id);
+  };
+
+  // 🆕 FUNCIÓN REUTILIZABLE PARA DETERMINAR ALINEACIÓN
+  const determinarAlineacionConDatos = async (jugadores, equipoId) => {
+    console.log('🎯 Determinando alineación con datos...');
     
     const portero = jugadores.find(j => j.posicion === 'POR');
     const defensas = jugadores.filter(j => j.posicion === 'DEF');
@@ -133,40 +241,15 @@ const DashboardScreen = ({ datosUsuario }) => {
       console.error('❌ Error sincronizando estados:', error);
     }
 
-    return {
-      portero_titular,
-      defensas_titulares,
-      delanteros_titulares,
-      banquillo
-    };
+    // 🆕 ACTUALIZAR ESTADOS DE ALINEACIÓN
+    setPorteroTitular(portero_titular);
+    setDefensasTitulares(defensas_titulares);
+    setDelanterosTitulares(delanteros_titulares);
+    setBanquillo(banquillo);
+    setAlineacionCargada(true);
   };
 
-  // Effect para cargar la alineación cuando cambia el equipo
-  useEffect(() => {
-    const cargarAlineacion = async () => {
-      if (equipoActual && equipoActual.jugadores) {
-        try {
-          console.log('🔄 Cargando alineación...');
-          const alineacion = await determinarAlineacion(equipoActual.jugadores, equipoActual.id);
-          
-          setPorteroTitular(alineacion.portero_titular);
-          setDefensasTitulares(alineacion.defensas_titulares);
-          setDelanterosTitulares(alineacion.delanteros_titulares);
-          setBanquillo(alineacion.banquillo);
-          setAlineacionCargada(true);
-          
-          console.log('✅ Alineación cargada correctamente');
-        } catch (error) {
-          console.error('❌ Error cargando alineación:', error);
-          setAlineacionCargada(true);
-        }
-      }
-    };
-
-    cargarAlineacion();
-  }, [equipoActual]);
-
-  // Funciones de gestión de jugadores
+  // Funciones de gestión de jugadores - REVISADAS
   const handleClicJugador = (jugador) => {
     if (modoCambio && jugadorOrigenCambio) {
       realizarCambio(jugadorOrigenCambio, jugador);
@@ -188,10 +271,18 @@ const DashboardScreen = ({ datosUsuario }) => {
     setJugadorOrigenCambio(null);
   };
 
+  // 🆕 FUNCIÓN REALIZAR CAMBIO MEJORADA
   const realizarCambio = async (origen, destino) => {
     console.log('🔄 REALIZAR CAMBIO - Datos completos:');
     console.log('   Origen:', origen);
     console.log('   Destino:', destino);
+    console.log('   Equipo ID:', equipoActual?.id);
+    
+    if (!equipoActual?.id) {
+      alert('❌ Error: No se pudo identificar el equipo');
+      cancelarModoCambio();
+      return;
+    }
     
     if (origen.posicion !== destino.posicion) {
       alert(`❌ No puedes cambiar un ${origen.posicion} por un ${destino.posicion}. Deben ser de la misma posición.`);
@@ -203,7 +294,7 @@ const DashboardScreen = ({ datosUsuario }) => {
       console.log('📡 Llamando a intercambiarJugadores...');
       await intercambiarJugadores(equipoActual.id, origen.id, destino.id);
       
-      console.log('🔄 Recargando datos...');
+      console.log('🔄 Recargando datos después del cambio...');
       await recargarDatosEquipo();
       
       alert(`✅ Cambio realizado: ${origen.nombre} ↔ ${destino.nombre}`);
@@ -290,9 +381,24 @@ const DashboardScreen = ({ datosUsuario }) => {
 
   // Helpers
   const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
-  const calcularPuntosTotales = () => equipoActual.jugadores.reduce((sum, j) => sum + j.puntos_totales, 0);
+  const calcularPuntosTotales = () => equipoActual?.jugadores?.reduce((sum, j) => sum + j.puntos_totales, 0) || 0;
   const totalJugadores = equipoActual?.jugadores?.length || 0;
   const maxJugadores = 13;
+
+  // Función para formatear la posición de manera elegante
+  const formatearPosicion = (posicion) => {
+    console.log('📊 Formateando posición:', posicion);
+    
+    if (posicion === null || posicion === undefined) {
+      return 'Sin datos';
+    }
+    
+    if (posicion === 1) return '1º 🥇';
+    if (posicion === 2) return '2º 🥈'; 
+    if (posicion === 3) return '3º 🥉';
+    
+    return `${posicion}º`;
+  };
 
   if (loading) {
     return (
@@ -329,7 +435,7 @@ const DashboardScreen = ({ datosUsuario }) => {
     );
   }
 
-  if (!alineacionCargada) {
+  if (!alineacionCargada || loadingAlineacion) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -405,8 +511,22 @@ const DashboardScreen = ({ datosUsuario }) => {
             <div className="text-2xl font-bold text-green-600">{calcularPuntosTotales()}</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
-            <div className="text-sm text-gray-600">Posición Liga</div>
-            <div className="text-2xl font-bold text-purple-600">-</div>
+            <div className="text-sm text-gray-600 flex items-center gap-1">
+              <Trophy size={16} />
+              Posición Liga
+            </div>
+            <div className="text-2xl font-bold text-purple-600">
+              {loadingPosicion ? (
+                <RefreshCw className="animate-spin" size={20} />
+              ) : (
+                formatearPosicion(posicionLiga)
+              )}
+            </div>
+            {!loadingPosicion && (!equipoActual.liga_id || !posicionLiga) && (
+              <div className="text-xs text-gray-500 mt-1">
+                {!equipoActual.liga_id ? 'Sin liga asignada' : 'Posición no disponible'}
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,14 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getMercado, ficharJugador } from '../services/api';
+import { 
+  getMercado, 
+  pujarJugador, 
+  getOfertasRecibidas, 
+  getOfertasRealizadas, 
+  getPujasRealizadas,
+  retirarPuja 
+} from '../services/api';
 
 export const useMarket = (ligaId) => {
   const [mercado, setMercado] = useState([]);
+  const [ofertasRecibidas, setOfertasRecibidas] = useState([]);
+  const [ofertasRealizadas, setOfertasRealizadas] = useState([]);
+  const [pujasRealizadas, setPujasRealizadas] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filtros, setFiltros] = useState({
     nombre: '',
-    posicion: '',
-    equipoReal: ''
+    posicion: ''
   });
 
   const cargarMercado = useCallback(async () => {
@@ -34,12 +43,81 @@ export const useMarket = (ligaId) => {
     }
   }, [ligaId]);
 
+  const cargarOfertasRecibidas = useCallback(async (equipoId) => {
+    if (!equipoId) return;
+    
+    try {
+      const ofertas = await getOfertasRecibidas(equipoId);
+      setOfertasRecibidas(ofertas);
+      console.log(`✅ ${ofertas.length} ofertas recibidas cargadas`);
+    } catch (err) {
+      console.error('❌ Error cargando ofertas recibidas:', err);
+    }
+  }, []);
+
+  const cargarOfertasRealizadas = useCallback(async (equipoId) => {
+    if (!equipoId) return;
+    
+    try {
+      const ofertas = await getOfertasRealizadas(equipoId);
+      setOfertasRealizadas(ofertas);
+      console.log(`✅ ${ofertas.length} ofertas realizadas cargadas`);
+    } catch (err) {
+      console.error('❌ Error cargando ofertas realizadas:', err);
+    }
+  }, []);
+
+  const cargarPujasRealizadas = useCallback(async (equipoId) => {
+    if (!equipoId) return;
+    
+    try {
+      const pujas = await getPujasRealizadas(equipoId);
+      setPujasRealizadas(pujas);
+      console.log(`✅ ${pujas.length} pujas realizadas cargadas`);
+    } catch (err) {
+      console.error('❌ Error cargando pujas realizadas:', err);
+    }
+  }, []);
+
+  const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
+    try {
+      const resultado = await pujarJugador(equipoId, jugadorId, montoPuja);
+      await cargarMercado(); // Recargar mercado para actualizar la puja máxima
+      return resultado;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const retirarPujaHook = async (pujaId) => {
+    try {
+      const resultado = await retirarPuja(pujaId);
+      return resultado;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const actualizarFiltro = useCallback((campo, valor) => {
+    setFiltros(prev => ({
+      ...prev,
+      [campo]: valor
+    }));
+  }, []);
+
+  const limpiarFiltros = useCallback(() => {
+    setFiltros({
+      nombre: '',
+      posicion: ''
+    });
+  }, []);
+
   const estaExpirado = useCallback((fechaMercado) => {
     if (!fechaMercado) return false;
     
     try {
       const fechaMercadoObj = new Date(fechaMercado);
-      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
+      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000)); // 1 día
       const ahora = new Date();
       
       return ahora >= expiracion;
@@ -54,7 +132,7 @@ export const useMarket = (ligaId) => {
     
     try {
       const fechaMercadoObj = new Date(fechaMercado);
-      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000));
+      const expiracion = new Date(fechaMercadoObj.getTime() + (24 * 60 * 60 * 1000)); // 1 día
       
       const opciones = { 
         day: 'numeric', 
@@ -69,74 +147,39 @@ export const useMarket = (ligaId) => {
     }
   }, []);
 
-  const ficharJugadorMercado = useCallback(async (equipoId, jugadorId) => {
-    try {
-      const jugador = mercado.find(j => j.id === jugadorId);
-      
-      if (!jugador) {
-        throw new Error('Jugador no encontrado');
-      }
-      
-      // Verificar si el jugador ya expiró
-      if (estaExpirado(jugador.fecha_mercado)) {
-        throw new Error('Este jugador ya no está disponible en el mercado');
-      }
-      
-      // Llamar a la API de fichaje
-      await ficharJugador(equipoId, jugadorId);
-      await cargarMercado(); // Recargar mercado después del fichaje
-      
-      return jugador;
-    } catch (err) {
-      console.error('❌ Error fichando jugador:', err);
-      throw err;
-    }
-  }, [mercado, estaExpirado, cargarMercado]);
-
   const mercadoFiltrado = mercado.filter(jugador => {
     const matchNombre = filtros.nombre === '' || 
                        jugador.nombre.toLowerCase().includes(filtros.nombre.toLowerCase());
     const matchPosicion = filtros.posicion === '' || jugador.posicion === filtros.posicion;
-    const matchEquipoReal = filtros.equipoReal === '' || 
-                           (jugador.equipo_real_nombre && 
-                            jugador.equipo_real_nombre.toLowerCase().includes(filtros.equipoReal.toLowerCase()));
     
-    return matchNombre && matchPosicion && matchEquipoReal;
+    return matchNombre && matchPosicion;
   });
-
-  const actualizarFiltro = useCallback((campo, valor) => {
-    setFiltros(prev => ({
-      ...prev,
-      [campo]: valor
-    }));
-  }, []);
-
-  const limpiarFiltros = useCallback(() => {
-    setFiltros({
-      nombre: '',
-      posicion: '',
-      equipoReal: ''
-    });
-  }, []);
 
   useEffect(() => {
     if (ligaId) {
       console.log('🎯 useEffect useMarket - ligaId:', ligaId);
       cargarMercado();
     }
-  }, [ligaId, cargarMercado]); 
+  }, [ligaId, cargarMercado]);
 
   return {
     mercado: mercadoFiltrado,
     mercadoCompleto: mercado,
+    ofertasRecibidas,
+    ofertasRealizadas,
+    pujasRealizadas,
     loading,
     error,
     filtros,
     cargarMercado,
-    ficharJugador: ficharJugadorMercado,
-    estaExpirado,
-    calcularExpiracion,
+    cargarOfertasRecibidas,
+    cargarOfertasRealizadas,
+    cargarPujasRealizadas,
+    realizarPuja,
+    retirarPuja: retirarPujaHook,
     actualizarFiltro,
-    limpiarFiltros
+    limpiarFiltros,
+    estaExpirado,
+    calcularExpiracion
   };
 };
