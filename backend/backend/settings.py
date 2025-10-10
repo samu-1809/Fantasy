@@ -144,7 +144,6 @@ CORS_ALLOWED_ORIGINS = [
     config('FRONTEND_URL', default='http://localhost:5173'),
 ]
 
-
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

@@ -39,7 +39,10 @@ class Jugador(models.Model):
     equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores')
     en_banquillo = models.BooleanField(default=True)
     fecha_mercado = models.DateTimeField(null=True, blank=True)
-    fecha_fichaje = models.DateTimeField(null=True, blank=True)  # 🆕 Si no la tienes
+    fecha_fichaje = models.DateTimeField(null=True, blank=True)
+    precio_venta = models.IntegerField(null=True, blank=True)
+    puja_actual = models.IntegerField(null=True, blank=True)
+    equipo_pujador = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='pujas_actuales')
 
     def __str__(self):
         return f"{self.nombre} ({self.posicion})"
@@ -54,7 +57,6 @@ class Jugador(models.Model):
         from django.utils import timezone
         if not self.fecha_mercado:
             return False
-        # Un jugador está en el mercado si se añadió en las últimas 24 horas
         return timezone.now() <= self.fecha_mercado + timedelta(hours=24)
     
     # 🆕 Propiedad para calcular la expiración
@@ -63,6 +65,100 @@ class Jugador(models.Model):
         if not self.fecha_mercado:
             return None
         return self.fecha_mercado + timedelta(hours=24)
+    
+    # 🆕 CORREGIR LA INDENTACIÓN DE ESTOS MÉTODOS
+    def poner_en_mercado(self, precio=None):
+        from django.utils import timezone
+        self.en_venta = True
+        self.fecha_mercado = timezone.now()
+        if precio:
+            self.precio_venta = precio
+        self.save()
+
+    def quitar_del_mercado(self):
+        self.en_venta = False
+        self.fecha_mercado = None
+        self.precio_venta = None
+        self.puja_actual = None
+        self.equipo_pujador = None
+        self.save()
+        
+        # Cancelar todas las pujas
+        Puja.objects.filter(jugador=self).update(es_ganadora=False)
+
+    def realizar_puja(self, equipo, monto):
+        if not self.en_venta:
+            raise ValueError("El jugador no está en el mercado")
+        
+        if monto <= (self.puja_actual or 0):
+            raise ValueError("La puja debe ser mayor a la puja actual")
+        
+        # Crear nueva puja
+        puja = Puja.objects.create(
+            jugador=self,
+            equipo=equipo,
+            monto=monto
+        )
+        
+        # Actualizar puja actual
+        self.puja_actual = monto
+        self.equipo_pujador = equipo
+        self.save()
+        
+        # ✅ CREAR OFERTA INMEDIATA si el jugador tiene dueño (no es agente libre)
+        if self.equipo:
+            oferta = Oferta.objects.create(
+                jugador=self,
+                equipo_ofertante=equipo,
+                equipo_receptor=self.equipo,
+                monto=monto,
+                estado='pendiente'
+            )
+            print(f"✅ Oferta creada inmediatamente: {equipo.nombre} -> {self.equipo.nombre} por {self.nombre} - €{monto}")
+        
+        return puja
+
+    def finalizar_subasta(self):
+        if self.en_venta and self.equipo_pujador:
+            if self.equipo:
+                # ✅ Crear oferta cuando un jugador con equipo tiene pujas
+                oferta = Oferta.objects.create(
+                    jugador=self,
+                    equipo_ofertante=self.equipo_pujador,
+                    equipo_receptor=self.equipo,
+                    monto=self.puja_actual,
+                    estado='pendiente'
+                )
+                print(f"✅ Oferta creada: {self.equipo_pujador.nombre} ofrece €{self.puja_actual} por {self.nombre} a {self.equipo.nombre}")
+                
+                # Resetear puja pero mantener en mercado
+                self.puja_actual = None
+                self.equipo_pujador = None
+                self.save()
+                return {'tipo': 'oferta', 'oferta': oferta}
+            else:
+                # Jugador libre - transferir directamente
+                self.equipo = self.equipo_pujador
+                self.en_venta = False
+                self.fecha_mercado = None
+                
+                # Marcar puja ganadora
+                puja_ganadora = self.pujas.filter(monto=self.puja_actual).first()
+                if puja_ganadora:
+                    puja_ganadora.es_ganadora = True
+                    puja_ganadora.save()
+                
+                self.save()
+                print(f"✅ Jugador libre transferido: {self.nombre} a {self.equipo.nombre}")
+                return {'tipo': 'transferencia', 'jugador': self}
+        return None
+
+    @property
+    def expirado(self):
+        from django.utils import timezone
+        if not self.fecha_mercado:
+            return False
+        return timezone.now() > self.fecha_mercado + timedelta(hours=24)
 
 class Equipo(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -119,52 +215,71 @@ class Partido(models.Model):
             return "Pendiente"
         return f"{self.goles_local} - {self.goles_visitante}"
 
-class Alineacion(models.Model):
-    equipo = models.OneToOneField(Equipo, on_delete=models.CASCADE, related_name='alineacion')
+class Oferta(models.Model):
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aceptada', 'Aceptada'),
+        ('rechazada', 'Rechazada'),
+        ('expirada', 'Expirada'),
+    ]
     
-    # Titulares (posición específica en el campo)
-    portero_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='portero_titular', null=True, blank=True)
-    defensa1_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='defensa1_titular', null=True, blank=True)
-    defensa2_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='defensa2_titular', null=True, blank=True)
-    delantero1_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='delantero1_titular', null=True, blank=True)
-    delantero2_titular = models.ForeignKey(Jugador, on_delete=models.CASCADE, related_name='delantero2_titular', null=True, blank=True)
+    jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='ofertas')
+    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas')
+    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas')
+    monto = models.IntegerField()
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
+    fecha_oferta = models.DateTimeField(auto_now_add=True)
+    fecha_respuesta = models.DateTimeField(null=True, blank=True)
     
-    # Banquillo (máximo 6 jugadores)
-    banquillo = models.ManyToManyField(Jugador, related_name='banquillo', blank=True)
+    class Meta:
+        ordering = ['-fecha_oferta']
     
     def __str__(self):
-        return f"Alineación de {self.equipo.nombre}"
+        return f"{self.equipo_ofertante.nombre} -> {self.jugador.nombre} (${self.monto})"
     
-    def clean(self):
-        """Validar que los titulares estén en la posición correcta"""
-        if self.portero_titular and self.portero_titular.posicion != 'POR':
-            raise ValidationError('El portero titular debe ser un PORTERO')
-        if self.defensa1_titular and self.defensa1_titular.posicion != 'DEF':
-            raise ValidationError('Los defensas titulares deben ser DEFENSAS')
-        if self.defensa2_titular and self.defensa2_titular.posicion != 'DEF':
-            raise ValidationError('Los defensas titulares deben ser DEFENSAS')
-        if self.delantero1_titular and self.delantero1_titular.posicion != 'DEL':
-            raise ValidationError('Los delanteros titulares deben ser DELANTEROS')
-        if self.delantero2_titular and self.delantero2_titular.posicion != 'DEL':
-            raise ValidationError('Los delanteros titulares deben ser DELANTEROS')
+    def aceptar(self):
+        if self.estado == 'pendiente':
+            self.estado = 'aceptada'
+            self.fecha_respuesta = datetime.datetime.now()
+            self.save()
+            
+            # Transferir jugador
+            self.jugador.equipo = self.equipo_ofertante
+            self.jugador.save()
+            
+            # Transferir dinero
+            self.equipo_ofertante.presupuesto -= self.monto
+            self.equipo_ofertante.save()
+            
+            self.equipo_receptor.presupuesto += self.monto
+            self.equipo_receptor.save()
+            
+            # Cancelar otras ofertas pendientes por este jugador
+            Oferta.objects.filter(
+                jugador=self.jugador, 
+                estado='pendiente'
+            ).exclude(id=self.id).update(estado='expirada')
+            
+            return True
+        return False
     
-    @property
-    def titulares(self):
-        """Devuelve todos los titulares"""
-        titulares = []
-        if self.portero_titular:
-            titulares.append(self.portero_titular)
-        if self.defensa1_titular:
-            titulares.append(self.defensa1_titular)
-        if self.defensa2_titular:
-            titulares.append(self.defensa2_titular)
-        if self.delantero1_titular:
-            titulares.append(self.delantero1_titular)
-        if self.delantero2_titular:
-            titulares.append(self.delantero2_titular)
-        return titulares
+    def rechazar(self):
+        if self.estado == 'pendiente':
+            self.estado = 'rechazada'
+            self.fecha_respuesta = datetime.datetime.now()
+            self.save()
+            return True
+        return False
+
+class Puja(models.Model):
+    jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='pujas')
+    equipo = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='pujas')
+    monto = models.IntegerField()
+    fecha_puja = models.DateTimeField(auto_now_add=True)
+    es_ganadora = models.BooleanField(default=False)
     
-    @property
-    def total_titulares(self):
-        return len([j for j in [self.portero_titular, self.defensa1_titular, self.defensa2_titular, 
-                               self.delantero1_titular, self.delantero2_titular] if j is not None])
+    class Meta:
+        ordering = ['-monto', 'fecha_puja']
+    
+    def __str__(self):
+        return f"{self.equipo.nombre} puja ${self.monto} por {self.jugador.nombre}"
