@@ -6,8 +6,18 @@ export const useAdmin = () => {
   const [partidos, setPartidos] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState(null);
 
   const API_URL = 'http://127.0.0.1:8000/api';
+
+  // 🆕 Efecto para seleccionar automáticamente la primera jornada
+  useEffect(() => {
+    if (jornadas.length > 0 && !jornadaSeleccionada) {
+      setJornadaSeleccionada(jornadas[0].id);
+    }
+  }, [jornadas, jornadaSeleccionada]);
+
+  // ==================== FUNCIONES BÁSICAS ====================
 
   // Cargar jornadas
   const cargarJornadas = async () => {
@@ -86,6 +96,8 @@ export const useAdmin = () => {
     }
   };
 
+  // ==================== GESTIÓN DE JORNADAS ====================
+
   // Crear nueva jornada
   const crearJornada = async (numeroJornada) => {
     try {
@@ -137,6 +149,8 @@ export const useAdmin = () => {
       throw err;
     }
   };
+
+  // ==================== GESTIÓN DE PARTIDOS ====================
 
   // Crear partido
   const crearPartido = async (jornadaId, equipoLocalId, equipoVisitanteId) => {
@@ -218,24 +232,197 @@ export const useAdmin = () => {
     }
   };
 
+  // ==================== GESTIÓN DE PUNTUACIONES ====================
+
+  // Cargar puntuaciones de una jornada (masivas)
+  const cargarPuntuacionesJornada = async (jornadaId) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/puntuaciones/?jornada=${jornadaId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      } else {
+        throw new Error('Error cargando puntuaciones');
+      }
+    } catch (err) {
+      console.error('Error cargando puntuaciones:', err);
+      return [];
+    }
+  };
+
+  // 🆕 Asignar puntos masivamente (función existente)
+  const asignarPuntos = async (jornadaId, puntos) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/puntuaciones/asignar_puntos/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          jornada_id: jornadaId,
+          puntos: puntos
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al asignar puntos');
+      }
+
+      return response.json();
+    } catch (err) {
+      console.error('Error asignando puntos:', err);
+      throw err;
+    }
+  };
+
+  // 🆕 Cargar puntuaciones de un jugador específico
+  const cargarPuntuacionesJugador = async (jugadorId) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/jugadores/${jugadorId}/puntuaciones/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error cargando puntuaciones del jugador:', error);
+      throw error;
+    }
+  };
+
+  // 🆕 Actualizar puntuación individual
+  const actualizarPuntuacionJugador = async (jugadorId, jornadaId, puntos) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/puntuaciones/actualizar/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jugador_id: jugadorId,
+          jornada_id: jornadaId,
+          puntos: puntos
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error actualizando puntuación:', error);
+      throw error;
+    }
+  };
+
+  // 🆕 Crear nueva puntuación
+  const crearPuntuacionJugador = async (jugadorId, jornadaId, puntos = 0) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/puntuaciones/crear/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jugador_id: jugadorId,
+          jornada_id: jornadaId,
+          puntos: puntos
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error creando puntuación:', error);
+      throw error;
+    }
+  };
+
+  // 🆕 Eliminar puntuación
+  const eliminarPuntuacionJugador = async (puntuacionId) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_URL}/puntuaciones/${puntuacionId}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}`);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error eliminando puntuación:', error);
+      throw error;
+    }
+  };
+
+  // ==================== EFECTOS INICIALES ====================
+
   useEffect(() => {
     cargarJornadas();
     cargarEquiposReales();
   }, []);
 
+  // ==================== RETORNO DEL HOOK ====================
+
   return {
+    // Estados
     jornadas,
     equiposReales,
     partidos,
+    jornadaSeleccionada, 
+    setJornadaSeleccionada, 
     loading,
     error,
+    
+    // Funciones básicas
     cargarJornadas,
     cargarEquiposReales,
     cargarPartidosJornada,
+    
+    // Gestión de jornadas
     crearJornada,
     eliminarJornada,
+    
+    // Gestión de partidos
     crearPartido,
     actualizarResultadoPartido,
-    eliminarPartido
+    eliminarPartido,
+    
+    // Gestión de puntuaciones
+    cargarPuntuacionesJornada,
+    asignarPuntos,
+    cargarPuntuacionesJugador,
+    actualizarPuntuacionJugador,
+    crearPuntuacionJugador,
+    eliminarPuntuacionJugador
   };
 };

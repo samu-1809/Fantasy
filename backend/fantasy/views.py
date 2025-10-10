@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, generics
 from django.core.cache import cache
 import hashlib
+from random import uniform
 from datetime import datetime
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -18,7 +19,7 @@ from django.db.models import Q
 import random
 from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja
 from .serializers import (
-    LigaSerializer, JugadorSerializer, EquipoSerializer, OfertaSerializer, PujaSerializer, JugadorMercadoSerializer,
+    LigaSerializer, JugadorSerializer, EquipoSerializer, OfertaSerializer, PujaSerializer, JugadorMercadoSerializer, PuntuacionJornadaSerializer,
     JornadaSerializer, PuntuacionSerializer, EquipoRealSerializer, PartidoSerializer, FicharJugadorSerializer, VenderJugadorSerializer
 )
 
@@ -335,6 +336,9 @@ class MercadoViewSet(viewsets.ViewSet):
         # Actualizar mercado rotatorio con lote fijo de 24h
         self.actualizar_mercado_libre_fijo()
         
+        # ✅ GENERAR OFERTAS AUTOMÁTICAS para jugadores con 24h en mercado
+        self.generar_ofertas_automaticas()
+        
         ahora = timezone.now()
         limite_expiracion = ahora - timedelta(hours=24)
         
@@ -345,7 +349,7 @@ class MercadoViewSet(viewsets.ViewSet):
             fecha_mercado__isnull=False,
             fecha_mercado__gte=limite_expiracion,
             en_venta=True
-        ).order_by('id')  # Orden fijo para consistencia
+        ).order_by('id')
         
         # 2. JUGADORES EN VENTA POR USUARIOS
         jugadores_en_venta = Jugador.objects.filter(
@@ -363,12 +367,20 @@ class MercadoViewSet(viewsets.ViewSet):
         for jugador_data in data:
             jugador = Jugador.objects.get(id=jugador_data['id'])
             
+            # ✅ Asegurarnos de que en_venta esté presente
+            jugador_data['en_venta'] = jugador.en_venta
+            
             if jugador.equipo:
                 # Jugador en venta por usuario
                 jugador_data['tipo'] = 'venta_usuario'
                 jugador_data['vendedor'] = jugador.equipo.nombre
                 jugador_data['expirado'] = False
                 jugador_data['fecha_expiracion'] = 'Hasta que se venda'
+                
+                # ✅ Mostrar si tiene puja actual
+                if jugador.puja_actual and jugador.equipo_pujador:
+                    jugador_data['puja_actual'] = jugador.puja_actual
+                    jugador_data['pujador_actual'] = jugador.equipo_pujador.nombre
             else:
                 # Jugador libre
                 jugador_data['tipo'] = 'libre_rotatorio'
@@ -378,7 +390,6 @@ class MercadoViewSet(viewsets.ViewSet):
                     expiracion = jugador.fecha_mercado + timedelta(hours=24)
                     tiempo_restante = expiracion - ahora
                     
-                    # Calcular horas y minutos restantes
                     horas_restantes = int(tiempo_restante.total_seconds() // 3600)
                     minutos_restantes = int((tiempo_restante.total_seconds() % 3600) // 60)
                     
@@ -444,6 +455,66 @@ class MercadoViewSet(viewsets.ViewSet):
                 puja_actual=None,
                 equipo_pujador=None
             )
+
+    def generar_ofertas_automaticas(self):
+        ahora = timezone.now()
+        limite_24h = ahora - timedelta(hours=24)
+        
+        # ✅ MODIFICADO: Incluir TODOS los jugadores con 24h en mercado, tengan o no pujas
+        jugadores_24h = Jugador.objects.filter(
+            equipo__isnull=False,  # Tienen dueño
+            en_venta=True,
+            fecha_mercado__lte=limite_24h
+        )
+        
+        print(f"🔄 Generando ofertas automáticas para {jugadores_24h.count()} jugadores con 24h en mercado...")
+        
+        for jugador in jugadores_24h:
+            # ✅ CALCULAR MONTO: Al menos igual a la puja actual + 1€, o variación del valor base
+            if jugador.puja_actual:
+                # Si ya hay pujas, la oferta del mercado debe ser mayor
+                monto_base = max(jugador.puja_actual + 1, jugador.valor)
+                variacion = uniform(0.01, 0.05)  # +1% a +5% sobre la puja actual
+                monto_oferta = int(monto_base * (1 + variacion))
+            else:
+                # Si no hay pujas, oferta entre -5% y +5% del valor
+                variacion = uniform(-0.05, 0.05)
+                monto_oferta = int(jugador.valor * (1 + variacion))
+            
+            # Buscar un equipo aleatorio para hacer la oferta (simular mercado)
+            equipos_interesados = Equipo.objects.exclude(id=jugador.equipo.id).order_by('?')[:1]
+            
+            if equipos_interesados:
+                equipo_ofertante = equipos_interesados[0]
+                
+                # ✅ VERIFICAR si ya existe una oferta del mercado por este jugador hoy
+                hoy = timezone.now().date()
+                oferta_existente = Oferta.objects.filter(
+                    jugador=jugador,
+                    equipo_ofertante=equipo_ofertante,
+                    fecha_oferta__date=hoy
+                ).exists()
+                
+                if not oferta_existente:
+                    # Crear oferta automática
+                    oferta = Oferta.objects.create(
+                        jugador=jugador,
+                        equipo_ofertante=equipo_ofertante,
+                        equipo_receptor=jugador.equipo,
+                        monto=monto_oferta,
+                        estado='pendiente'
+                    )
+                    
+                    # ✅ ACTUALIZAR PUJA ACTUAL si la oferta del mercado es mayor
+                    if not jugador.puja_actual or monto_oferta > jugador.puja_actual:
+                        jugador.puja_actual = monto_oferta
+                        jugador.equipo_pujador = equipo_ofertante
+                        jugador.save()
+                    
+                    print(f"✅ Oferta automática: {equipo_ofertante.nombre} -> {jugador.equipo.nombre} por {jugador.nombre} - €{monto_oferta}")
+                    
+                    if jugador.puja_actual:
+                        print(f"   - Puja anterior: €{jugador.puja_actual}" if hasattr(jugador, '_original_puja') else f"   - Nueva puja máxima")
 
 class ClasificacionViewSet(viewsets.ViewSet):
     """
@@ -531,19 +602,28 @@ class PuntuacionViewSet(viewsets.ModelViewSet):
     def asignar_puntos(self, request):
         """
         Asignar puntos a jugadores y actualizar valores
-        Formato: {'jornada_id': 1, 'puntos': [{'jugador_id': 1, 'puntos': 8}, ...]}
         """
         jornada_id = request.data.get('jornada_id')
+        numero_jornada = request.data.get('numero_jornada')
         puntos_data = request.data.get('puntos', [])
         
         try:
-            jornada = Jornada.objects.get(id=jornada_id)
+            if jornada_id:
+                jornada = Jornada.objects.get(id=jornada_id)
+            elif numero_jornada:
+                jornada = Jornada.objects.get(numero=numero_jornada)
+            else:
+                return Response(
+                    {'error': 'Se requiere jornada_id o numero_jornada'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         except Jornada.DoesNotExist:
             return Response(
                 {'error': 'Jornada no encontrada'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # 🆕 AQUÍ FALTABA EL CÓDIGO QUE PROCESA LOS PUNTOS
         resultados = []
         for item in puntos_data:
             jugador_id = item.get('jugador_id')
@@ -552,7 +632,7 @@ class PuntuacionViewSet(viewsets.ModelViewSet):
             try:
                 jugador = Jugador.objects.get(id=jugador_id)
                 
-                # 🆕 FIX: Obtener puntos anteriores ANTES de update_or_create
+                # Obtener puntos anteriores ANTES de update_or_create
                 try:
                     puntuacion_anterior = Puntuacion.objects.get(jugador=jugador, jornada=jornada)
                     puntos_anteriores = puntuacion_anterior.puntos
@@ -637,25 +717,56 @@ def datos_iniciales(request):
     Endpoint único para cargar todos los datos iniciales del usuario
     """
     try:
-        # 1. Obtener equipo del usuario
+        # 🆕 1. Si es admin, devolver TODOS los jugadores del sistema
+        if request.user.is_superuser or request.user.is_staff:
+            print(f"🛠️ Cargando datos para ADMIN: {request.user.username}")
+            
+            # CORREGIDO: Incluir select_related para todas las relaciones necesarias
+            jugadores = Jugador.objects.all().select_related(
+                'equipo_real', 
+                'equipo', 
+                'equipo__usuario'
+            )
+            jugadores_data = JugadorSerializer(jugadores, many=True).data
+            
+            # Cargar equipos reales para los filtros
+            equipos_reales = EquipoReal.objects.all()
+            equipos_reales_data = EquipoRealSerializer(equipos_reales, many=True).data
+            
+            print(f"🛠️ Admin - Jugadores cargados: {len(jugadores_data)}")
+            print(f"🛠️ Admin - Equipos reales cargados: {len(equipos_reales_data)}")
+            
+            # 🆕 DEBUG: Verificar primer jugador
+            if jugadores_data:
+                print(f"🛠️ Primer jugador: {jugadores_data[0]}")
+            
+            # 🆕 CORREGIDO: Estructura específica para admin
+            return Response({
+                'jugadores': jugadores_data,
+                'equipos_reales': equipos_reales_data,
+                'es_admin': True,  # 🆕 ESTO ES CRÍTICO
+                'ligaActual': {
+                    'nombre': 'Liga de Administración',
+                    'jornada_actual': 1
+                }
+            })
+        
+        # 2. Lógica normal para usuarios no admin
         equipo = Equipo.objects.filter(usuario=request.user).first()
         if not equipo:
             return Response(
                 {"error": "No se encontró equipo para este usuario"}, 
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # 2. Serializar datos
-        equipo_data = EquipoSerializer(equipo).data
-        
+
         # 3. Obtener jugadores del equipo
+        equipo_data = EquipoSerializer(equipo).data
         jugadores = Jugador.objects.filter(equipo=equipo)
         jugadores_data = JugadorSerializer(jugadores, many=True).data
         
         # 4. Obtener mercado
         mercado_jugadores = []
         try:
-            # Simular lógica del mercado
             mercado_jugadores = Jugador.objects.filter(
                 equipo__isnull=True
             ).order_by('?')[:8]
@@ -686,12 +797,18 @@ def datos_iniciales(request):
             print(f"❌ Error cargando clasificación: {e}")
             clasificacion_data = []
         
+        # 🆕 CORREGIDO: Estructura para usuario normal
         return Response({
             'equipo': equipo_data,
             'jugadores': jugadores_data,
             'mercado': mercado_data,
             'clasificacion': clasificacion_data,
-            'liga_id': equipo.liga.id
+            'liga_id': equipo.liga.id,
+            'ligaActual': {
+                'nombre': equipo.liga.nombre,
+                'jornada_actual': equipo.liga.jornada_actual
+            },
+            'es_admin': False  # 🆕 IMPORTANTE
         })
         
     except Exception as e:
@@ -1073,22 +1190,49 @@ def pujar_jugador(request, equipo_id):
 @permission_classes([IsAuthenticated])
 def ofertas_recibidas(request, equipo_id):
     try:
+        print(f"🔍 INICIANDO ofertas_recibidas para equipo_id: {equipo_id}")
+        print(f"👤 Usuario autenticado: {request.user.username} (ID: {request.user.id})")
+        
         equipo = Equipo.objects.get(id=equipo_id)
+        print(f"🏆 Equipo encontrado: {equipo.nombre} (Usuario: {equipo.usuario.username})")
         
         # Verificar que el equipo pertenece al usuario
         if equipo.usuario != request.user:
+            print(f"❌ PERMISO DENEGADO: El equipo {equipo.nombre} pertenece a {equipo.usuario.username}, no a {request.user.username}")
             return Response({'error': 'No tienes permisos para este equipo'}, status=403)
         
+        print(f"✅ Permiso OK: El usuario {request.user.username} es dueño del equipo {equipo.nombre}")
+        
+        # Buscar ofertas
         ofertas = Oferta.objects.filter(
             equipo_receptor=equipo,
             estado='pendiente'
         ).select_related('jugador', 'equipo_ofertante')
         
+        print(f"📊 Ofertas en BD: {ofertas.count()}")
+        
+        # Debug detallado de cada oferta
+        for i, oferta in enumerate(ofertas, 1):
+            print(f"   {i}. Oferta ID: {oferta.id}")
+            print(f"      Jugador: {oferta.jugador.nombre} (ID: {oferta.jugador.id})")
+            print(f"      Ofertante: {oferta.equipo_ofertante.nombre}")
+            print(f"      Receptor: {oferta.equipo_receptor.nombre}")
+            print(f"      Monto: €{oferta.monto}")
+            print(f"      Estado: {oferta.estado}")
+            print(f"      Fecha: {oferta.fecha_oferta}")
+        
         serializer = OfertaSerializer(ofertas, many=True)
-        return Response(serializer.data)
+        data = serializer.data
+        print(f"📦 Datos serializados: {len(data)} ofertas")
+        
+        return Response(data)
         
     except Equipo.DoesNotExist:
+        print(f"❌ EQUIPO NO ENCONTRADO: No existe equipo con ID {equipo_id}")
         return Response({'error': 'Equipo no encontrado'}, status=404)
+    except Exception as e:
+        print(f"❌ ERROR INESPERADO: {str(e)}")
+        return Response({'error': f'Error interno: {str(e)}'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1324,7 +1468,6 @@ def retirar_puja(request, puja_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-# En views.py
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def guardar_alineacion(request, equipo_id):
@@ -1355,6 +1498,118 @@ def guardar_alineacion(request, equipo_id):
         return Response({'error': 'Jugador no encontrado'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def puntuaciones_jugador(request, jugador_id):
+    """
+    Endpoint para obtener las puntuaciones de un jugador específico
+    """
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
+        puntuaciones = Puntuacion.objects.filter(jugador=jugador).select_related('jornada')
+        serializer = PuntuacionJornadaSerializer(puntuaciones, many=True)
+        return Response(serializer.data)
+    except Jugador.DoesNotExist:
+        return Response(
+            {"error": "Jugador no encontrado"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def actualizar_puntuacion_jugador(request):
+    """
+    Endpoint para actualizar puntuación específica de un jugador en una jornada
+    """
+    jugador_id = request.data.get('jugador_id')
+    jornada_id = request.data.get('jornada_id')
+    puntos = request.data.get('puntos')
+    
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
+        jornada = Jornada.objects.get(id=jornada_id)
+        
+        # Crear o actualizar puntuación
+        puntuacion, created = Puntuacion.objects.update_or_create(
+            jugador=jugador,
+            jornada=jornada,
+            defaults={'puntos': puntos}
+        )
+        
+        # Recalcular puntos totales del jugador
+        jugador.puntos_totales = Puntuacion.objects.filter(jugador=jugador).aggregate(
+            total=Sum('puntos')
+        )['total'] or 0
+        
+        # Recalcular valor basado en puntos totales
+        jugador.valor = 5000000 + (jugador.puntos_totales * 100000)
+        jugador.save()
+        
+        return Response({
+            'message': 'Puntuación actualizada correctamente',
+            'puntuacion': PuntuacionJornadaSerializer(puntuacion).data,
+            'jugador': {
+                'puntos_totales': jugador.puntos_totales,
+                'valor': jugador.valor
+            }
+        })
+        
+    except (Jugador.DoesNotExist, Jornada.DoesNotExist) as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+# 🆕 View para crear nueva puntuación
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def crear_puntuacion_jugador(request):
+    """
+    Endpoint para crear nueva puntuación para un jugador en una jornada
+    """
+    jugador_id = request.data.get('jugador_id')
+    jornada_id = request.data.get('jornada_id')
+    puntos = request.data.get('puntos', 0)
+    
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
+        jornada = Jornada.objects.get(id=jornada_id)
+        
+        # Verificar si ya existe
+        if Puntuacion.objects.filter(jugador=jugador, jornada=jornada).exists():
+            return Response(
+                {"error": "Ya existe una puntuación para este jugador en esta jornada"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Crear nueva puntuación
+        puntuacion = Puntuacion.objects.create(
+            jugador=jugador,
+            jornada=jornada,
+            puntos=puntos
+        )
+        
+        # Recalcular puntos totales del jugador
+        total_puntos = Puntuacion.objects.filter(jugador=jugador).aggregate(
+            total=Sum('puntos')
+        )['total'] or 0
+        
+        jugador.puntos_totales = total_puntos
+        jugador.valor = max(5000000, 5000000 + (total_puntos * 100000))
+        jugador.save()
+        
+        return Response({
+            'message': 'Puntuación creada correctamente',
+            'puntuacion': PuntuacionJornadaSerializer(puntuacion).data
+        })
+        
+    except (Jugador.DoesNotExist, Jornada.DoesNotExist) as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

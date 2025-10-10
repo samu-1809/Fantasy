@@ -7,16 +7,46 @@ class LigaSerializer(serializers.ModelSerializer):
         model = Liga
         fields = ['id', 'nombre', 'codigo', 'jornada_actual']
 
+class PuntuacionJornadaSerializer(serializers.ModelSerializer):
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+    jornada_id = serializers.IntegerField(source='jornada.id', read_only=True)
+
+    class Meta:
+        model = Puntuacion
+        fields = ['jornada_id', 'jornada_numero', 'puntos']
+
 class JugadorSerializer(serializers.ModelSerializer):
     equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
     usuario_vendedor = serializers.CharField(source='equipo.usuario.username', read_only=True)
     usuario_vendedor_id = serializers.IntegerField(source='equipo.usuario.id', read_only=True)
-    
+    equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
+    puntuaciones_jornadas = serializers.SerializerMethodField()
+
     class Meta:
         model = Jugador
         fields = ['id', 'nombre', 'posicion', 'valor', 'precio_venta', 'en_venta', 
-                 'fecha_mercado', 'equipo_nombre', 'usuario_vendedor', 'usuario_vendedor_id',
-                 'puntos_totales', 'en_banquillo']
+                 'fecha_mercado', 'equipo_nombre', 'equipo_real_nombre', 'usuario_vendedor', 'usuario_vendedor_id',
+                 'puntos_totales', 'en_banquillo', 'puntuaciones_jornadas']
+
+    def get_puntuaciones_jornadas(self, obj):
+        # Obtener las puntuaciones del jugador por jornada
+        puntuaciones = Puntuacion.objects.filter(jugador=obj).select_related('jornada')
+        return PuntuacionJornadaSerializer(puntuaciones, many=True).data
+
+class JugadorDetailSerializer(serializers.ModelSerializer):
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True, allow_null=True)
+    equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True, allow_null=True)
+    puntuaciones_jornadas = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Jugador
+        fields = ['id', 'nombre', 'posicion', 'valor', 'equipo_real_nombre', 
+                 'equipo_nombre', 'puntos_totales', 'puntuaciones_jornadas']
+
+    def get_puntuaciones_jornadas(self, obj):
+        # Obtener las puntuaciones del jugador por jornada
+        puntuaciones = Puntuacion.objects.filter(jugador=obj).select_related('jornada')
+        return PuntuacionJornadaSerializer(puntuaciones, many=True).data
 
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
@@ -24,6 +54,7 @@ class EquipoSerializer(serializers.ModelSerializer):
     jugadores = JugadorSerializer(many=True, read_only=True)
     jugadores_campo = serializers.SerializerMethodField()
     jugadores_banquillo = serializers.SerializerMethodField() 
+    
     class Meta:
         model = Equipo
         fields = [
@@ -109,7 +140,7 @@ class PartidoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'jornada', 'jornada_numero', 'equipo_local', 'equipo_visitante',
             'equipo_local_nombre', 'equipo_visitante_nombre', 'goles_local', 
-            'goles_visitante', 'fecha', 'jugado'  # 🎯 Quitado 'estado'
+            'goles_visitante', 'fecha', 'jugado'
         ]
 
     def validate(self, data):
@@ -180,25 +211,32 @@ class PujaSerializer(serializers.ModelSerializer):
     jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
     jugador_posicion = serializers.CharField(source='jugador.posicion', read_only=True)
     jugador_equipo_real_nombre = serializers.CharField(source='jugador.equipo_real.nombre', read_only=True)
+    valor_jugador = serializers.IntegerField(source='jugador.valor', read_only=True)
+    puntos_jugador = serializers.IntegerField(source='jugador.puntos_totales', read_only=True)
+    jugador_en_venta = serializers.BooleanField(source='jugador.en_venta', read_only=True)
+    jugador_expirado = serializers.BooleanField(source='jugador.expirado', read_only=True)
+    fecha_mercado = serializers.DateTimeField(source='jugador.fecha_mercado', read_only=True)
     
     class Meta:
         model = Puja
         fields = [
             'id', 'jugador', 'jugador_nombre', 'jugador_posicion', 
             'jugador_equipo_real_nombre', 'equipo', 'equipo_nombre', 
-            'monto', 'fecha_puja', 'es_ganadora'
+            'monto', 'fecha_puja', 'es_ganadora', 'valor_jugador',
+            'puntos_jugador', 'jugador_en_venta', 'jugador_expirado', 'fecha_mercado'
         ]
 
 class JugadorMercadoSerializer(serializers.ModelSerializer):
     equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
     pujador_actual = serializers.CharField(source='equipo_pujador.nombre', read_only=True)
     expirado = serializers.SerializerMethodField()
+    en_venta = serializers.BooleanField() 
     
     class Meta:
         model = Jugador
         fields = [
             'id', 'nombre', 'posicion', 'equipo_real', 'equipo_real_nombre', 
-            'valor', 'puntos_totales', 'en_mercado', 'fecha_mercado',
+            'valor', 'puntos_totales', 'en_venta', 'fecha_mercado',
             'precio_venta', 'puja_actual', 'pujador_actual', 'expirado'
         ]
     

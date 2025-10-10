@@ -64,19 +64,36 @@ const Fantasy = () => {
     const cargarDatosUsuario = async () => {
       if (user && isAuthenticated && !datosUsuario) {
         console.log('🔄 Usuario autenticado detectado, cargando datos...');
+        console.log('🔐 Usuario info:', {
+          username: user.username,
+          is_superuser: user.is_superuser,
+          is_staff: user.is_staff
+        });
         
         setAppLoading(true);
         setError(null);
         try {
           console.log('🔄 Cargando datos para usuario:', user.username);
           const datos = await cargarDatosIniciales(user);
+          
+          // 🆕 DEBUG COMPLETO
+          console.log('📦 RESPUESTA COMPLETA del backend:', datos);
+          console.log('🔍 Estructura de datos recibida:', {
+            tieneJugadores: !!datos.jugadores,
+            cantidadJugadores: datos.jugadores?.length,
+            tieneEquiposReales: !!datos.equipos_reales, 
+            cantidadEquiposReales: datos.equipos_reales?.length,
+            es_admin: datos.es_admin,
+            tieneEquipo: !!datos.equipo
+          });
+          
           setDatosUsuario(datos);
           
-          // 🎯 CORREGIDO: Redirigir inmediatamente después de cargar datos
-          const isAdmin = user.is_superuser || user.is_staff;
+          // 🎯 CORREGIDO: Usar el es_admin de la respuesta
+          const isAdmin = datos.es_admin;
           const nuevaPantalla = isAdmin ? 'admin' : 'dashboard';
           
-          console.log(`🎯 Redirigiendo a: ${nuevaPantalla}`);
+          console.log(`🎯 Redirigiendo a: ${nuevaPantalla} (basado en es_admin: ${isAdmin})`);
           setCurrentScreen(nuevaPantalla);
           
           console.log('✅ Datos cargados correctamente');
@@ -253,7 +270,11 @@ const Fantasy = () => {
               <AdminScreen
                 datosUsuario={datosUsuario}
                 setCurrentScreen={setCurrentScreen}
-                cargarDatosIniciales={() => cargarDatosIniciales(user).then(setDatosUsuario)}
+                cargarDatosIniciales={async () => {
+                  const nuevosDatos = await cargarDatosIniciales(user);
+                  setDatosUsuario(nuevosDatos);
+                  return nuevosDatos;
+                }}
               />
             );
           

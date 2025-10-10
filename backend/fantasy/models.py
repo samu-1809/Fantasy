@@ -105,11 +105,23 @@ class Jugador(models.Model):
         self.equipo_pujador = equipo
         self.save()
         
+        # ✅ CREAR OFERTA INMEDIATA si el jugador tiene dueño (no es agente libre)
+        if self.equipo:
+            oferta = Oferta.objects.create(
+                jugador=self,
+                equipo_ofertante=equipo,
+                equipo_receptor=self.equipo,
+                monto=monto,
+                estado='pendiente'
+            )
+            print(f"✅ Oferta creada inmediatamente: {equipo.nombre} -> {self.equipo.nombre} por {self.nombre} - €{monto}")
+        
         return puja
 
     def finalizar_subasta(self):
         if self.en_venta and self.equipo_pujador:
             if self.equipo:
+                # ✅ Crear oferta cuando un jugador con equipo tiene pujas
                 oferta = Oferta.objects.create(
                     jugador=self,
                     equipo_ofertante=self.equipo_pujador,
@@ -117,6 +129,8 @@ class Jugador(models.Model):
                     monto=self.puja_actual,
                     estado='pendiente'
                 )
+                print(f"✅ Oferta creada: {self.equipo_pujador.nombre} ofrece €{self.puja_actual} por {self.nombre} a {self.equipo.nombre}")
+                
                 # Resetear puja pero mantener en mercado
                 self.puja_actual = None
                 self.equipo_pujador = None
@@ -135,6 +149,7 @@ class Jugador(models.Model):
                     puja_ganadora.save()
                 
                 self.save()
+                print(f"✅ Jugador libre transferido: {self.nombre} a {self.equipo.nombre}")
                 return {'tipo': 'transferencia', 'jugador': self}
         return None
 

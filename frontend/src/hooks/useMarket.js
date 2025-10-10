@@ -44,16 +44,26 @@ export const useMarket = (ligaId) => {
   }, [ligaId]);
 
   const cargarOfertasRecibidas = useCallback(async (equipoId) => {
-    if (!equipoId) return;
-    
-    try {
-      const ofertas = await getOfertasRecibidas(equipoId);
-      setOfertasRecibidas(ofertas);
-      console.log(`✅ ${ofertas.length} ofertas recibidas cargadas`);
-    } catch (err) {
-      console.error('❌ Error cargando ofertas recibidas:', err);
+  if (!equipoId) {
+    console.warn('⚠️ useMarket: No hay equipoId para cargar ofertas recibidas');
+    setOfertasRecibidas([]);
+    return;
+  }
+  
+  try {
+    console.log(`🔄 useMarket: Cargando ofertas recibidas para equipo ${equipoId}`);
+    const ofertas = await getOfertasRecibidas(equipoId);
+    console.log(`✅ useMarket: Ofertas cargadas - ${ofertas.length} elementos`, ofertas);
+    setOfertasRecibidas(ofertas);
+  } catch (err) {
+    console.error('❌ useMarket: Error cargando ofertas recibidas:', err);
+    // Mostrar el error específico de la API si está disponible
+    if (err.response) {
+      console.error('❌ Detalles del error:', err.response.data);
     }
-  }, []);
+    setOfertasRecibidas([]);
+  }
+}, []);
 
   const cargarOfertasRealizadas = useCallback(async (equipoId) => {
     if (!equipoId) return;
@@ -113,7 +123,7 @@ export const useMarket = (ligaId) => {
   }, []);
 
   const estaExpirado = useCallback((fechaMercado) => {
-    if (!fechaMercado) return false;
+    if (!fechaMercado) return true; // Si no hay fecha, considerar expirado
     
     try {
       const fechaMercadoObj = new Date(fechaMercado);
@@ -123,7 +133,7 @@ export const useMarket = (ligaId) => {
       return ahora >= expiracion;
     } catch (error) {
       console.error('❌ Error verificando expiración:', error);
-      return false;
+      return true; // En caso de error, considerar expirado
     }
   }, []);
 

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// AdminScreen.jsx
+import React, { useState, useEffect } from 'react';
 import { Settings, LogOut, Calendar, Edit, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import JornadasPanel from './JornadasPanel';
@@ -9,7 +10,19 @@ const AdminScreen = ({ datosUsuario, setCurrentScreen, cargarDatosIniciales }) =
   const [vista, setVista] = useState('jornadas');
   const { logout } = useAuth();
 
+  // 🆕 Debug para ver la estructura de datosUsuario
+  useEffect(() => {
+    console.log('=== DEBUG AdminScreen ===');
+    console.log('datosUsuario:', datosUsuario);
+    console.log('¿Es admin?:', datosUsuario?.es_admin);
+    console.log('Jugadores:', datosUsuario?.jugadores?.length);
+    console.log('Equipos realesssssss:', datosUsuario?.equipos_reales?.length);
+  }, [datosUsuario]);
+
   const jugadoresList = datosUsuario?.jugadores || [];
+  const equiposRealesList = datosUsuario?.equipos_reales || [];
+  console.log('Jugadores:', jugadoresList);
+  console.log('Equipos:', equiposRealesList);
 
   const handleLogout = () => {
     logout();
@@ -48,8 +61,8 @@ const AdminScreen = ({ datosUsuario, setCurrentScreen, cargarDatosIniciales }) =
               <div className="text-lg font-bold text-blue-600">{jugadoresList.length}</div>
             </div>
             <div className="bg-white p-3 rounded border">
-              <div className="font-semibold text-gray-700">Liga actual</div>
-              <div className="text-lg font-bold text-green-600">{datosUsuario?.ligaActual?.nombre || 'Liga Principal'}</div>
+              <div className="font-semibold text-gray-700">Equipos reales</div>
+              <div className="text-lg font-bold text-green-600">{equiposRealesList.length}</div>
             </div>
             <div className="bg-white p-3 rounded border">
               <div className="font-semibold text-gray-700">Jornada actual</div>
@@ -101,6 +114,7 @@ const AdminScreen = ({ datosUsuario, setCurrentScreen, cargarDatosIniciales }) =
           ) : (
             <PuntuacionesPanel 
               jugadores={jugadoresList}
+              equiposReales={equiposRealesList}
               onAsignarPuntosSuccess={cargarDatosIniciales}
             />
           )}

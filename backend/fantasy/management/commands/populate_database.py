@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
-from fantasy.models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Alineacion
+from fantasy.models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido
 import random
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -23,15 +23,15 @@ class Command(BaseCommand):
         
         # Crear JUGADORES con los nombres proporcionados
         total_jugadores = self.crear_jugadores_proporcionados(equipos_reales)
-        
-        # 🆕 PONER JUGADORES EN EL MERCADO
-        self.poner_jugadores_en_mercado()
-        
+    
         # Crear usuario admin
         self.crear_usuario_admin()
         
         # Crear algunos usuarios de prueba con equipos
         self.crear_usuarios_y_equipos_prueba(liga)
+
+        # 🆕 PONER JUGADORES EN EL MERCADO
+        self.poner_jugadores_en_mercado()
         
         # Crear jornadas y partidos
         self.crear_calendario_completo(liga, equipos_reales)
@@ -68,7 +68,7 @@ class Command(BaseCommand):
         """Crear equipos reales para asignar a jugadores"""
         equipos_reales_nombres = [
             'Viseu', 'Shalcke', 'Spolka', 'Pizarrin', 
-            'Barfleur', 'Pikatostes', 'Botafumeiro', 'Rayo Casedano'
+            'Barfleur', 'Pikatostes', 'Botafumeiro', 'Rayo Casedano', 'Makilakixki'
         ]
         
         equipos_reales = []
@@ -124,6 +124,11 @@ class Command(BaseCommand):
             'rayo casedano': [
                 'Mali (pt)', 'Arturo Jiménez', 'Marcos Jiménez', 'Alin', 'Aritza',
                 'Ivan Torrea', 'Daniel Torrea', 'Rodman'
+            ],
+            'makilakixki': [
+                'Adrian Pueyo (pt)', 'Mikel Ruiz (pt)', 'Ander Bandres', 'Asier Bandres', 'Jon Perez', 'Samuel Gomez',
+                'Alberto Lecumberri', 'Fermin Ingelmo', 'Oscar Guillen','Alvaro del Castillo','Asier Jimenez',
+                'Egoitz Arguiñariz','Aitor Blanco','Ivan Ramos','Miguel Rodrigues', 'Jesus Oiza', 'Gabriel Guallar'
             ]
         }
         

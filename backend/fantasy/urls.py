@@ -22,30 +22,50 @@ router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
 router.register(r'pujas', views.PujaViewSet, basename='pujas')
 
 urlpatterns = [
+    # ==================== RUTAS DEL ROUTER ====================
     path('', include(router.urls)),
+    
+    # ==================== AUTENTICACIÓN ====================
     path('auth/register/', views.RegisterView.as_view(), name='register'),
     path('auth/login/', CookieTokenObtainPairView.as_view(), name='login'),
     path('auth/logout/', LogoutView.as_view(), name='logout'),
-    path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
-    path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
+    
+    # ==================== DATOS GENERALES ====================
+    path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
-
-    path('equipos/<int:pk>/detalle', views.equipo_detalle, name='equipo-detalle'),
-    path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
+    
+    # ==================== EQUIPOS ====================
+    path('equipos/<int:pk>/detalle/', views.equipo_detalle, name='equipo-detalle'),
+    path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
+    path('equipos/<int:equipo_id>/actualizar_estados_banquillo/', views.actualizar_estados_banquillo, name='actualizar_estados_banquillo'),
+    
+    # ==================== MERCADO - OFERTAS ====================
     path('equipos/<int:equipo_id>/ofertas_recibidas/', views.ofertas_recibidas, name='ofertas_recibidas'),
     path('equipos/<int:equipo_id>/ofertas_realizadas/', views.ofertas_realizadas, name='ofertas_realizadas'),
     path('ofertas/<int:oferta_id>/aceptar/', views.aceptar_oferta, name='aceptar_oferta'),
     path('ofertas/<int:oferta_id>/rechazar/', views.rechazar_oferta, name='rechazar_oferta'),
+    path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
+    path('equipos/<int:equipo_id>/intercambiar_jugadores/', views.intercambiar_jugadores, name='intercambiar_jugadores'),
+    
+    # ==================== MERCADO - PUJAS ====================
+    path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
-
-    path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
-    path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
+    
+    # ==================== GESTIÓN DE JUGADORES ====================
     path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/poner_en_venta/', views.poner_en_venta, name='poner_en_venta'),
-    path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
     path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/quitar-del-mercado/', views.quitar_del_mercado, name='quitar_del_mercado'),
-    path('equipos/<int:equipo_id>/intercambiar_jugadores/', views.intercambiar_jugadores, name='intercambiar_jugadores'),
-    path('equipos/<int:equipo_id>/actualizar_estados_banquillo/', views.actualizar_estados_banquillo, name='actualizar_estados_banquillo'),
+    
+    # ==================== PUNTUACIONES ====================
+    path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
+    path('puntuaciones/actualizar/', views.actualizar_puntuacion_jugador, name='actualizar_puntuacion_jugador'),
+    path('puntuaciones/crear/', views.crear_puntuacion_jugador, name='crear_puntuacion_jugador'),
+    
+    # ==================== JORNADAS Y PARTIDOS ====================
+    path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
+    
+    # ==================== ADMINISTRACIÓN ====================
+    path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
 ]
