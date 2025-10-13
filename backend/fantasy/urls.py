@@ -1,12 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from django.contrib.auth import views as auth_views
-from . import views
-from .auth_views import (
-    CookieTokenObtainPairView,
-    CookieTokenRefreshView,
-    LogoutView
-)
+
+from . import views  
+from .auth_views import CookieTokenObtainPairView, CookieTokenRefreshView, LogoutView
 
 router = DefaultRouter()
 router.register(r'ligas', views.LigaViewSet)
@@ -20,6 +16,8 @@ router.register(r'equipos-reales', views.EquipoRealViewSet)
 router.register(r'puntuaciones', views.PuntuacionViewSet)
 router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
 router.register(r'pujas', views.PujaViewSet, basename='pujas')
+router.register(r'notificaciones', views.NotificacionViewSet, basename='notificaciones')
+router.register(r'transacciones', views.TransaccionEconomicaViewSet, basename='transacciones')
 
 urlpatterns = [
     # ==================== RUTAS DEL ROUTER ====================
@@ -37,9 +35,14 @@ urlpatterns = [
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
     
     # ==================== EQUIPOS ====================
-    path('equipos/<int:pk>/detalle/', views.equipo_detalle, name='equipo-detalle'),
+    path('equipos/<int:equipo_id>/plantilla/', views.plantilla_equipo, name='plantilla_equipo'),
     path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
     path('equipos/<int:equipo_id>/actualizar_estados_banquillo/', views.actualizar_estados_banquillo, name='actualizar_estados_banquillo'),
+    path('equipos/<int:equipo_id>/intercambiar_jugadores/', views.intercambiar_jugadores, name='intercambiar_jugadores'),
+    
+    # ==================== GESTIÓN DE JUGADORES ====================
+    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/poner_en_venta/', views.poner_en_venta, name='poner_en_venta'),
+    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/quitar_del_mercado/', views.quitar_del_mercado, name='quitar_del_mercado'),
     
     # ==================== MERCADO - OFERTAS ====================
     path('equipos/<int:equipo_id>/ofertas_recibidas/', views.ofertas_recibidas, name='ofertas_recibidas'),
@@ -47,16 +50,12 @@ urlpatterns = [
     path('ofertas/<int:oferta_id>/aceptar/', views.aceptar_oferta, name='aceptar_oferta'),
     path('ofertas/<int:oferta_id>/rechazar/', views.rechazar_oferta, name='rechazar_oferta'),
     path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
-    path('equipos/<int:equipo_id>/intercambiar_jugadores/', views.intercambiar_jugadores, name='intercambiar_jugadores'),
+    path('ofertas-directas/crear/', views.crear_oferta_directa, name='crear_oferta_directa'),    
     
     # ==================== MERCADO - PUJAS ====================
     path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
-    
-    # ==================== GESTIÓN DE JUGADORES ====================
-    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/poner_en_venta/', views.poner_en_venta, name='poner_en_venta'),
-    path('equipos/<int:equipo_id>/jugadores/<int:jugador_id>/quitar-del-mercado/', views.quitar_del_mercado, name='quitar_del_mercado'),
     
     # ==================== PUNTUACIONES ====================
     path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
@@ -68,4 +67,9 @@ urlpatterns = [
     
     # ==================== ADMINISTRACIÓN ====================
     path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
+
+    # ==================== NOTIFICACIONES Y TRANSACCIONES ====================
+    path('notificaciones/mis_notificaciones/', views.mis_notificaciones, name='mis-notificaciones'),
+    path('notificaciones/<int:notificacion_id>/marcar_leida/', views.marcar_notificacion_leida, name='marcar-notificacion-leida'),
+    path('transacciones/mis_transacciones/', views.mis_transacciones, name='mis-transacciones'),
 ]

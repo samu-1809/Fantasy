@@ -27,12 +27,6 @@ class Command(BaseCommand):
         # Crear usuario admin
         self.crear_usuario_admin()
         
-        # Crear algunos usuarios de prueba con equipos
-        self.crear_usuarios_y_equipos_prueba(liga)
-
-        # 🆕 PONER JUGADORES EN EL MERCADO
-        self.poner_jugadores_en_mercado()
-        
         # Crear jornadas y partidos
         self.crear_calendario_completo(liga, equipos_reales)
         
@@ -178,94 +172,6 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS(f'\n🎉 Total jugadores creados: {jugadores_creados}'))
         return jugadores_creados
-
-    def poner_jugadores_en_mercado(self):
-        """Poner jugadores libres en el mercado automáticamente"""
-        self.stdout.write('\n🏪 Poniendo jugadores en el mercado...')
-        
-        # 🆕 Obtener jugadores libres (sin equipo fantasy)
-        jugadores_libres = Jugador.objects.filter(equipo__isnull=True)
-        
-        # 🆕 Seleccionar al menos 12 jugadores aleatorios para poner en el mercado
-        num_jugadores_mercado = min(12, jugadores_libres.count())
-        jugadores_para_mercado = random.sample(list(jugadores_libres), num_jugadores_mercado)
-        
-        for jugador in jugadores_para_mercado:
-            jugador.en_venta = True
-            jugador.fecha_mercado = timezone.now()
-            jugador.save()
-            self.stdout.write(f'   ✅ {jugador.nombre} puesto en mercado - {jugador.posicion} - €{jugador.valor:,}')
-        
-        self.stdout.write(self.style.SUCCESS(f'🎯 {num_jugadores_mercado} jugadores puestos en el mercado'))
-
-    def crear_usuarios_y_equipos_prueba(self, liga):
-        """Crear algunos usuarios de prueba con equipos"""
-        self.stdout.write('\n👥 Creando usuarios de prueba...')
-        
-        usuarios_prueba = [
-            {'username': 'aaa', 'email': 'manager1@test.com', 'equipo_nombre': 'Los Tigres'},
-            {'username': 'aaaa', 'email': 'manager2@test.com', 'equipo_nombre': 'Dragones FC'},
-        ]
-        
-        for usuario_data in usuarios_prueba:
-            try:
-                user = User.objects.create_user(
-                    username=usuario_data['username'],
-                    email=usuario_data['email'],
-                    password='aaaaaa'
-                )
-                
-                # Crear equipo para el usuario
-                equipo = Equipo.objects.create(
-                    usuario=user,
-                    liga=liga,
-                    nombre=usuario_data['equipo_nombre'],
-                    presupuesto=50000000
-                )
-                
-                # 🆕 ASIGNAR JUGADORES A ESTE EQUIPO (máximo 7)
-                self.asignar_jugadores_a_equipo(equipo)
-                
-                self.stdout.write(self.style.SUCCESS(f'   ✅ Usuario {usuario_data["username"]} creado con equipo'))
-                
-            except Exception as e:
-                self.stdout.write(self.style.WARNING(f'   ⚠ Error creando usuario {usuario_data["username"]}: {e}'))
-
-    def asignar_jugadores_a_equipo(self, equipo):
-        """Asignar jugadores libres a un equipo (1 POR, 3 DEF, 3 DEL)"""
-        # 🆕 Buscar jugadores libres por posición
-        portero = Jugador.objects.filter(
-            equipo__isnull=True, 
-            posicion='POR'
-        ).order_by('?').first()
-        
-        defensas = Jugador.objects.filter(
-            equipo__isnull=True, 
-            posicion='DEF'
-        ).order_by('?')[:3]
-        
-        delanteros = Jugador.objects.filter(
-            equipo__isnull=True, 
-            posicion='DEL'
-        ).order_by('?')[:3]
-        
-        # Asignar jugadores al equipo
-        if portero:
-            portero.equipo = equipo
-            portero.en_banquillo = False  # Portero titular
-            portero.save()
-        
-        for defensa in defensas:
-            if defensa:
-                defensa.equipo = equipo
-                defensa.en_banquillo = random.choice([True, False])  # Aleatorio banquillo/campo
-                defensa.save()
-        
-        for delantero in delanteros:
-            if delantero:
-                delantero.equipo = equipo
-                delantero.en_banquillo = random.choice([True, False])  # Aleatorio banquillo/campo
-                delantero.save()
 
     def crear_usuario_admin(self):
         """Crear usuario administrador"""

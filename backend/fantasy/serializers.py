@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion, TransaccionEconomica
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -93,7 +93,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name']
+        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name'] 
     
     def validate(self, data):
         if data['password'] != data['password2']:
@@ -242,3 +242,21 @@ class JugadorMercadoSerializer(serializers.ModelSerializer):
     
     def get_expirado(self, obj):
         return obj.expirado
+
+class NotificacionSerializer(serializers.ModelSerializer):
+    tipo = serializers.CharField(source='tipo.codigo', read_only=True)
+    icono = serializers.CharField(source='tipo.icono', read_only=True)
+    
+    class Meta:
+        model = Notificacion
+        fields = [
+            'id', 'tipo', 'titulo', 'mensaje', 'icono', 
+            'fecha_creacion', 'es_leida', 'datos_extra'
+        ]
+        read_only_fields = ['fecha_creacion']
+
+class TransaccionEconomicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransaccionEconomica
+        fields = ['id', 'tipo', 'monto', 'descripcion', 'fecha']
+        read_only_fields = ['fecha']
