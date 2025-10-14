@@ -779,6 +779,96 @@ export const aceptarOferta = async (ofertaId) => {
   }
 };
 
+export const retirarOferta = async (ofertaId) => {
+  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/retirar/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al retirar oferta');
+  }
+  
+  return await response.json();
+};
+
+export const editarPuja = async (pujaId, nuevoMonto) => {
+  console.log(`🔄 [API] Editando puja ID: ${pujaId} con monto: ${nuevoMonto}`);
+  
+  try {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_URL}/pujas/${pujaId}/editar/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nuevo_monto: nuevoMonto }),
+    });
+
+    console.log(`📊 [API] Status editar puja: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response editar puja:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Puja editada exitosamente:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en editarPuja:', error);
+    throw error;
+  }
+};
+
+export const editarOferta = async (ofertaId, nuevoMonto) => {
+  console.log(`🔄 [API] Editando oferta ID: ${ofertaId} con monto: ${nuevoMonto}`);
+  
+  try {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_URL}/ofertas/${ofertaId}/editar/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nuevo_monto: nuevoMonto }),
+    });
+
+    console.log(`📊 [API] Status editar oferta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response editar oferta:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Oferta editada exitosamente:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en editarOferta:', error);
+    throw error;
+  }
+};
+
 export const ponerJugadorEnVenta = async (equipoId, jugadorId, precioVenta = null) => {
   console.log(`🔄 [API] Poniendo jugador ${jugadorId} en venta del equipo ${equipoId} con precio ${precioVenta}`);
   

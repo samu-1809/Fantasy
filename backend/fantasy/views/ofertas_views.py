@@ -91,6 +91,7 @@ def ofertas_realizadas(request, equipo_id):
         print(f"📋 Oferta realizada: {oferta.jugador.nombre} - {oferta.equipo_receptor.nombre} - €{oferta.monto}")
     
     return Response(data)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def aceptar_oferta(request, oferta_id):
@@ -389,6 +390,77 @@ def crear_oferta_directa(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def editar_oferta(request, oferta_id):
+    print(f"🔄 Editando oferta ID: {oferta_id}")
+    
+    try:
+        oferta = Oferta.objects.select_related(
+            'equipo_ofertante', 'jugador'
+        ).get(
+            id=oferta_id, 
+            equipo_ofertante__usuario=request.user
+        )
+    except Oferta.DoesNotExist:
+        return Response({'error': 'Oferta no encontrada'}, status=404)
+
+    # Verificar que la oferta está pendiente
+    if oferta.estado != 'pendiente':
+        return Response({'error': 'Solo puedes editar ofertas pendientes'}, status=400)
+
+    # Obtener nuevo monto del request
+    nuevo_monto = request.data.get('nuevo_monto')
+    if not nuevo_monto:
+        return Response({'error': 'El nuevo monto es requerido'}, status=400)
+
+    try:
+        nuevo_monto = float(nuevo_monto)
+    except (TypeError, ValueError):
+        return Response({'error': 'El monto debe ser un número válido'}, status=400)
+
+    # Validar que el nuevo monto es mayor
+    if nuevo_monto <= oferta.monto:
+        return Response({'error': 'El nuevo monto debe ser mayor al monto actual'}, status=400)
+
+    equipo = oferta.equipo_ofertante
+
+    # Calcular diferencia
+    diferencia = nuevo_monto - oferta.monto
+
+    if equipo.presupuesto < diferencia:
+        return Response({'error': 'Presupuesto insuficiente para aumentar la oferta'}, status=400)
+
+    try:
+        with transaction.atomic():
+            # Actualizar la oferta
+            oferta_anterior = oferta.monto
+            oferta.monto = nuevo_monto
+            oferta.fecha_oferta = timezone.now()
+            oferta.save()
+
+            # Restar diferencia del presupuesto
+            equipo.presupuesto -= diferencia
+            equipo.save()
+
+            print(f"✅ Oferta actualizada: €{oferta_anterior} -> €{nuevo_monto}. Diferencia: €{diferencia}")
+
+        return Response({
+            'success': True,
+            'message': 'Oferta actualizada correctamente',
+            'nuevo_monto': nuevo_monto,
+            'nuevo_presupuesto': equipo.presupuesto
+        })
+
+    except Exception as e:
+        print(f"❌ Error editando oferta: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': f'Error interno del servidor: {str(e)}'}, 
+            status=500
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def retirar_oferta(request, oferta_id):
     try:
         oferta = Oferta.objects.get(
@@ -399,8 +471,20 @@ def retirar_oferta(request, oferta_id):
     except Oferta.DoesNotExist:
         return Response({'error': 'Oferta no encontrada o no se puede retirar'}, status=404)
     
+    # Devolver el dinero al equipo ofertante
+    equipo = oferta.equipo_ofertante
+    equipo.presupuesto += oferta.monto
+    equipo.save()
+    
+    # Marcar la oferta como retirada
     oferta.estado = 'retirada'
     oferta.fecha_respuesta = timezone.now()
     oferta.save()
     
-    return Response({'message': 'Oferta retirada correctamente'})
+    print(f"✅ Oferta {oferta_id} retirada. Dinero devuelto: €{oferta.monto}")
+    
+    return Response({
+        'success': True,
+        'message': 'Oferta retirada correctamente',
+        'nuevo_presupuesto': equipo.presupuesto
+    })

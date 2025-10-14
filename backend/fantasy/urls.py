@@ -53,12 +53,15 @@ urlpatterns = [
     path('ofertas/<int:oferta_id>/aceptar/', views.aceptar_oferta, name='aceptar_oferta'),
     path('ofertas/<int:oferta_id>/rechazar/', views.rechazar_oferta, name='rechazar_oferta'),
     path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
-    path('ofertas-directas/crear/', views.crear_oferta_directa, name='crear_oferta_directa'),    
+    path('ofertas-directas/crear/', views.crear_oferta_directa, name='crear_oferta_directa'),   
+    path('ofertas/<int:oferta_id>/editar/', views.editar_oferta, name='editar_oferta'), 
     
     # ==================== MERCADO - PUJAS ====================
     path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
+    path('pujas/<int:puja_id>/editar/', views.editar_puja, name='editar_puja'),
+
 
     # ==================== JORNADAS Y PARTIDOS ====================
     path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),

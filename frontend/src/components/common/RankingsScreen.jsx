@@ -1,8 +1,9 @@
 // components/screens/RankingsScreen.js
 import React, { useState, useEffect } from 'react';
-import { Trophy, Users, TrendingUp, Crown, Medal, Star, Target, Calendar } from 'lucide-react';
+import { Trophy, Users, TrendingUp, Crown, Medal, Star, Target, Calendar, X } from 'lucide-react';
 import { getClasificacion, getPlantillaEquipo, getPuntuacionesJugador, crearOfertaDirecta} from '../../services/api';
 import FieldView from '../dashboard/FieldView';
+import MiniGrafico from '../market/components/MiniGrafico';
 
 const RankingsScreen = ({ datosUsuario }) => {
   const [clasificacion, setClasificacion] = useState([]);
@@ -14,7 +15,8 @@ const RankingsScreen = ({ datosUsuario }) => {
   const [alineacion, setAlineacion] = useState(null);
   const [loadingAlineacion, setLoadingAlineacion] = useState(false);
   
-  const [mostrarDetallesJugador, setMostrarDetallesJugador] = useState(false);
+  // 🆕 Estados para el nuevo modal de jugador
+  const [mostrarModalJugador, setMostrarModalJugador] = useState(false);
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
   const [puntuacionesJugador, setPuntuacionesJugador] = useState([]);
   const [loadingPuntuaciones, setLoadingPuntuaciones] = useState(false);
@@ -22,6 +24,9 @@ const RankingsScreen = ({ datosUsuario }) => {
   const [mostrarOferta, setMostrarOferta] = useState(false);
   const [montoOferta, setMontoOferta] = useState('');
   const [enviandoOferta, setEnviandoOferta] = useState(false);
+
+  // 🆕 Obtener ID del equipo del usuario
+  const miEquipoId = datosUsuario?.equipo?.id;
 
   useEffect(() => {
     cargarClasificacion();
@@ -46,9 +51,20 @@ const RankingsScreen = ({ datosUsuario }) => {
       setLoading(false);
     }
   };
-  
+
+  // 🆕 Función para verificar si un equipo es el del usuario
+  const esMiEquipo = (equipo) => {
+    const equipoId = equipo.id || equipo.equipo_id;
+    return miEquipoId && equipoId && miEquipoId === equipoId;
+  };
+
 
   const handleTeamClick = async (equipo) => {
+    // 🆕 No permitir clic en el equipo propio
+    if (esMiEquipo(equipo)) {
+      return;
+    }
+
     const equipoId = equipo.id || equipo.equipo_id;
     
     if (!equipoId) {
@@ -95,6 +111,7 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
   };
 
+  // 🆕 Función mejorada para manejar clic en jugador
   const handlePlayerClick = async (jugador) => {
     if (!jugador) return;
     
@@ -104,16 +121,37 @@ const RankingsScreen = ({ datosUsuario }) => {
       
       console.log(`🔍 Cargando puntuaciones del jugador: ${jugador.id}`);
       const puntuaciones = await getPuntuacionesJugador(jugador.id);
-      setPuntuacionesJugador(puntuaciones);
-      setMostrarDetallesJugador(true);
+      
+      // 🆕 Formatear puntuaciones para el MiniGrafico
+      const puntuacionesFormateadas = puntuaciones.map((p, index) => ({
+        jornada_numero: p.jornada || index + 1,
+        puntos: p.puntos || 0
+      }));
+      
+      setPuntuacionesJugador(puntuacionesFormateadas);
+      setMostrarModalJugador(true);
       
     } catch (err) {
       console.error('❌ Error cargando puntuaciones:', err);
+      // 🆕 Mostrar modal con array vacío si hay error
       setPuntuacionesJugador([]);
-      setMostrarDetallesJugador(true);
+      setMostrarModalJugador(true);
     } finally {
       setLoadingPuntuaciones(false);
     }
+  };
+
+  // 🆕 Función para hacer oferta desde el modal
+  const handleHacerOfertaDesdeModal = () => {
+    setMostrarModalJugador(false);
+    setMostrarOferta(true);
+  };
+
+  // 🆕 Función para cerrar modal de jugador
+  const cerrarModalJugador = () => {
+    setMostrarModalJugador(false);
+    setJugadorSeleccionado(null);
+    setPuntuacionesJugador([]);
   };
 
   const handleHacerOferta = async () => {
@@ -141,6 +179,7 @@ const RankingsScreen = ({ datosUsuario }) => {
       alert(`✅ Oferta de €${formatNumber(monto)} enviada por ${jugadorSeleccionado.nombre}`);
       setMostrarOferta(false);
       setMontoOferta('');
+      setJugadorSeleccionado(null);
       
     } catch (err) {
       console.error('❌ Error enviando oferta:', err);
@@ -156,10 +195,9 @@ const RankingsScreen = ({ datosUsuario }) => {
     setAlineacion(null);
   };
 
-  const cerrarDetallesJugador = () => {
-    setMostrarDetallesJugador(false);
-    setJugadorSeleccionado(null);
-    setPuntuacionesJugador([]);
+  const cerrarOferta = () => {
+    setMostrarOferta(false);
+    setMontoOferta('');
   };
 
   const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
@@ -188,6 +226,17 @@ const RankingsScreen = ({ datosUsuario }) => {
       case 4: case 5: case 6: return 'bg-gradient-to-r from-blue-50 to-white border-l-4 border-blue-400';
       default: return 'bg-white border-l-4 border-gray-300';
     }
+  };
+
+  // 🆕 Función para obtener clases CSS condicionales
+  const getClasesFilaEquipo = (equipo) => {
+    const baseClasses = `p-4 transition-all duration-200 ${getPosicionColor(equipo.posicion || index + 1)}`;
+    
+    if (esMiEquipo(equipo)) {
+      return `${baseClasses} opacity-70 cursor-not-allowed`;
+    }
+    
+    return `${baseClasses} hover:shadow-md hover:scale-[1.02] cursor-pointer`;
   };
 
   if (loading) {
@@ -258,7 +307,7 @@ const RankingsScreen = ({ datosUsuario }) => {
               {clasificacion.map((equipo, index) => (
                 <div 
                   key={equipo.id || equipo.equipo_id || index}
-                  className={`p-4 transition-all duration-200 hover:shadow-md hover:scale-[1.02] cursor-pointer ${getPosicionColor(equipo.posicion || index + 1)}`}
+                  className={getClasesFilaEquipo(equipo)}
                   onClick={() => handleTeamClick(equipo)}
                 >
                   <div className="grid grid-cols-12 gap-4 items-center">
@@ -275,12 +324,25 @@ const RankingsScreen = ({ datosUsuario }) => {
                     {/* Equipo */}
                     <div className="col-span-5">
                       <div className="flex items-center gap-3 group">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                          esMiEquipo(equipo) 
+                            ? 'bg-gradient-to-br from-green-500 to-emerald-600' 
+                            : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                        }`}>
                           {equipo.nombre?.charAt(0) || 'E'}
                         </div>
                         <div className="text-left">
-                          <div className="font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
+                          <div className={`font-semibold ${
+                            esMiEquipo(equipo) 
+                              ? 'text-green-700' 
+                              : 'text-gray-800 group-hover:text-blue-600 transition-colors'
+                          }`}>
                             {equipo.nombre}
+                            {esMiEquipo(equipo) && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                Tu equipo
+                              </span>
+                            )}
                           </div>
                           <div className="text-sm text-gray-500">
                             {equipo.puntos_totales || 0} pts totales
@@ -291,16 +353,27 @@ const RankingsScreen = ({ datosUsuario }) => {
 
                     {/* Manager */}
                     <div className="col-span-3">
-                      <div className="text-gray-700 font-medium">
+                      <div className={`font-medium ${
+                        esMiEquipo(equipo) ? 'text-green-600' : 'text-gray-700'
+                      }`}>
                         {equipo.usuario || equipo.usuario_username}
+                        {esMiEquipo(equipo) && ' (Tú)'}
                       </div>
                     </div>
 
                     {/* Puntos */}
                     <div className="col-span-2 text-center">
-                      <div className="inline-flex items-center gap-1 bg-gray-100 rounded-full px-3 py-1">
-                        <TrendingUp size={14} className="text-green-500" />
-                        <span className="font-bold text-gray-800">
+                      <div className={`inline-flex items-center gap-1 rounded-full px-3 py-1 ${
+                        esMiEquipo(equipo) 
+                          ? 'bg-green-100' 
+                          : 'bg-gray-100'
+                      }`}>
+                        <TrendingUp size={14} className={
+                          esMiEquipo(equipo) ? 'text-green-500' : 'text-green-500'
+                        } />
+                        <span className={`font-bold ${
+                          esMiEquipo(equipo) ? 'text-green-800' : 'text-gray-800'
+                        }`}>
                           {equipo.puntos_totales || 0}
                         </span>
                       </div>
@@ -380,97 +453,69 @@ const RankingsScreen = ({ datosUsuario }) => {
           </div>
         )}
 
-        {/* Modal de Detalles del Jugador */}
-        {mostrarDetallesJugador && jugadorSeleccionado && (
+        {/* 🆕 MODAL DE JUGADOR CON GRÁFICO */}
+        {mostrarModalJugador && jugadorSeleccionado && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+              {/* Header del Modal */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-2xl font-bold">{jugadorSeleccionado.nombre}</h2>
-                    <p className="text-blue-100">
+                    <h3 className="text-2xl font-bold">{jugadorSeleccionado.nombre}</h3>
+                    <p className="text-blue-100 mt-2 text-lg">
                       {jugadorSeleccionado.posicion_display || jugadorSeleccionado.posicion} • 
                       {jugadorSeleccionado.equipo_real_nombre ? ` ${jugadorSeleccionado.equipo_real_nombre}` : ' Libre'}
                     </p>
                   </div>
                   <button
-                    onClick={cerrarDetallesJugador}
+                    onClick={cerrarModalJugador}
                     className="text-white hover:text-blue-200 text-2xl transition-colors bg-white/20 rounded-full p-2"
                   >
                     ✕
                   </button>
                 </div>
+                <div className="flex items-center gap-4 mt-3 text-base">
+                  <span className="bg-white/20 px-3 py-1 rounded">
+                    Valor: <strong>€{formatNumber(jugadorSeleccionado.valor || 0)}</strong>
+                  </span>
+                  <span className="bg-white/20 px-3 py-1 rounded">
+                    Puntos: <strong>{jugadorSeleccionado.puntos_totales || 0}</strong>
+                  </span>
+                </div>
               </div>
 
-              <div className="p-6 overflow-y-auto max-h-[calc(95vh-120px)]">
-                {/* Información básica */}
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="text-gray-600 text-sm">Valor</div>
-                    <div className="font-bold text-green-600 text-lg">
-                      {formatValue(jugadorSeleccionado.valor || 0)}
-                    </div>
+              {/* Sección del Gráfico */}
+              <div className="p-6 border-b border-gray-200">
+                <h4 className="text-lg font-semibold mb-4 text-gray-800">
+                  Rendimiento por Jornada
+                </h4>
+                {loadingPuntuaciones ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Cargando estadísticas...</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="text-gray-600 text-sm">Puntos Totales</div>
-                    <div className="font-bold text-purple-600 text-lg">
-                      {jugadorSeleccionado.puntos_totales || 0}
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  <MiniGrafico 
+                    puntuaciones={puntuacionesJugador}
+                  />
+                )}
+              </div>
 
-                {/* Puntuaciones por jornada */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                    <Calendar className="text-blue-500" size={20} />
-                    Puntuaciones por Jornada
-                  </h3>
-                  
-                  {loadingPuntuaciones ? (
-                    <div className="text-center py-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="text-gray-600 mt-2">Cargando puntuaciones...</p>
-                    </div>
-                  ) : puntuacionesJugador.length > 0 ? (
-                    <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">Jornada</th>
-                            <th className="text-right py-2">Puntos</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {puntuacionesJugador.map((puntuacion, index) => (
-                            <tr key={index} className="border-b">
-                              <td className="py-2">Jornada {puntuacion.jornada || index + 1}</td>
-                              <td className="py-2 text-right font-semibold">
-                                <span className={puntuacion.puntos > 0 ? 'text-green-600' : 'text-red-600'}>
-                                  {puntuacion.puntos > 0 ? '+' : ''}{puntuacion.puntos}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-4 text-center">
-                      <p className="text-gray-500">No hay puntuaciones disponibles</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Botón para hacer oferta */}
-                <div className="border-t pt-4">
-                  <button
-                    onClick={() => setMostrarOferta(true)}
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Target size={20} />
-                    Hacer Oferta por este Jugador
-                  </button>
-                </div>
+              {/* Botones de Acción */}
+              <div className="p-6 space-y-3">
+                <button
+                  onClick={handleHacerOfertaDesdeModal}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all flex items-center justify-center gap-2"
+                >
+                  <Target size={20} />
+                  Hacer Oferta por este Jugador
+                </button>
+                <button
+                  onClick={cerrarModalJugador}
+                  className="w-full bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
@@ -489,30 +534,59 @@ const RankingsScreen = ({ datosUsuario }) => {
 
               <div className="p-6">
                 <div className="space-y-4">
+                  {/* Información del jugador */}
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <p className="font-semibold text-gray-800">{jugadorSeleccionado.nombre}</p>
+                    <p className="text-sm text-gray-600">
+                      {jugadorSeleccionado.posicion_display || jugadorSeleccionado.posicion} • 
+                      {jugadorSeleccionado.equipo_real_nombre ? ` ${jugadorSeleccionado.equipo_real_nombre}` : ' Libre'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <div className="text-xs text-gray-500">Valor</div>
+                        <div className="font-bold text-green-600 text-lg">
+                          {formatValue(jugadorSeleccionado.valor || 0)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500">Puntos</div>
+                        <div className="font-bold text-purple-600 text-lg">
+                          {jugadorSeleccionado.puntos_totales || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Input de monto */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Monto de la oferta (€)
                     </label>
                     <input
-                      type="number"
-                      value={montoOferta}
-                      onChange={(e) => setMontoOferta(e.target.value.replace(/[^\d]/g, ''))}
-                      className="w-full border border-gray-300 rounded-lg p-3 text-lg font-semibold"
-                      min={1}
+                      type="text"
+                      value={montoOferta ? formatNumber(montoOferta) : ''}
+                      onChange={(e) => {
+                        // 🆕 Permitir solo números y eliminar puntos para el cálculo
+                        const numericValue = e.target.value.replace(/[^\d]/g, '');
+                        setMontoOferta(numericValue);
+                      }}
+                      className="w-full border border-gray-300 rounded-lg p-3 text-lg font-semibold text-right"
+                      placeholder="0"
                     />
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-sm text-gray-500 mt-1 text-right">
                       Valor actual: €{formatNumber(jugadorSeleccionado.valor || 0)}
                     </p>
                   </div>
 
-                  <div className="bg-blue-50 rounded-lg p-4">
+                  {/* Información de presupuesto */}
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                     <div className="flex justify-between text-sm">
                       <span className="text-blue-700">Tu presupuesto:</span>
                       <span className="font-semibold text-blue-800">
                         €{formatNumber(datosUsuario?.equipo?.presupuesto || 0)}
                       </span>
                     </div>
-                    {montoOferta && !isNaN(montoOferta) && (
+                    {montoOferta && !isNaN(montoOferta) && montoOferta > 0 && (
                       <div className="flex justify-between text-sm mt-2">
                         <span className="text-blue-700">Presupuesto restante:</span>
                         <span className={`font-semibold ${
@@ -526,16 +600,17 @@ const RankingsScreen = ({ datosUsuario }) => {
                     )}
                   </div>
 
+                  {/* Botones */}
                   <div className="flex gap-3">
                     <button
-                      onClick={() => setMostrarOferta(false)}
+                      onClick={cerrarOferta}
                       className="flex-1 bg-gray-500 text-white py-3 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleHacerOferta}
-                      disabled={enviandoOferta || !montoOferta || 0}
+                      disabled={enviandoOferta || !montoOferta || montoOferta === '0'}
                       className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {enviandoOferta ? 'Enviando...' : 'Enviar Oferta'}

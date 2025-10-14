@@ -37,14 +37,16 @@ from .ofertas_views import (
     aceptar_oferta,
     rechazar_oferta, 
     retirar_oferta,
-    crear_oferta_directa
+    crear_oferta_directa,
+    editar_oferta
 )
 
 # Importa funciones de pujas
 from .pujas_views import (
     pujar_jugador, 
     pujas_realizadas, 
-    retirar_puja
+    retirar_puja,
+    editar_puja
 )
 
 # Importa utilidades

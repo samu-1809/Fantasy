@@ -335,33 +335,83 @@ def retirar_puja(request, puja_id):
             status=500
         )
 
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def ofertas_realizadas(request, equipo_id):
-    """Obtener todas las ofertas realizadas por un equipo"""
+def editar_puja(request, puja_id):
+    print(f"🔄 Editando puja ID: {puja_id}")
+    
     try:
-        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
-    except Equipo.DoesNotExist:
-        return Response({'error': 'Equipo no encontrado'}, status=404)
+        puja = Puja.objects.select_related('equipo', 'jugador').get(
+            id=puja_id, 
+            equipo__usuario=request.user
+        )
+    except Puja.DoesNotExist:
+        return Response({'error': 'Puja no encontrada'}, status=404)
 
-    ofertas = Oferta.objects.filter(
-        equipo_ofertante=equipo
-    ).select_related('jugador', 'equipo_receptor').order_by('-fecha_oferta')
-    
-    ofertas_data = []
-    for oferta in ofertas:
-        oferta_data = {
-            'id': oferta.id,
-            'jugador_id': oferta.jugador.id,
-            'jugador_nombre': oferta.jugador.nombre,
-            'jugador_posicion': oferta.jugador.posicion,
-            'jugador_equipo': oferta.equipo_receptor.nombre,
-            'monto': oferta.monto,
-            'estado': oferta.estado,
-            'fecha_oferta': oferta.fecha_oferta,
-            'fecha_respuesta': oferta.fecha_respuesta,
-            'equipo_receptor_nombre': oferta.equipo_receptor.nombre,
-        }
-        ofertas_data.append(oferta_data)
-    
-    return Response(ofertas_data)
+    # Verificar si la puja está activa
+    if hasattr(puja, 'activa') and not puja.activa:
+        return Response({'error': 'No puedes editar una puja retirada'}, status=400)
+
+    if puja.es_ganadora:
+        return Response({'error': 'No puedes editar una puja ganadora'}, status=400)
+
+    # Obtener el nuevo monto del request
+    nuevo_monto = request.data.get('nuevo_monto')
+    if not nuevo_monto:
+        return Response({'error': 'El nuevo monto es requerido'}, status=400)
+
+    try:
+        nuevo_monto = float(nuevo_monto)
+    except (TypeError, ValueError):
+        return Response({'error': 'El monto debe ser un número válido'}, status=400)
+
+    jugador = puja.jugador
+    equipo = puja.equipo
+
+    # Validaciones
+    if not jugador.en_venta or jugador.expirado:
+        return Response({'error': 'El jugador ya no está en venta'}, status=400)
+
+    if nuevo_monto <= jugador.puja_actual:
+        return Response({'error': 'El nuevo monto debe ser mayor a la puja actual'}, status=400)
+
+    # Calcular diferencia
+    diferencia = nuevo_monto - puja.monto
+
+    if equipo.presupuesto < diferencia:
+        return Response({'error': 'Presupuesto insuficiente para aumentar la puja'}, status=400)
+
+    try:
+        with transaction.atomic():
+            # Actualizar la puja
+            puja_anterior = puja.monto
+            puja.monto = nuevo_monto
+            puja.fecha_puja = timezone.now()
+            puja.save()
+
+            # Actualizar puja actual del jugador
+            jugador.puja_actual = nuevo_monto
+            jugador.equipo_pujador = equipo
+            jugador.save()
+
+            # Restar diferencia del presupuesto
+            equipo.presupuesto -= diferencia
+            equipo.save()
+
+            print(f"✅ Puja actualizada: €{puja_anterior} -> €{nuevo_monto}. Diferencia: €{diferencia}")
+
+        return Response({
+            'success': True,
+            'message': 'Puja actualizada correctamente',
+            'nuevo_monto': nuevo_monto,
+            'nuevo_presupuesto': equipo.presupuesto
+        })
+
+    except Exception as e:
+        print(f"❌ Error editando puja: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': f'Error interno del servidor: {str(e)}'}, 
+            status=500
+        )

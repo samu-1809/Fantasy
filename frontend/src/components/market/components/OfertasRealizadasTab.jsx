@@ -1,5 +1,4 @@
-// components/OfertasRealizadasTab.jsx - Versión más robusta
-import React from 'react';
+import React, { useState } from 'react';
 import { DollarSign, Clock, Edit2 } from 'lucide-react';
 
 const OfertasRealizadasTab = ({
@@ -8,11 +7,16 @@ const OfertasRealizadasTab = ({
   mercado = [],
   handleEditarPuja,
   handleRetirarPuja,
+  handleRetirarOferta,
+  handleEditarOferta, // 🆕 Nueva prop
   formatNormalValue,
   totalJugadores = 0,
   maxJugadores = 13,
   equipoId
 }) => {
+  const [editando, setEditando] = useState(null);
+  const [nuevoMonto, setNuevoMonto] = useState('');
+
   if (!equipoId) {
     return (
       <div className="text-center text-red-500 py-8">
@@ -20,6 +24,37 @@ const OfertasRealizadasTab = ({
       </div>
     );
   }
+
+  // 🆕 Función para iniciar edición
+  const iniciarEdicion = (item, tipo, montoActual) => {
+    setEditando({ id: item.id, tipo, montoActual });
+    setNuevoMonto(montoActual.toString());
+  };
+
+  // 🆕 Función para cancelar edición
+  const cancelarEdicion = () => {
+    setEditando(null);
+    setNuevoMonto('');
+  };
+
+  // 🆕 Función para confirmar edición
+  const confirmarEdicion = async () => {
+    if (!nuevoMonto || isNaN(nuevoMonto) || parseFloat(nuevoMonto) <= editando.montoActual) {
+      alert('El monto debe ser un número válido y mayor al actual');
+      return;
+    }
+
+    try {
+      if (editando.tipo === 'puja') {
+        await handleEditarPuja(editando.id, parseFloat(nuevoMonto));
+      } else {
+        await handleEditarOferta(editando.id, parseFloat(nuevoMonto));
+      }
+      cancelarEdicion();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    }
+  };
 
   // 🆕 Filtrar pujas activas (con fallback seguro)
   const pujasActivas = pujasRealizadas.filter(puja => 
@@ -79,6 +114,54 @@ const OfertasRealizadasTab = ({
                   <Clock size={14} className="inline mr-1" />
                   {new Date(oferta.fecha_oferta).toLocaleDateString()}
                 </div>
+
+                {/* 🆕 Botones para ofertas pendientes */}
+                {oferta.estado === 'pendiente' && (
+                  <div className="mt-3 flex justify-end gap-2">
+                    {editando && editando.tipo === 'oferta' && editando.id === oferta.id ? (
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="number"
+                          value={nuevoMonto}
+                          onChange={(e) => setNuevoMonto(e.target.value)}
+                          className="px-2 py-1 border rounded w-32"
+                          placeholder="Nuevo monto"
+                          min={oferta.monto + 100000}
+                          step={100000}
+                        />
+                        <button 
+                          onClick={confirmarEdicion}
+                          className="px-3 py-1 bg-green-600 text-white rounded text-sm"
+                        >
+                          ✅
+                        </button>
+                        <button 
+                          onClick={cancelarEdicion}
+                          className="px-3 py-1 bg-gray-600 text-white rounded text-sm"
+                        >
+                          ❌
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => iniciarEdicion(oferta, 'oferta', oferta.monto)}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2 transition-colors"
+                        >
+                          <Edit2 size={14} />
+                          Editar
+                        </button>
+                        <button 
+                          onClick={() => handleRetirarOferta(oferta.id)}
+                          className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm flex items-center gap-2 transition-colors"
+                        >
+                          <span>❌</span>
+                          Retirar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -128,20 +211,48 @@ const OfertasRealizadasTab = ({
                     </div>
                     {!puja.es_ganadora && !expirada && (
                       <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleEditarPuja(puja)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-1"
-                        >
-                          <Edit2 size={14} />
-                          Editar
-                        </button>
-                        <button 
-                          onClick={() => handleRetirarPuja(puja.id)}
-                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm flex items-center gap-1"
-                        >
-                          <span>❌</span>
-                          Retirar
-                        </button>
+                        {editando && editando.tipo === 'puja' && editando.id === puja.id ? (
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="number"
+                              value={nuevoMonto}
+                              onChange={(e) => setNuevoMonto(e.target.value)}
+                              className="px-2 py-1 border rounded w-32"
+                              placeholder="Nuevo monto"
+                              min={puja.monto + 100000}
+                              step={100000}
+                            />
+                            <button 
+                              onClick={confirmarEdicion}
+                              className="px-3 py-1 bg-green-600 text-white rounded text-sm"
+                            >
+                              ✅
+                            </button>
+                            <button 
+                              onClick={cancelarEdicion}
+                              className="px-3 py-1 bg-gray-600 text-white rounded text-sm"
+                            >
+                              ❌
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => iniciarEdicion(puja, 'puja', puja.monto)}
+                              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2 transition-colors"
+                            >
+                              <Edit2 size={14} />
+                              Editar
+                            </button>
+                            <button 
+                              onClick={() => handleRetirarPuja(puja.id)}
+                              className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm flex items-center gap-2 transition-colors"
+                            >
+                              <span>❌</span>
+                              Retirar
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

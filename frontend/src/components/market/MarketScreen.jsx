@@ -9,6 +9,7 @@ import OfertasRecibidasTab from './components/OfertasRecibidasTab';
 import OfertasRealizadasTab from './components/OfertasRealizadasTab';
 import PujaModal from './components/PujaModal';
 import { ShoppingCart, TrendingUp, Users, AlertCircle } from 'lucide-react';
+import { retirarOferta, editarPuja, editarOferta } from '../../services/api'; // 🆕 Importar funciones
 
 const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const { user } = useAuth();
@@ -121,6 +122,72 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     };
   }, []);
 
+  // 🆕 Función para retirar ofertas
+  const handleRetirarOferta = async (ofertaId) => {
+    if (!window.confirm('¿Estás seguro de que quieres retirar esta oferta? Se te devolverá el dinero.')) {
+      return;
+    }
+
+    try {
+      await retirarOferta(ofertaId);
+      alert('✅ Oferta retirada correctamente. El dinero ha sido devuelto a tu presupuesto.');
+      
+      if (equipoId) {
+        await cargarOfertasRealizadas(equipoId);
+      }
+      
+      if (onFichajeExitoso) {
+        onFichajeExitoso();
+      }
+    } catch (err) {
+      alert('❌ Error al retirar la oferta: ' + err.message);
+    }
+  };
+
+  // 🆕 Función para editar puja
+  const handleEditarPuja = async (pujaId, nuevoMonto) => {
+    try {
+      const resultado = await editarPuja(pujaId, nuevoMonto);
+      
+      // Recargar datos después de editar
+      if (equipoId) {
+        await cargarPujasRealizadas(equipoId);
+      }
+      
+      if (onFichajeExitoso) {
+        onFichajeExitoso();
+      }
+      
+      alert('✅ Puja actualizada correctamente');
+      return resultado;
+    } catch (error) {
+      alert('❌ Error al editar la puja: ' + error.message);
+      throw error;
+    }
+  };
+
+  // 🆕 Función para editar oferta
+  const handleEditarOferta = async (ofertaId, nuevoMonto) => {
+    try {
+      const resultado = await editarOferta(ofertaId, nuevoMonto);
+      
+      // Recargar datos después de editar
+      if (equipoId) {
+        await cargarOfertasRealizadas(equipoId);
+      }
+      
+      if (onFichajeExitoso) {
+        onFichajeExitoso();
+      }
+      
+      alert('✅ Oferta actualizada correctamente');
+      return resultado;
+    } catch (error) {
+      alert('❌ Error al editar la oferta: ' + error.message);
+      throw error;
+    }
+  };
+
   // Reemplaza todo el useEffect problemático con esto:
   useEffect(() => {
     const retirarPujasDeJugadoresInexistentes = async () => {
@@ -151,8 +218,6 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
           // Si el error es que la subasta terminó, marcamos la puja como no activa
           if (err.message.includes('subasta ha terminado') || err.message.includes('No se puede retirar')) {
             console.log(`⚠️ Puja ${puja.id} no puede ser retirada (subasta terminada), marcando como inactiva`);
-            // Aquí podrías actualizar el estado local para marcar esta puja como no activa
-            // para evitar intentos futuros
           } else {
             console.error(`❌ Error retirando puja ${puja.id}:`, err.message);
           }
@@ -199,13 +264,52 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   };
 
+  // 🆕 Función corregida para verificar si ya se pujó por un jugador
   const yaPujadoPorJugador = (jugadorId) => {
-    return pujasRealizadas.some(puja => 
+    console.log('🔍 Verificando pujas para jugador:', jugadorId);
+    
+    // Verificar en pujas activas
+    const yaPujado = pujasRealizadas.some(puja => {
+      const esPujaActiva = puja.jugador === jugadorId &&
+                          !puja.es_ganadora && 
+                          puja.jugador_en_venta && 
+                          !puja.jugador_expirado;
+      
+      console.log(`Puja ${puja.id}: jugador=${puja.jugador}, activa=${esPujaActiva}`);
+      return esPujaActiva;
+    });
+
+    // Verificar en ofertas directas pendientes
+    const yaOfertado = ofertasRealizadas.some(oferta => {
+      const esOfertaPendiente = oferta.jugador === jugadorId &&
+                               oferta.estado === 'pendiente';
+      
+      console.log(`Oferta ${oferta.id}: jugador=${oferta.jugador}, pendiente=${esOfertaPendiente}`);
+      return esOfertaPendiente;
+    });
+
+    console.log(`Resultado: yaPujado=${yaPujado}, yaOfertado=${yaOfertado}`);
+    return yaPujado || yaOfertado;
+  };
+
+  const getOfertaExistente = (jugadorId) => {
+    const pujaExistente = pujasRealizadas.find(puja => 
       puja.jugador === jugadorId &&
       !puja.es_ganadora && 
       puja.jugador_en_venta && 
       !puja.jugador_expirado
     );
+
+    if (pujaExistente) return { tipo: 'puja', data: pujaExistente };
+
+    const ofertaExistente = ofertasRealizadas.find(oferta => 
+      oferta.jugador === jugadorId &&
+      oferta.estado === 'pendiente'
+    );
+
+    if (ofertaExistente) return { tipo: 'oferta', data: ofertaExistente };
+
+    return null;
   };
 
   const getPujaExistente = (jugadorId) => {
@@ -217,7 +321,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     );
   };
 
-  const handleEditarPuja = (puja) => {
+  const handleIniciarEdicionPuja = (puja) => {
     if (!puja.jugador_en_venta || puja.jugador_expirado) {
       alert('❌ No puedes editar esta puja porque el jugador ya no está disponible');
       return;
@@ -229,15 +333,25 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     setMostrarModalPuja(true);
   };
 
+  // 🆕 Función corregida para manejar pujas
   const handlePujar = (jugador) => {
+    console.log('🎯 Intentando pujar por:', jugador);
+    
     if (yaPujadoPorJugador(jugador.id)) {
-      const pujaExistente = getPujaExistente(jugador.id);
-      if (pujaExistente) {
-        handleEditarPuja(pujaExistente);
+      const ofertaExistente = getOfertaExistente(jugador.id);
+      
+      if (ofertaExistente) {
+        if (ofertaExistente.tipo === 'puja') {
+          handleIniciarEdicionPuja(ofertaExistente.data);
+        } else {
+          alert(`⚠️ Ya tienes una oferta directa pendiente por ${jugador.nombre}. No puedes hacer una puja en subasta por el mismo jugador.`);
+        }
         return;
       }
     }
 
+    // 🆕 CORRECCIÓN: Permitir pujar en cualquier tipo de venta que esté en el mercado
+    // El mercado incluye tanto subastas como ventas directas de usuarios
     setJugadorSeleccionado(jugador);
     setModoEdicionPuja(false);
     setPujaEditando(null);
@@ -245,14 +359,8 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     setMostrarModalPuja(true);
   };
 
-  const handleChangeMontoPuja = (e) => {
-    const valor = e.target.value;
-    if (valor === '') {
-      setMontoPuja('');
-      return;
-    }
-    const soloNumeros = valor.replace(/[^\d]/g, '');
-    setMontoPuja(soloNumeros);
+  const handleChangeMontoPuja = (numericValue) => {
+    setMontoPuja(numericValue);
   };
 
   const confirmarPuja = async () => {
@@ -351,16 +459,29 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     return esMiJugador;
   };
 
+  // 🆕 Función corregida para verificar si se puede pujar
   const puedePujarPorJugador = (jugador) => {
+    console.log('🔍 Verificando si se puede pujar por:', jugador.nombre);
+    
     const esMiJugador = esJugadorEnVentaPorMi(jugador);
     
-    if (esMiJugador) return false;
-    if (!jugador.en_venta || jugador.expirado) return false;
-    
-    if (yaPujadoPorJugador(jugador.id)) {
+    if (esMiJugador) {
+      console.log('❌ No se puede pujar: es mi jugador');
       return false;
     }
     
+    if (!jugador.en_venta || jugador.expirado) {
+      console.log('❌ No se puede pujar: no está en venta o expirado');
+      return false;
+    }
+    
+    // Verificar si ya se pujó por este jugador
+    if (yaPujadoPorJugador(jugador.id)) {
+      console.log('❌ No se puede pujar: ya se pujó por este jugador');
+      return false;
+    }
+    
+    // Verificar límites de pujas
     const pujasActivas = pujasRealizadas.filter(puja => 
       !puja.es_ganadora && 
       puja.jugador_en_venta && 
@@ -370,9 +491,17 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     const capacidadDisponible = maxJugadores - totalJugadores;
     const pujasPermitidas = Math.max(0, capacidadDisponible);
     
-    if (pujasActivas >= pujasPermitidas) return false;
-    if (presupuesto <= (jugador.valor || 0)) return false;
+    if (pujasActivas >= pujasPermitidas) {
+      console.log('❌ No se puede pujar: límite de pujas alcanzado');
+      return false;
+    }
     
+    if (presupuesto <= (jugador.valor || 0)) {
+      console.log('❌ No se puede pujar: presupuesto insuficiente');
+      return false;
+    }
+    
+    console.log('✅ Se puede pujar por este jugador');
     return true;
   };
 
@@ -380,8 +509,13 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     if (esJugadorEnVentaPorMi(jugador)) return 'Tu jugador';
     if (!jugador.en_venta || jugador.expirado) return 'Expirado';
     
-    if (yaPujadoPorJugador(jugador.id)) return 'Ya pujado';
+    // Verificar ofertas existentes
+    const ofertaExistente = getOfertaExistente(jugador.id);
+    if (ofertaExistente) {
+      return ofertaExistente.tipo === 'puja' ? 'Ya pujado' : 'Oferta enviada';
+    }
     
+    // Verificar límites de pujas
     const pujasActivas = pujasRealizadas.filter(puja => 
       !puja.es_ganadora && 
       puja.jugador_en_venta && 
@@ -400,8 +534,12 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     if (esJugadorEnVentaPorMi(jugador)) return 'No puedes pujar por tu propio jugador';
     if (!jugador.en_venta || jugador.expirado) return 'Subasta expirada o jugador no disponible';
     
-    if (yaPujadoPorJugador(jugador.id)) {
-      return 'Ya tienes una puja activa por este jugador. Puedes editarla en "Ofertas & Pujas"';
+    // Verificar ofertas existentes
+    const ofertaExistente = getOfertaExistente(jugador.id);
+    if (ofertaExistente) {
+      return ofertaExistente.tipo === 'puja' 
+        ? 'Ya tienes una puja activa por este jugador. Puedes editarla en "Ofertas & Pujas"'
+        : 'Ya tienes una oferta directa pendiente por este jugador';
     }
     
     const pujasActivas = pujasRealizadas.filter(puja => 
@@ -563,6 +701,8 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                   mercado={mercado || []}
                   handleEditarPuja={handleEditarPuja}
                   handleRetirarPuja={handleRetirarPuja}
+                  handleRetirarOferta={handleRetirarOferta}
+                  handleEditarOferta={handleEditarOferta} // 🆕 Pasar la nueva función
                   formatNormalValue={formatNormalValue}
                   totalJugadores={totalJugadores}
                   maxJugadores={maxJugadores}
@@ -587,6 +727,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
         cerrarModalPuja={cerrarModalPuja}
         formatValue={formatValue}
         formatNumber={formatNumber}
+        datosUsuario={datosUsuario}
       />
     </div>
   );
