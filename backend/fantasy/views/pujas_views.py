@@ -335,7 +335,6 @@ def retirar_puja(request, puja_id):
             status=500
         )
 
-# Vista adicional para obtener ofertas realizadas (por si no la tienes)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def ofertas_realizadas(request, equipo_id):

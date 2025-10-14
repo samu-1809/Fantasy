@@ -7,7 +7,7 @@ from .model_views import (
 from .notificacion_views import (
     NotificacionViewSet, TransaccionEconomicaViewSet, 
     crear_notificacion, crear_transaccion, crear_notificacion_publica,
-    mis_notificaciones, marcar_notificacion_leida, mis_transacciones  # 🆕 Nuevas funciones
+    mis_notificaciones, marcar_notificacion_leida, mis_transacciones
 )
 from .mercado_views import MercadoViewSet, OfertaViewSet, PujaViewSet
 from .clasificacion_views import ClasificacionViewSet
@@ -27,7 +27,6 @@ from .equipo_views import (
 from .puntuacion_views import (
     puntuaciones_jugador, 
     actualizar_puntuacion_jugador, 
-    crear_puntuacion_jugador, 
     equipos_disponibles_jornada
 )
 

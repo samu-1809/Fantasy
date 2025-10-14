@@ -111,123 +111,87 @@ export const getMiEquipo = async () => {
 };
 
 export const cargarDatosIniciales = async (usuario, forzarRecarga = false) => {
+  console.log("🚀🚀🚀 api.js: INICIANDO cargarDatosIniciales");
+  console.log("   👤 Usuario:", usuario?.username);
+  console.log("   🆔 User ID:", usuario?.id);
+  
   if (!usuario) {
     throw new Error("Usuario no definido");
   }
   
-  console.log("👨‍💼 Usuario", usuario.username, "Admin:", usuario.is_superuser || usuario.is_staff);
-  
-  // Si forzamos recarga, limpiar cualquier cache
-  if (forzarRecarga) {
-    console.log("🔄 Forzando recarga completa de datos...");
-    const cacheKeys = ['datosUsuarioCache', 'equipoCache', 'jugadoresCache'];
-    cacheKeys.forEach(key => localStorage.removeItem(key));
-  }
-  
   try {
-    const isAdmin = usuario.is_superuser || usuario.is_staff;
+    console.log("📡 api.js: Haciendo fetch a /datos-iniciales/");
     
-    console.log("🔄 Llamando a /datos-iniciales/ para todos los usuarios...");
-    
-    const timestamp = forzarRecarga ? `?t=${Date.now()}` : '';
-    const response = await fetch(`${API_URL}/datos-iniciales/${timestamp}`, {
+    const response = await fetch(`${API_URL}/datos-iniciales/`, {
       headers: getAuthHeaders(),
       credentials: 'include',
     });
     
+    console.log("📊 api.js: Response status:", response.status);
+    console.log("📊 api.js: Response ok:", response.ok);
+    
     if (!response.ok) {
-      throw new Error(`Error ${response.status} en la petición datos-iniciales`);
+      const errorText = await response.text();
+      console.error("❌ api.js: Error response body:", errorText);
+      throw new Error(`Error ${response.status}: ${errorText}`);
     }
     
     const datosBackend = await response.json();
-    console.log("✅ Datos iniciales recibidos del backend:", datosBackend);
+    console.log("✅✅✅ api.js: RESPUESTA CRUDA DEL BACKEND:", datosBackend);
     
-    console.log("🔍 Estructura de respuesta backend:", {
-      tieneJugadores: !!datosBackend.jugadores,
-      cantidadJugadores: datosBackend.jugadores?.length,
-      tieneEquiposReales: !!datosBackend.equipos_reales,
-      cantidadEquiposReales: datosBackend.equipos_reales?.length,
-      es_admin: datosBackend.es_admin,
-      tieneEquipo: !!datosBackend.equipo
-    });
+    // 🆕 VERIFICACIÓN EXTREMA DE LA RESPUESTA
+    console.log("🔍 api.js - Análisis respuesta backend:");
+    console.log("   - Tiene 'equipo':", !!datosBackend.equipo);
+    console.log("   - Tiene 'jugadores':", !!datosBackend.jugadores);
+    console.log("   - Tiene 'es_admin':", datosBackend.es_admin);
+    console.log("   - Keys principales:", Object.keys(datosBackend));
     
-    if (isAdmin) {
-      console.log("🎯 Procesando respuesta para ADMIN");
-      
+    if (datosBackend.equipo) {
+      console.log("   🏆 Equipo recibido - ID:", datosBackend.equipo.id);
+      console.log("   🏆 Equipo recibido - nombre:", datosBackend.equipo.nombre);
+    } else {
+      console.warn("   ⚠️⚠️⚠️ NO hay equipo en la respuesta del backend");
+    }
+    
+    // Procesamiento normal...
+    if (usuario.is_superuser || usuario.is_staff) {
       return {
-        usuario,
-        es_admin: datosBackend.es_admin || true,
-        ligaActual: datosBackend.ligaActual || {
-          id: 1,
-          nombre: "Liga de Administración", 
-          jornada_actual: 1
-        },
+        usuario: datosBackend.usuario || usuario,
+        es_admin: true,
+        ligaActual: datosBackend.ligaActual || { id: 1, nombre: "Liga Admin", jornada_actual: 1 },
         jugadores: datosBackend.jugadores || [],
-        equipos_reales: datosBackend.equipos_reales || [], // 🆕 CRÍTICO
+        equipos_reales: datosBackend.equipos_reales || [],
         equipo: null,
         mercado: [],
         clasificacion: [],
         presupuesto: 0
       };
     } else {
-      console.log("👤 Procesando respuesta para USUARIO NORMAL");
-      
-      // Verificar equipo para usuarios normales
+      // 🆕 VERIFICACIÓN EXTRA PARA USUARIOS NORMALES
       if (!datosBackend.equipo) {
-        console.warn("⚠️ No se encontró equipo en la respuesta");
-        throw new Error("No se pudo cargar el equipo del usuario");
+        console.error("💥💥💥 api.js: USUARIO NORMAL SIN EQUIPO - Esto no debería pasar");
       }
       
-      // Asegurar liga_id
-      const equipoConLiga = {
-        ...datosBackend.equipo,
-        liga_id: datosBackend.equipo.liga_id || datosBackend.liga_id || 1
-      };
-      
-      console.log("🏆 Equipo con liga_id:", equipoConLiga.liga_id);
-      
       return {
-        usuario,
-        es_admin: datosBackend.es_admin || false,
-        ligaActual: {
-          id: datosBackend.liga_id || equipoConLiga.liga_id || 1,
-          nombre: datosBackend.liga_nombre || datosBackend.ligaActual?.nombre || "Liga Principal",
-          jornada_actual: datosBackend.jornada_actual || datosBackend.ligaActual?.jornada_actual || 1
+        usuario: datosBackend.usuario || usuario,
+        es_admin: false,
+        ligaActual: datosBackend.ligaActual || {
+          id: datosBackend.liga_id || 1,
+          nombre: datosBackend.liga_nombre || "Liga Principal",
+          jornada_actual: datosBackend.jornada_actual || 1
         },
         jugadores: datosBackend.jugadores || [],
-        equipos_reales: datosBackend.equipos_reales || [], // 🆕 Para consistencia
-        equipo: equipoConLiga,
+        equipos_reales: datosBackend.equipos_reales || [],
+        equipo: datosBackend.equipo, // 🎯 ESTE ES EL CAMPO CRÍTICO
         mercado: datosBackend.mercado || [],
         clasificacion: datosBackend.clasificacion || [],
-        presupuesto: datosBackend.equipo?.presupuesto || 0
+        presupuesto: datosBackend.presupuesto || datosBackend.equipo?.presupuesto || 0
       };
     }
     
   } catch (error) {
-    console.error("❌ Error cargando datos iniciales:", error);
-    
-    // Si forzamos recarga y hay error, relanzarlo
-    if (forzarRecarga) {
-      throw error;
-    }
-    
-    // Fallback en caso de error
-    const isAdmin = usuario.is_superuser || usuario.is_staff;
-    return {
-      usuario,
-      es_admin: isAdmin,
-      ligaActual: { 
-        id: 1, 
-        nombre: isAdmin ? "Liga de Administración" : "Liga Principal", 
-        jornada_actual: 1 
-      },
-      jugadores: [],
-      equipos_reales: [],
-      equipo: null,
-      mercado: [],
-      clasificacion: [],
-      presupuesto: 0
-    };
+    console.error("❌❌❌ api.js: ERROR COMPLETO en cargarDatosIniciales:", error);
+    throw error;
   }
 };
 
@@ -263,6 +227,35 @@ export const getJugadores = async (posicion = null, equipoId = null) => {
 export const getJugadoresPorEquipo = async (equipoId) => {
   const response = await fetch(`${API_URL}/jugadores/?equipo=${equipoId}`);
   return handleResponse(response);
+};
+
+export const getPuntuacionesJugador = async (jugadorId) => {
+  try {
+    console.log(`🔍 Solicitando puntuaciones del jugador: ${jugadorId}`);
+    const response = await fetch(`${API_URL}/jugadores/${jugadorId}/puntuaciones/`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    
+    console.log('📨 Respuesta de puntuaciones:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error en respuesta:', errorText);
+      throw new Error(`Error ${response.status} al cargar puntuaciones: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Puntuaciones cargadas:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error en getPuntuacionesJugador:', error);
+    throw error;
+  }
 };
 
 // ==================== EQUIPOS ====================
@@ -483,6 +476,36 @@ export const getClasificacion = async (ligaId) => {
   }
 };
 
+export const getPlantillaEquipo = async (equipoId) => {
+  try {
+    console.log(`🔍 Solicitando plantilla del equipo: ${equipoId}`);
+    
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/plantilla/`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    
+    console.log('📨 Respuesta de plantilla:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error en respuesta:', errorText);
+      throw new Error(`Error ${response.status} al cargar plantilla: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Plantilla cargada:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error en getPlantillaEquipo:', error);
+    throw error;
+  }
+};
+
 // ==================== JORNADAS Y PARTIDOS ====================
 
 export const getJornadas = async () => {
@@ -669,64 +692,239 @@ export const getOfertasRealizadas = async (equipoId) => {
   return await response.json();
 };
 
-export const aceptarOferta = async (ofertaId) => {
-  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/aceptar/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
+export const rechazarOferta = async (ofertaId) => {
+  console.log(`🔄 [API] Rechazando oferta ID: ${ofertaId}`);
   
-  if (!response.ok) {
-    throw new Error('Error al aceptar la oferta');
+  try {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_URL}/ofertas/${ofertaId}/rechazar/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📊 [API] Status rechazar oferta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response rechazar oferta:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Oferta rechazada exitosamente:', result);
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en rechazarOferta:', error);
+    throw error;
   }
-  
-  return await response.json();
 };
 
-export const rechazarOferta = async (ofertaId) => {
-  const response = await fetch(`${API_URL}/ofertas/${ofertaId}/rechazar/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
+export const aceptarOferta = async (ofertaId) => {
+  console.log(`🔄 [API] Aceptando oferta ID: ${ofertaId}`);
   
-  if (!response.ok) {
-    throw new Error('Error al rechazar la oferta');
+  try {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_URL}/ofertas/${ofertaId}/aceptar/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📊 [API] Status aceptar oferta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response aceptar oferta:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Oferta aceptada exitosamente:', result);
+    
+    // 🆕 Disparar evento con detalles del jugador vendido para la animación
+    window.dispatchEvent(new CustomEvent('ofertaAceptadaConExito', {
+      detail: {
+        jugadorVendido: result.jugador_vendido || { nombre: 'Jugador' }
+      }
+    }));
+    
+    // Disparar eventos de actualización
+    window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+    window.dispatchEvent(new CustomEvent('jugadorVendido'));
+    window.dispatchEvent(new CustomEvent('ofertaAceptada'));
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en aceptarOferta:', error);
+    throw error;
   }
-  
-  return await response.json();
 };
 
 export const ponerJugadorEnVenta = async (equipoId, jugadorId, precioVenta = null) => {
-  const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/poner-en-venta/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ 
-      precio_venta: precioVenta 
-    }),
-  });
+  console.log(`🔄 [API] Poniendo jugador ${jugadorId} en venta del equipo ${equipoId} con precio ${precioVenta}`);
+  
+  try {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/poner-en-venta/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        precio_venta: precioVenta 
+      }),
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Error al poner jugador en venta');
+    console.log(`📊 [API] Status poner en venta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response poner en venta:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Jugador puesto en venta exitosamente:', result);
+    
+    // 🆕 Disparar eventos de actualización para actualizar la UI automáticamente
+    window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+    window.dispatchEvent(new CustomEvent('jugadorPuestoEnVenta', {
+      detail: {
+        jugadorId: jugadorId,
+        equipoId: equipoId,
+        precioVenta: precioVenta
+      }
+    }));
+    window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en ponerEnVenta:', error);
+    throw error;
   }
+};
 
-  return await response.json();
+export const rechazarOfertasPorJugador = async (equipoId, jugadorId) => {
+  console.log(`🔄 [API] Rechazando ofertas pendientes para jugador ID: ${jugadorId}`);
+  
+  try {
+    const token = localStorage.getItem('access_token');
+    
+    // Primero obtenemos las ofertas recibidas
+    const responseOfertas = await fetch(`${API_URL}/equipos/${equipoId}/ofertas_recibidas/`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!responseOfertas.ok) {
+      throw new Error('Error al obtener ofertas recibidas');
+    }
+
+    const ofertasRecibidas = await responseOfertas.json();
+    
+    // Filtramos las ofertas pendientes para este jugador
+    const ofertasPendientes = ofertasRecibidas.filter(oferta => 
+      oferta.jugador_id === jugadorId && oferta.estado === 'pendiente'
+    );
+
+    console.log(`📊 [API] Encontradas ${ofertasPendientes.length} ofertas pendientes para el jugador`);
+
+    // Rechazamos cada oferta pendiente
+    for (const oferta of ofertasPendientes) {
+      try {
+        await rechazarOferta(oferta.id);
+        console.log(`✅ [API] Oferta ${oferta.id} rechazada automáticamente`);
+      } catch (error) {
+        console.error(`❌ [API] Error rechazando oferta ${oferta.id}:`, error);
+      }
+    }
+
+    return {
+      mensaje: `Se rechazaron ${ofertasPendientes.length} ofertas pendientes automáticamente`,
+      ofertasRechazadas: ofertasPendientes.length
+    };
+    
+  } catch (error) {
+    console.error('❌ [API] Error en rechazarOfertasPorJugador:', error);
+    throw error;
+  }
 };
 
 export const quitarJugadorDelMercado = async (equipoId, jugadorId) => {
-  console.log(`🔄 Retirando del mercado: equipo=${equipoId}, jugador=${jugadorId}`);
+  console.log(`🔄 [API] Quitando jugador ${jugadorId} del mercado del equipo ${equipoId}`);
   
-  // ✅ URL CORREGIDA
-  const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/quitar-del-mercado/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-  });
+  try {
+    const token = localStorage.getItem('access_token');
+    
+    // 🆕 Primero rechazamos las ofertas pendientes
+    await rechazarOfertasPorJugador(equipoId, jugadorId);
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Error al retirar jugador del mercado');
+    // Luego quitamos el jugador del mercado
+    const response = await fetch(`${API_URL}/equipos/${equipoId}/jugadores/${jugadorId}/quitar_del_mercado/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📊 [API] Status quitar del mercado: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [API] Error response quitar del mercado:', errorText);
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        throw new Error(errorData.error || `Error ${response.status}: ${errorText}`);
+      } catch {
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+    }
+
+    const result = await response.json();
+    console.log('✅ [API] Jugador quitado del mercado exitosamente:', result);
+    
+    // Disparar eventos de actualización
+    window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+    window.dispatchEvent(new CustomEvent('jugadorQuitadoDelMercado'));
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ [API] Error en quitarJugadorDelMercado:', error);
+    throw error;
   }
-
-  return await response.json();
 };
 
 export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
@@ -772,7 +970,8 @@ export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
 
 export const getPujasRealizadas = async (equipoId) => {
   try {
-    console.log(`🔍 Solicitando pujas realizadas para equipo: ${equipoId}`);
+    console.log(`📨 Cargando pujas realizadas para equipo ${equipoId}...`);
+    
     const response = await fetch(`${API_URL}/equipos/${equipoId}/pujas_realizadas/`, {
       headers: getAuthHeaders(),
     });
@@ -783,7 +982,15 @@ export const getPujasRealizadas = async (equipoId) => {
     
     const data = await response.json();
     console.log('✅ Pujas realizadas cargadas:', data);
-    return data;
+    
+    // Asegurar que cada puja tenga el campo activa
+    const pujasConActiva = data.map(puja => ({
+      ...puja,
+      activa: puja.activa !== undefined ? puja.activa : true
+    }));
+    
+    return pujasConActiva;
+    
   } catch (error) {
     console.error('❌ Error en getPujasRealizadas:', error);
     throw error;
@@ -801,5 +1008,64 @@ export const retirarPuja = async (pujaId) => {
     throw new Error(errorData.error || 'Error al retirar puja');
   }
   
+  return await response.json();
+};
+
+export const crearOfertaDirecta = async (jugadorId, monto) => {
+  try {
+    console.log(`💰 Creando oferta directa: jugador ${jugadorId}, monto ${monto}`);
+    
+    const response = await fetch(`${API_URL}/ofertas-directas/crear/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        jugador_id: jugadorId,
+        monto: parseInt(monto)
+      }),
+    });
+    
+    console.log('📨 Respuesta oferta directa:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error en respuesta:', errorText);
+      throw new Error(`Error ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Oferta directa creada:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error en crearOfertaDirecta:', error);
+    throw error;
+  }
+};
+
+export const getNotificaciones = async () => {
+  const response = await fetch(`${API_URL}/notificaciones/mis_notificaciones/`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Error al obtener notificaciones');
+  return await response.json();
+};
+
+export const marcarNotificacionLeida = async (notificacionId) => {
+  const response = await fetch(`${API_URL}/notificaciones/${notificacionId}/marcar_leida/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Error al marcar notificación como leída');
+  return await response.json();
+};
+
+export const getTransacciones = async () => {
+  const response = await fetch(`${API_URL}/transacciones/mis_transacciones/`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Error al obtener transacciones');
   return await response.json();
 };

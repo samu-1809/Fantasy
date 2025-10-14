@@ -11,6 +11,7 @@ source venv/bin/activate
 sudo systemctl stop postgresql
 sudo docker-compose up -d
 python manage.py runserver
+python manage.py populate_database
 ```
 ## 🚀 Setup Inicial (Primera Vez)
 ### 1. Instalar Dependencias del Backend

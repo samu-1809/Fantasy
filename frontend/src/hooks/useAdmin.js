@@ -256,7 +256,6 @@ export const useAdmin = () => {
     }
   };
 
-  // 🆕 Asignar puntos masivamente (función existente)
   const asignarPuntos = async (jornadaId, puntos) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -267,17 +266,20 @@ export const useAdmin = () => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          jornada_id: jornadaId,
-          puntos: puntos
+          jornada_id: parseInt(jornadaId),
+          puntos: puntos.map(p => ({
+            jugador_id: parseInt(p.jugador_id),
+            puntos: parseInt(p.puntos) || 0 // Asegurar que sea número
+          }))
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al asignar puntos');
+        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      return response.json();
+      return await response.json();
     } catch (err) {
       console.error('Error asignando puntos:', err);
       throw err;
@@ -306,7 +308,6 @@ export const useAdmin = () => {
     }
   };
 
-  // 🆕 Actualizar puntuación individual
   const actualizarPuntuacionJugador = async (jugadorId, jornadaId, puntos) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -330,34 +331,6 @@ export const useAdmin = () => {
       return await response.json();
     } catch (error) {
       console.error('Error actualizando puntuación:', error);
-      throw error;
-    }
-  };
-
-  // 🆕 Crear nueva puntuación
-  const crearPuntuacionJugador = async (jugadorId, jornadaId, puntos = 0) => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${API_URL}/puntuaciones/crear/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jugador_id: jugadorId,
-          jornada_id: jornadaId,
-          puntos: puntos
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error creando puntuación:', error);
       throw error;
     }
   };
@@ -422,7 +395,6 @@ export const useAdmin = () => {
     asignarPuntos,
     cargarPuntuacionesJugador,
     actualizarPuntuacionJugador,
-    crearPuntuacionJugador,
     eliminarPuntuacionJugador
   };
 };

@@ -48,6 +48,14 @@ class JugadorDetailSerializer(serializers.ModelSerializer):
         puntuaciones = Puntuacion.objects.filter(jugador=obj).select_related('jornada')
         return PuntuacionJornadaSerializer(puntuaciones, many=True).data
 
+class PuntuacionSerializer(serializers.ModelSerializer):
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+    
+    class Meta:
+        model = Puntuacion
+        fields = ['id', 'jugador', 'jugador_nombre', 'jornada', 'jornada_numero', 'puntos']
+
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
     liga_nombre = serializers.CharField(source='liga.nombre', read_only=True)
@@ -72,14 +80,6 @@ class EquipoSerializer(serializers.ModelSerializer):
         """Jugadores en el banquillo"""
         jugadores_banquillo = obj.jugadores.filter(en_banquillo=True)
         return JugadorSerializer(jugadores_banquillo, many=True).data
-
-class PuntuacionSerializer(serializers.ModelSerializer):
-    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
-    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
-    
-    class Meta:
-        model = Puntuacion
-        fields = ['id', 'jugador', 'jugador_nombre', 'jornada', 'jornada_numero', 'puntos']
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:

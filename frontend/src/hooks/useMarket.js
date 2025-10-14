@@ -44,26 +44,22 @@ export const useMarket = (ligaId) => {
   }, [ligaId]);
 
   const cargarOfertasRecibidas = useCallback(async (equipoId) => {
-  if (!equipoId) {
-    console.warn('⚠️ useMarket: No hay equipoId para cargar ofertas recibidas');
-    setOfertasRecibidas([]);
-    return;
-  }
-  
-  try {
-    console.log(`🔄 useMarket: Cargando ofertas recibidas para equipo ${equipoId}`);
-    const ofertas = await getOfertasRecibidas(equipoId);
-    console.log(`✅ useMarket: Ofertas cargadas - ${ofertas.length} elementos`, ofertas);
-    setOfertasRecibidas(ofertas);
-  } catch (err) {
-    console.error('❌ useMarket: Error cargando ofertas recibidas:', err);
-    // Mostrar el error específico de la API si está disponible
-    if (err.response) {
-      console.error('❌ Detalles del error:', err.response.data);
+    if (!equipoId) {
+      console.error('❌ No se puede cargar ofertas recibidas: equipoId no proporcionado');
+      setOfertasRecibidas([]);
+      return;
     }
-    setOfertasRecibidas([]);
-  }
-}, []);
+
+    try {
+      console.log(`🔍 Cargando ofertas recibidas para equipo: ${equipoId}`);
+      const ofertas = await getOfertasRecibidas(equipoId);
+      console.log(`✅ Ofertas recibidas cargadas: ${ofertas.length} ofertas`);
+      setOfertasRecibidas(ofertas);
+    } catch (err) {
+      console.error('❌ Error cargando ofertas recibidas:', err);
+      setOfertasRecibidas([]);
+    }
+  }, []);
 
   const cargarOfertasRealizadas = useCallback(async (equipoId) => {
     if (!equipoId) return;

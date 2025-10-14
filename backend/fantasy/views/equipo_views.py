@@ -3,8 +3,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Prefetch
 from django.db import transaction
-from ..models import Equipo, Jugador
+from ..models import Equipo, Jugador, Puja
 from ..serializers import EquipoSerializer, JugadorSerializer
+from .notificacion_views import crear_notificacion
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -145,12 +146,7 @@ def quitar_del_mercado(request, equipo_id, jugador_id):
         return Response({'error': 'El jugador no está en el mercado'}, status=400)
     
     try:
-        # 🆕 IMPORTAR LA FUNCIÓN DE NOTIFICACIONES
-        from .notificacion_views import crear_notificacion
-        
         with transaction.atomic():
-            # 🆕 Buscar pujas activas para este jugador
-            from .models import Puja  # Asegúrate de importar el modelo Puja
             pujas_activas = Puja.objects.filter(
                 jugador=jugador,
                 activa=True

@@ -58,48 +58,6 @@ def actualizar_puntuacion_jugador(request):
             status=404
         )
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def crear_puntuacion_jugador(request):
-    jugador_id = request.data.get('jugador_id')
-    jornada_id = request.data.get('jornada_id')
-    puntos = request.data.get('puntos', 0)
-    
-    try:
-        jugador = Jugador.objects.get(id=jugador_id)
-        jornada = Jornada.objects.get(id=jornada_id)
-        
-        if Puntuacion.objects.filter(jugador=jugador, jornada=jornada).exists():
-            return Response(
-                {"error": "Ya existe una puntuación para este jugador en esta jornada"},
-                status=400
-            )
-        
-        puntuacion = Puntuacion.objects.create(
-            jugador=jugador,
-            jornada=jornada,
-            puntos=puntos
-        )
-        
-        total_puntos = Puntuacion.objects.filter(jugador=jugador).aggregate(
-            total=Sum('puntos')
-        )['total'] or 0
-        
-        jugador.puntos_totales = total_puntos
-        jugador.valor = max(5000000, 5000000 + (total_puntos * 100000))
-        jugador.save()
-        
-        return Response({
-            'message': 'Puntuación creada correctamente',
-            'puntuacion': PuntuacionJornadaSerializer(puntuacion).data
-        })
-        
-    except (Jugador.DoesNotExist, Jornada.DoesNotExist) as e:
-        return Response(
-            {"error": str(e)}, 
-            status=404
-        )
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def equipos_disponibles_jornada(request, jornada_id):

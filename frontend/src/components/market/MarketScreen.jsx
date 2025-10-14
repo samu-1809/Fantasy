@@ -1,4 +1,3 @@
-// MarketScreen.jsx
 import React, { useState, useEffect } from 'react';
 import { useMarket } from '../../hooks/useMarket';
 import { useAuth } from '../../context/AuthContext';
@@ -9,13 +8,13 @@ import MercadoTab from './components/MercadoTab';
 import OfertasRecibidasTab from './components/OfertasRecibidasTab';
 import OfertasRealizadasTab from './components/OfertasRealizadasTab';
 import PujaModal from './components/PujaModal';
+import { ShoppingCart, TrendingUp, Users, AlertCircle } from 'lucide-react';
 
 const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const { user } = useAuth();
   const equipoId = React.useMemo(() => {
     if (!datosUsuario) return null;
     
-    // Intentar obtener de diferentes formas
     return datosUsuario.equipo?.id || 
            datosUsuario.equipo_id || 
            (datosUsuario.equipo && typeof datosUsuario.equipo === 'object' ? datosUsuario.equipo.id : null);
@@ -55,14 +54,12 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     calcularExpiracion
   } = useMarket(datosUsuario?.ligaActual?.id);
 
-  // Función para formatear números con separadores de miles
   const formatNumber = (number) => {
     if (!number && number !== 0) return '';
     const num = parseInt(number) || 0;
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
-  // Efecto para sincronizar montoPuja y montoPujaFormateado
   useEffect(() => {
     if (montoPuja && !isNaN(montoPuja)) {
       setMontoPujaFormateado(formatNumber(montoPuja));
@@ -71,40 +68,43 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   }, [montoPuja]);
 
-  // Efecto principal para recargar datos cuando cambia refreshKey
+  useEffect(() => {
+    const handleJugadorPuestoEnVenta = () => {
+      console.log('🔄 MarketScreen: Recibido evento jugadorPuestoEnVenta');
+      refresh();
+    };
+
+    window.addEventListener('jugadorPuestoEnVenta', handleJugadorPuestoEnVenta);
+
+    return () => {
+      window.removeEventListener('jugadorPuestoEnVenta', handleJugadorPuestoEnVenta);
+    };
+  }, [refresh]);
+
   useEffect(() => {
     if (pestañaActiva === 'mercado') {
       cargarMercado();
-    } else if (pestañaActiva === 'ofertas-recibidas' && equipoId) {
-      cargarOfertasRecibidas(equipoId);
     } else if (pestañaActiva === 'ofertas-realizadas' && equipoId) {
       cargarOfertasRealizadas(equipoId);
       cargarPujasRealizadas(equipoId);
+    }
+    if (equipoId) {
+      cargarOfertasRecibidas(equipoId);
     }
 
     setUltimaActualizacion(new Date().toLocaleTimeString());
   }, [refreshKey, pestañaActiva, equipoId]);
 
-  // Efecto específico para cargar ofertas recibidas cuando se monta el componente o cambia la pestaña
-  useEffect(() => {
-    if (pestañaActiva === 'ofertas-recibidas' && equipoId) {
-      cargarOfertasRecibidas(equipoId);
-    }
-  }, [pestañaActiva, equipoId, cargarOfertasRecibidas]);
-
-  // Efecto para recargar cuando cambia la pestaña
   useEffect(() => {
     refresh();
   }, [pestañaActiva]);
 
-  // Efecto específico para recargar pujas después de una puja exitosa
   useEffect(() => {
     if (pestañaActiva === 'mercado' && equipoId) {
       cargarPujasRealizadas(equipoId);
     }
   }, [pestañaActiva, equipoId, cargarPujasRealizadas]);
 
-  // Escuchar eventos personalizados para refresh
   useEffect(() => {
     const handleMercadoUpdate = () => {
       refresh();
@@ -121,33 +121,61 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     };
   }, []);
 
-  // Efecto para retirar pujas de jugadores inexistentes
+  // Reemplaza todo el useEffect problemático con esto:
   useEffect(() => {
     const retirarPujasDeJugadoresInexistentes = async () => {
       if (pujasRealizadas.length === 0 || !equipoId) return;
 
+      // Filtrar solo pujas que realmente necesitan ser retiradas
       const pujasParaRetirar = pujasRealizadas.filter(puja => {
         const jugadorNoDisponible = !puja.jugador_en_venta || puja.jugador_expirado;
-        return jugadorNoDisponible && !puja.es_ganadora;
+        const puedeSerRetirada = !puja.es_ganadora && jugadorNoDisponible;
+        
+        // Solo procesar si realmente necesita ser retirada
+        return puedeSerRetirada && puja.activa !== false;
       });
 
-      if (pujasParaRetirar.length > 0) {
-        for (const puja of pujasParaRetirar) {
-          try {
-            await retirarPuja(puja.id);
-          } catch (err) {
-            console.error(`❌ Error retirando puja ${puja.id}: ${err.message}`);
+      if (pujasParaRetirar.length === 0) return;
+
+      console.log(`🔄 Intentando retirar ${pujasParaRetirar.length} pujas de jugadores no disponibles`);
+
+      for (const puja of pujasParaRetirar) {
+        try {
+          console.log(`🔄 Retirando puja ${puja.id} para jugador ${puja.jugador_nombre}`);
+          await retirarPuja(puja.id);
+          console.log(`✅ Puja ${puja.id} retirada exitosamente`);
+          
+          // Pequeña pausa entre requests
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          // Si el error es que la subasta terminó, marcamos la puja como no activa
+          if (err.message.includes('subasta ha terminado') || err.message.includes('No se puede retirar')) {
+            console.log(`⚠️ Puja ${puja.id} no puede ser retirada (subasta terminada), marcando como inactiva`);
+            // Aquí podrías actualizar el estado local para marcar esta puja como no activa
+            // para evitar intentos futuros
+          } else {
+            console.error(`❌ Error retirando puja ${puja.id}:`, err.message);
           }
         }
-
-        setTimeout(() => {
-          cargarPujasRealizadas(equipoId);
-          cargarMercado();
-        }, 1000);
       }
+
+      // Recargar datos solo si se procesaron pujas
+      setTimeout(() => {
+        cargarPujasRealizadas(equipoId);
+        cargarMercado();
+      }, 500);
     };
 
-    retirarPujasDeJugadoresInexistentes();
+    // Ejecutar solo si hay pujas para procesar
+    const tienePujasParaProcesar = pujasRealizadas.some(puja => 
+      (!puja.jugador_en_venta || puja.jugador_expirado) && 
+      !puja.es_ganadora && 
+      puja.activa !== false
+    );
+
+    if (tienePujasParaProcesar) {
+      retirarPujasDeJugadoresInexistentes();
+    }
   }, [pujasRealizadas, equipoId, retirarPuja, cargarPujasRealizadas, cargarMercado]);
 
   const handleRetirarPuja = async (pujaId) => {
@@ -315,7 +343,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const formatNormalValue = (value) => `€${formatNumber(value)}`;
 
   const totalJugadores = datosUsuario?.equipo?.jugadores?.length || 0;
-  const maxJugadores = 13;
+  const maxJugadores = 10;
   const presupuesto = datosUsuario?.equipo?.presupuesto || 0;
 
   const esJugadorEnVentaPorMi = (jugador) => {
@@ -394,14 +422,72 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="p-6">
-        <MarketStats 
-          datosUsuario={datosUsuario} 
-          formatNormalValue={formatNormalValue} 
-        />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+      <div className="max-w-7xl mx-auto px-4">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-4 bg-white/80 backdrop-blur-sm rounded-2xl px-8 py-4 shadow-lg border border-white/20">
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-full p-3">
+              <ShoppingCart className="text-white" size={32} />
+            </div>
+            <div className="text-left">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                Mercado de Fichajes
+              </h1>
+              <p className="text-gray-600 mt-1">Liga {datosUsuario?.ligaActual?.nombre}</p>
+            </div>
+          </div>
+        </div>
 
-        <div className="bg-white p-6 rounded-lg shadow border-2 border-gray-300">
+        {/* Estadísticas Principales */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Presupuesto */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-100 text-sm font-medium">Presupuesto</p>
+                <p className="text-3xl font-bold mt-2">{formatValue(presupuesto)}</p>
+              </div>
+              <div className="bg-white/20 rounded-full p-3">
+                <TrendingUp className="text-white" size={28} />
+              </div>
+            </div>
+          </div>
+
+          {/* Jugadores */}
+          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-green-100 text-sm font-medium">Plantilla</p>
+                <p className="text-3xl font-bold mt-2">{totalJugadores}<span className="text-green-200">/{maxJugadores}</span></p>
+              </div>
+              <div className="bg-white/20 rounded-full p-3">
+                <Users className="text-white" size={28} />
+              </div>
+            </div>
+          </div>
+
+          {/* Pujas Activas */}
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-purple-100 text-sm font-medium">Pujas Activas</p>
+                <p className="text-3xl font-bold mt-2">
+                  {pujasRealizadas.filter(puja => 
+                    !puja.es_ganadora && 
+                    puja.jugador_en_venta && 
+                    !puja.jugador_expirado
+                  ).length}
+                </p>
+              </div>
+              <div className="bg-white/20 rounded-full p-3">
+                <ShoppingCart className="text-white" size={28} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-6">
           <MarketHeader
             pestañaActiva={pestañaActiva}
             setPestañaActiva={setPestañaActiva}
@@ -410,14 +496,21 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
             ofertasRealizadas={ofertasRealizadas}
             pujasRealizadas={pujasRealizadas}
             ultimaActualizacion={ultimaActualizacion}
+            onRefresh={handleActualizar}
           />
 
           {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
+            <div className="bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-200 text-red-800 px-6 py-4 rounded-xl mb-6 flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="mr-3 text-red-500" size={24} />
+                <div>
+                  <div className="font-semibold">Error al cargar</div>
+                  <div className="text-sm">{error}</div>
+                </div>
+              </div>
               <button 
                 onClick={handleActualizar}
-                className="ml-4 bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-semibold"
               >
                 Reintentar
               </button>
@@ -425,9 +518,9 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
           )}
 
           {loading ? (
-            <div className="text-center text-gray-500 py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p>Cargando...</p>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-500 mx-auto mb-4"></div>
+              <p className="text-lg text-gray-600">Cargando mercado...</p>
             </div>
           ) : (
             <>

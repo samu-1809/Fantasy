@@ -21,6 +21,9 @@ router.register(r'transacciones', views.TransaccionEconomicaViewSet, basename='t
 
 urlpatterns = [
     # ==================== RUTAS DEL ROUTER ====================
+        # ==================== PUNTUACIONES ====================
+    path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
+    path('puntuaciones/actualizar/', views.actualizar_puntuacion_jugador, name='actualizar_puntuacion_jugador'),
     path('', include(router.urls)),
     
     # ==================== AUTENTICACIÓN ====================
@@ -56,12 +59,7 @@ urlpatterns = [
     path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
-    
-    # ==================== PUNTUACIONES ====================
-    path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
-    path('puntuaciones/actualizar/', views.actualizar_puntuacion_jugador, name='actualizar_puntuacion_jugador'),
-    path('puntuaciones/crear/', views.crear_puntuacion_jugador, name='crear_puntuacion_jugador'),
-    
+
     # ==================== JORNADAS Y PARTIDOS ====================
     path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
     

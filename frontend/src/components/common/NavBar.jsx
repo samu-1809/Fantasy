@@ -1,12 +1,13 @@
 import React from 'react';
-import { LogOut, RefreshCw } from 'lucide-react';
+import { LogOut, RefreshCw, Bell } from 'lucide-react';
 
 const NavBar = ({ onNavigate, onRefresh, onLogout, currentScreen }) => {
   const navItems = [
     { key: 'dashboard', label: ' Mi Equipo', icon: '🧤' },
     { key: 'market', label: ' Mercado', icon: '💰' },
     { key: 'rankings', label: ' Clasificación', icon: '🏆' },
-    { key: 'calendar', label: ' Calendario', icon: '📅' }
+    { key: 'calendar', label: ' Calendario', icon: '📅' },
+    { key: 'notificacion', label: ' Noticias', icon: '📢' }
   ];
 
   return (
