@@ -49,86 +49,99 @@ const Fantasy = () => {
   const [error, setError] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   
-  const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
+  // 🆕 Usar authChecked del contexto
+  const { user, logout, isAuthenticated, loading: authLoading, authChecked } = useAuth();
 
-  // 🎯 EFECTO DE DEBUG
+  // 🆕 EFECTO PRINCIPAL MEJORADO: Navegación sincronizada
   useEffect(() => {
-    console.log('🔍 DEBUG COMPLETO - Estado actual:', {
+    console.log('🔍 Fantasy - Estado actual:', {
       currentScreen,
       user: user ? `${user.username} (id:${user.id})` : 'null',
       isAuthenticated,
-      datosUsuario: datosUsuario ? {
-        tieneEquipo: !!datosUsuario.equipo,
-        equipoId: datosUsuario.equipo?.id,
-        cantidadJugadores: datosUsuario.jugadores?.length,
-        es_admin: datosUsuario.es_admin
-      } : 'null',
-      appLoading,
-      error
+      authLoading,
+      authChecked,
+      datosUsuario: datosUsuario ? `object (equipo: ${!!datosUsuario?.equipo})` : 'null',
+      appLoading
     });
-  }, [currentScreen, user, isAuthenticated, datosUsuario, appLoading, error]);
 
-  // 🎯 EFECTO PRINCIPAL: Cargar datos cuando el usuario se autentica
-  useEffect(() => {
-    const cargarDatosUsuario = async () => {
-      if (user && isAuthenticated && !datosUsuario && !appLoading) {
-        console.log('🎯🎯🎯 Fantasy: Iniciando carga de datos para:', user.username);
-        
-        setAppLoading(true);
-        setError(null);
-        
-        try {
-          console.log('📡 Fantasy: Llamando a cargarDatosIniciales...');
-          const datos = await cargarDatosIniciales(user);
-          
-          console.log('📦📦📦 Fantasy: RESPUESTA COMPLETA de cargarDatosIniciales:', datos);
-          console.log('🔍 Fantasy - Análisis de datos recibidos:');
-          console.log('   - Tiene equipo:', !!datos.equipo);
-          console.log('   - Equipo ID:', datos.equipo?.id);
-          console.log('   - Equipo nombre:', datos.equipo?.nombre);
-          console.log('   - Cantidad jugadores:', datos.jugadores?.length);
-          console.log('   - Es admin:', datos.es_admin);
-          
-          if (!datos.equipo) {
-            console.warn('⚠️⚠️⚠️ ATENCIÓN: Los datos llegaron SIN EQUIPO');
-          }
-          
-          setDatosUsuario(datos);
-          
-          // Navegación
-          const targetScreen = datos.es_admin ? 'admin' : 'dashboard';
-          console.log(`🎯 Fantasy: Navegando a ${targetScreen}`);
-          setCurrentScreen(targetScreen);
-          
-        } catch (err) {
-          console.error('❌❌❌ Fantasy: Error en cargarDatosIniciales:', err);
-          setError('Error cargando datos: ' + err.message);
-        } finally {
-          setAppLoading(false);
-        }
-      }
-    };
+    // 🆕 Esperar a que la autenticación esté completamente verificada
+    if (!authChecked || authLoading) {
+      console.log('⏳ Fantasy: Esperando verificación de autenticación...');
+      return;
+    }
 
-    cargarDatosUsuario();
-  }, [user, isAuthenticated]);// ⚠️ IMPORTANTE: No incluir datosUsuario en dependencias
-
-  // 🎯 EFECTO: Redirigir a login si no está autenticado
-  useEffect(() => {
-    if (!isAuthenticated && currentScreen !== 'login' && currentScreen !== 'register') {
-      console.log('🚪 Usuario no autenticado, redirigiendo a login...');
+    // 🆕 Usuario NO autenticado - ir a login
+    if (!isAuthenticated) {
+      console.log('🚪 Fantasy: Usuario no autenticado, navegando a login');
       setCurrentScreen('login');
       setDatosUsuario(null);
+      return;
     }
-  }, [isAuthenticated, currentScreen]);
 
-  // 🎯 HANDLERS
+    // 🆕 Usuario autenticado pero sin datos - cargar datos
+    if (isAuthenticated && user && !datosUsuario && !appLoading) {
+      console.log('🎯 Fantasy: Usuario autenticado, cargando datos...');
+      cargarDatosUsuario();
+      return;
+    }
+
+    // 🆕 Usuario autenticado con datos - decidir navegación
+    if (isAuthenticated && user && datosUsuario) {
+      console.log('🏆 Fantasy: Usuario autenticado con datos, verificando equipo...');
+      
+      if (datosUsuario.es_admin) {
+        console.log('👑 Fantasy: Es admin, navegando a admin');
+        setCurrentScreen('admin');
+      } else if (!datosUsuario.equipo) {
+        console.log('➕ Fantasy: No tiene equipo, navegando a crear equipo');
+        setCurrentScreen('createTeam');
+      } else {
+        console.log('📊 Fantasy: Tiene equipo, navegando a dashboard');
+        setCurrentScreen('dashboard');
+      }
+    }
+  }, [isAuthenticated, user, datosUsuario, authLoading, authChecked, appLoading]);
+
+  // 🆕 Función mejorada para cargar datos
+  const cargarDatosUsuario = async () => {
+    if (!user) return;
+    
+    console.log('🚀 Fantasy: Iniciando carga de datos para:', user.username);
+    setAppLoading(true);
+    setError(null);
+    
+    try {
+      const datos = await cargarDatosIniciales(user);
+      console.log('✅ Fantasy: Datos cargados exitosamente:', {
+        tieneEquipo: !!datos.equipo,
+        equipoId: datos.equipo?.id,
+        cantidadJugadores: datos.jugadores?.length,
+        es_admin: datos.es_admin
+      });
+      
+      setDatosUsuario(datos);
+    } catch (err) {
+      console.error('❌ Fantasy: Error cargando datos:', err);
+      setError('Error cargando datos: ' + err.message);
+      
+      // 🆕 Reintentar después de un tiempo si falla
+      setTimeout(() => {
+        console.log('🔄 Fantasy: Reintentando carga de datos...');
+        cargarDatosUsuario();
+      }, 1000);
+    } finally {
+      setAppLoading(false);
+    }
+  };
+
+  // 🆕 HANDLERS mejorados
   const handleLoginSuccess = () => {
-    console.log('✅ Login exitoso en Fantasy');
-    // Los efectos se encargarán de cargar los datos
+    console.log('✅ Fantasy: Login exitoso, la sincronización se encargará del resto');
+    // No hacer nada más aquí - el efecto principal manejará la navegación
   };
 
   const handleRegisterSuccess = () => {
-    console.log('✅ Registro exitoso, redirigiendo a login...');
+    console.log('✅ Fantasy: Registro exitoso, redirigiendo a login...');
     setCurrentScreen('login');
   };
 
@@ -143,7 +156,7 @@ const Fantasy = () => {
   };
 
   const handleLogout = () => {
-    console.log('🚪 Cerrando sesión...');
+    console.log('🚪 Fantasy: Cerrando sesión...');
     logout();
     setCurrentScreen('login');
     setDatosUsuario(null);
@@ -155,12 +168,12 @@ const Fantasy = () => {
       setAppLoading(true);
       setError(null);
       try {
-        console.log('🔄 Actualizando datos...');
+        console.log('🔄 Fantasy: Actualizando datos...');
         const datos = await cargarDatosIniciales(user, true);
         setDatosUsuario(datos);
-        console.log('✅ Datos actualizados correctamente');
+        console.log('✅ Fantasy: Datos actualizados correctamente');
       } catch (err) {
-        console.error('❌ Error actualizando datos:', err);
+        console.error('❌ Fantasy: Error actualizando datos:', err);
         setError('Error al actualizar los datos: ' + err.message);
       } finally {
         setAppLoading(false);
@@ -169,12 +182,13 @@ const Fantasy = () => {
   };
 
   const renderScreen = () => {
-    if (authLoading) {
+    // 🆕 Mostrar carga inicial hasta que la autenticación esté verificada
+    if (!authChecked || authLoading) {
       return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-xl text-gray-600">Inicializando aplicación...</p>
+            <p className="text-xl text-gray-600">Verificando autenticación...</p>
           </div>
         </div>
       );

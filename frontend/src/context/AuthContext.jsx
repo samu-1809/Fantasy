@@ -1,4 +1,4 @@
-// context/AuthContext.jsx - VERSIÓN CORREGIDA
+// context/AuthContext.jsx - VERSIÓN MEJORADA CON SINCRONIZACIÓN
 import { createContext, useState, useContext, useEffect } from 'react';
 import { loginUser, registerUser, getCurrentUser, logoutUser } from '../services/api';
 
@@ -17,6 +17,27 @@ export const AuthProvider = ({ children }) => {
   const [equipo, setEquipo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false); // 🆕 Nuevo estado para sincronización
+
+  // 🆕 Función sincronizada para establecer autenticación
+  const setAuth = (userData, authenticated) => {
+    console.log('🔄 AuthContext: Actualizando estado de autenticación', {
+      user: userData?.username,
+      authenticated
+    });
+    
+    setUser(userData);
+    setEquipo(userData?.equipo || null);
+    
+    if (authenticated) {
+      setAuthChecked(true);
+    }
+    
+    // Forzar re-render inmediato
+    setTimeout(() => {
+      setLoading(false);
+    }, 0);
+  };
 
   // Cargar usuario al iniciar si hay token
   useEffect(() => {
@@ -29,18 +50,16 @@ export const AuthProvider = ({ children }) => {
           console.log('🔄 Cargando usuario desde token...');
           const userData = await getCurrentUser();
           console.log('✅ Usuario cargado:', userData);
-          setUser(userData);
-          if (userData.equipo) {
-            setEquipo(userData.equipo);
-          }
+          setAuth(userData, true); // 🆕 Usar función sincronizada
         } catch (err) {
           console.error('❌ Error al cargar usuario:', err);
           localStorage.removeItem('access_token');
-          setUser(null);
-          setEquipo(null);
+          setAuth(null, false); // 🆕 Usar función sincronizada
         }
+      } else {
+        console.log('🔐 AuthProvider: No hay token, usuario no autenticado');
+        setAuth(null, false); // 🆕 Usar función sincronizada
       }
-      setLoading(false);
     };
 
     loadUser();
@@ -49,64 +68,48 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
-      console.log('🔐 Iniciando login...');
+      setLoading(true);
+      console.log('🔐 AuthContext: Iniciando login...');
       
       const data = await loginUser(username, password);
-      console.log('✅ Login exitoso, datos recibidos:', data);
+      console.log('✅ AuthContext: Login exitoso, datos recibidos:', data);
 
       if (data.access) {
         localStorage.setItem('access_token', data.access);
         
-        // 🎯 CORREGIDO: Siempre intentar obtener datos reales del usuario
+        // 🆕 Obtener siempre datos reales del usuario
         try {
-          console.log('🔄 Obteniendo datos reales del usuario...');
+          console.log('🔄 AuthContext: Obteniendo datos reales del usuario...');
           const userData = await getCurrentUser();
-          console.log('✅ Datos reales del usuario:', userData);
+          console.log('✅ AuthContext: Datos reales del usuario:', userData);
           
-          setUser(userData);
-          setEquipo(userData.equipo || null);
+          // 🆕 Usar función sincronizada
+          setAuth(userData, true);
           
-          console.log('✅ Estado actualizado - usuario real:', userData.username);
+          console.log('✅ AuthContext: Estado actualizado - usuario real:', userData.username);
           
           return { 
+            success: true,
             user: userData, 
             access: data.access, 
             equipo: userData.equipo 
           };
           
         } catch (userError) {
-          console.error('❌ Error obteniendo datos reales:', userError);
+          console.error('❌ AuthContext: Error obteniendo datos reales:', userError);
           
-          // 🎯 CORREGIDO: Si hay datos en la respuesta del login, usarlos
+          // 🆕 Si hay datos en la respuesta del login, usarlos
           if (data.user) {
-            console.log('🔄 Usando datos del login response:', data.user);
-            setUser(data.user);
-            setEquipo(data.equipo || null);
+            console.log('🔄 AuthContext: Usando datos del login response:', data.user);
+            setAuth(data.user, true);
             return { 
+              success: true,
               user: data.user, 
               access: data.access, 
               equipo: data.equipo 
             };
           } else {
-            // 🎯 Último recurso: usuario temporal
-            const tempUser = {
-              id: Date.now(),
-              username: username,
-              email: `${username}@ejemplo.com`,
-              is_staff: username.includes('admin'), // 🆕 Intentar detectar admin
-              is_superuser: username.includes('admin')
-            };
-            
-            setUser(tempUser);
-            setEquipo(null);
-            
-            console.log('✅ Estado actualizado - usuario temporal:', tempUser.username);
-            
-            return { 
-              user: tempUser, 
-              access: data.access, 
-              equipo: null 
-            };
+            throw new Error('No se pudieron obtener los datos del usuario');
           }
         }
       }
@@ -114,17 +117,19 @@ export const AuthProvider = ({ children }) => {
       throw new Error('No se recibió token de acceso');
       
     } catch (err) {
-      console.error('❌ Error en login:', err);
+      console.error('❌ AuthContext: Error en login:', err);
       const errorMessage = err.message || 'Error al iniciar sesión';
       setError(errorMessage);
-      throw new Error(errorMessage);
+      setAuth(null, false); // 🆕 Usar función sincronizada
+      return { success: false, error: errorMessage };
     }
   };
 
   const register = async (userData) => {
     try {
       setError(null);
-      console.log('📝 Iniciando registro...');
+      setLoading(true);
+      console.log('📝 AuthContext: Iniciando registro...');
       
       const data = await registerUser({
         username: userData.username,
@@ -135,41 +140,39 @@ export const AuthProvider = ({ children }) => {
         last_name: userData.last_name
       });
 
-      console.log('✅ Registro exitoso, datos:', data);
+      console.log('✅ AuthContext: Registro exitoso, datos:', data);
 
       if (data.access) {
         localStorage.setItem('access_token', data.access);
         
         if (data.user) {
-          setUser(data.user);
-          setEquipo(data.equipo || null);
+          setAuth(data.user, true); // 🆕 Usar función sincronizada
         } else {
           // Obtener usuario si no viene en la respuesta
           const userDataResponse = await getCurrentUser();
-          setUser(userDataResponse);
-          setEquipo(userDataResponse.equipo || null);
+          setAuth(userDataResponse, true); // 🆕 Usar función sincronizada
         }
       }
 
-      return data;
+      return { success: true, data };
     } catch (err) {
-      console.error('❌ Error en registro:', err);
+      console.error('❌ AuthContext: Error en registro:', err);
       setError(err.message || 'Error al registrarse');
-      throw err;
+      setAuth(null, false); // 🆕 Usar función sincronizada
+      return { success: false, error: err.message };
     }
   };
 
   const logout = async () => {
     try {
-      console.log('🚪 Cerrando sesión...');
+      console.log('🚪 AuthContext: Cerrando sesión...');
       await logoutUser();
     } catch (err) {
-      console.error('❌ Error al hacer logout:', err);
+      console.error('❌ AuthContext: Error al hacer logout:', err);
     } finally {
       localStorage.removeItem('access_token');
-      setUser(null);
-      setEquipo(null);
-      console.log('✅ Sesión cerrada');
+      setAuth(null, false); // 🆕 Usar función sincronizada
+      console.log('✅ AuthContext: Sesión cerrada');
     }
   };
 
@@ -178,6 +181,7 @@ export const AuthProvider = ({ children }) => {
     equipo,
     loading,
     error,
+    authChecked, // 🆕 Exportar nuevo estado
     login,
     register,
     logout,
@@ -188,8 +192,55 @@ export const AuthProvider = ({ children }) => {
     user: user ? user.username : 'null',
     equipo: equipo ? 'SÍ' : 'NO',
     isAuthenticated: !!user,
-    loading
+    loading,
+    authChecked
   });
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+// Hook complementario para funcionalidades específicas de auth
+export const useAuthData = () => {
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        if (token) {
+          const user = await getCurrentUser();
+          setUserData(user);
+        }
+      } catch (err) {
+        setError('Error cargando datos de usuario');
+        console.error('Error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  return {
+    userData,
+    loading,
+    error,
+    refetch: () => {
+      setLoading(true);
+      const loadUserData = async () => {
+        try {
+          const user = await getCurrentUser();
+          setUserData(user);
+        } catch (err) {
+          setError('Error cargando datos de usuario');
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadUserData();
+    }
+  };
 };
