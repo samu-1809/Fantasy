@@ -9,6 +9,8 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 sudo systemctl stop postgresql
+python manage.py flush
+python manage.py populate_database
 sudo docker-compose up -d
 python manage.py runserver
 ```

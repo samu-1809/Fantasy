@@ -7,6 +7,7 @@ const FieldView = ({
   banquillo,
   onPlayerClick,
   onSellPlayer,
+  onRemoveFromMarket,
   getPlayerState,
   modoCambio = false
 }) => {
@@ -37,8 +38,11 @@ const FieldView = ({
                   key={del.id} 
                   player={del}
                   onSelect={onPlayerClick}
+                  onRemove={onSellPlayer}
+                  onRemoveFromMarket={onRemoveFromMarket}
                   estado={getPlayerState(del)}
                   showRemoveButton={!modoCambio}
+                  modoCambio={modoCambio}
                 />
               ))}
             </div>
@@ -50,8 +54,11 @@ const FieldView = ({
                   key={def.id} 
                   player={def}
                   onSelect={onPlayerClick}
+                  onRemove={onSellPlayer}
+                  onRemoveFromMarket={onRemoveFromMarket}
                   estado={getPlayerState(def)}
                   showRemoveButton={!modoCambio}
+                  modoCambio={modoCambio}
                 />
               ))}
             </div>
@@ -62,8 +69,11 @@ const FieldView = ({
                 <PlayerCard 
                   player={portero_titular}
                   onSelect={onPlayerClick}
+                  onRemove={onSellPlayer}
+                  onRemoveFromMarket={onRemoveFromMarket}
                   estado={getPlayerState(portero_titular)}
                   showRemoveButton={!modoCambio}
+                  modoCambio={modoCambio}
                 />
               )}
             </div>
@@ -84,9 +94,11 @@ const FieldView = ({
                 key={jugador.id} 
                 player={jugador} 
                 onRemove={onSellPlayer}
+                onRemoveFromMarket={onRemoveFromMarket}
                 onSelect={onPlayerClick}
                 estado={getPlayerState(jugador)}
                 showRemoveButton={!modoCambio}
+                modoCambio={modoCambio}
               />
             ))}
           </div>

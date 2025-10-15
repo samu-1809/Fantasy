@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Loader, CheckCircle } from 'lucide-react';
+import { UserPlus, Loader, CheckCircle, Users, Trophy, DollarSign } from 'lucide-react';
 
 const RegisterScreen = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -14,6 +14,7 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [teamInfo, setTeamInfo] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -85,6 +86,7 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
     try {
       setLoading(true);
       setError('');
+      setTeamInfo(null);
       
       const requestData = {
         username: formData.username,
@@ -121,21 +123,35 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
 
       const data = await response.json();
       console.log('✅ Registro exitoso:', data);
-          setFormData({
-            username: '',
-            email: '',
-            password: '',
-            password2: '',
-            first_name: '',
-            last_name: ''
-          });
+      
+      // Guardar información del equipo para mostrarla en el éxito
+      if (data.equipo_creado) {
+        setTeamInfo({
+          nombre: data.equipo?.nombre,
+          jugadores: data.jugadores_asignados,
+          titulares: data.titulares,
+          banquillo: data.banquillo,
+          presupuesto: data.presupuesto_restante,
+          costo: data.costo_equipo
+        });
+      }
+      
+      setFormData({
+        username: '',
+        email: '',
+        password: '',
+        password2: '',
+        first_name: '',
+        last_name: ''
+      });
       setError('');
+      
       // Mostrar mensaje de éxito
       setShowSuccess(true);
       setTimeout(() => {
         setShowSuccess(false);
         onSwitchToLogin();
-      }, 2000);
+      }, 4000); // Un poco más de tiempo para leer la info del equipo
       
     } catch (err) {
       console.error('❌ Error en registro:', err);
@@ -153,6 +169,14 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
     return `${baseClass} border-gray-300 focus:border-blue-500`;
   };
 
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
   // Si se muestra éxito
   if (showSuccess) {
     return (
@@ -160,11 +184,74 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
         <div className="bg-white p-8 rounded-2xl shadow-2xl w-96 border border-gray-200 text-center">
           <CheckCircle size={64} className="text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-800 mb-2">¡Cuenta Creada!</h2>
+          
+          {teamInfo && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+              <h3 className="font-semibold text-green-800 mb-3 flex items-center justify-center gap-2">
+                <Trophy size={20} />
+                ¡Equipo Creado Automáticamente!
+              </h3>
+              
+              <div className="space-y-3 text-left">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Users size={16} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Nombre del equipo</p>
+                    <p className="font-semibold text-gray-800">{teamInfo.nombre}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Users size={16} className="text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Jugadores asignados</p>
+                    <p className="font-semibold text-gray-800">
+                      {teamInfo.jugadores} jugadores ({teamInfo.titulares} titulares + {teamInfo.banquillo} banquillo)
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                    <DollarSign size={16} className="text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Presupuesto restante</p>
+                    <p className="font-semibold text-gray-800">
+                      {formatCurrency(teamInfo.presupuesto)}
+                    </p>
+                  </div>
+                </div>
+                
+                {teamInfo.costo && (
+                  <div className="text-xs text-gray-500 text-center mt-2">
+                    Inversión inicial: {formatCurrency(teamInfo.costo)}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
           <p className="text-gray-600 mb-6">
-            Tu cuenta ha sido creada exitosamente. Redirigiendo al login...
+            Tu cuenta y equipo han sido creados exitosamente. 
+            <br />
+            <span className="text-sm text-gray-500">
+              Redirigiendo al login...
+            </span>
           </p>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
             <div className="bg-green-500 h-2 rounded-full animate-pulse"></div>
+          </div>
+          
+          <div className="text-xs text-gray-500 space-y-1">
+            <p>🎯 <strong>Formación 1-2-2</strong> - 5 jugadores titulares</p>
+            <p>🪑 <strong>2 suplentes</strong> - 1 defensa + 1 delantero en banquillo</p>
+            <p>💰 <strong>Presupuesto inicial</strong> - {formatCurrency(150000000)}</p>
           </div>
         </div>
       </div>
@@ -187,7 +274,10 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
             <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-            {error}
+            <div className="flex-1">
+              <p className="font-medium">Error en el registro</p>
+              <p className="text-sm">{error}</p>
+            </div>
           </div>
         )}
 
@@ -315,7 +405,7 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
             {loading ? (
               <>
                 <Loader size={20} className="animate-spin" />
-                Creando cuenta...
+                Creando cuenta y equipo...
               </>
             ) : (
               <>
@@ -342,10 +432,18 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
         </form>
 
         {/* Información adicional */}
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <p className="text-sm text-blue-700 text-center">
-            🔒 Tus datos están protegidos y seguros.
-          </p>
+        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Trophy size={18} className="text-green-600" />
+            <p className="font-semibold text-green-800 text-sm">Ventajas al registrarte:</p>
+          </div>
+          <ul className="text-xs text-green-700 space-y-1">
+            <li>✅ <strong>Equipo automático</strong> - 7 jugadores (5 titulares + 2 banquillo)</li>
+            <li>✅ <strong>Presupuesto inicial</strong> - {formatCurrency(150000000)}</li>
+            <li>✅ <strong>Formación 1-2-2</strong> - 1 Portero, 2 Defensas, 2 Delanteros titulares</li>
+            <li>✅ <strong>Banquillo completo</strong> - 1 Defensa y 1 Delantero suplentes</li>
+            <li>✅ <strong>Listo para jugar</strong> - Empieza a competir inmediatamente</li>
+          </ul>
         </div>
       </div>
     </div>

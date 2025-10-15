@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion, TransaccionEconomica
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,6 +48,14 @@ class JugadorDetailSerializer(serializers.ModelSerializer):
         puntuaciones = Puntuacion.objects.filter(jugador=obj).select_related('jornada')
         return PuntuacionJornadaSerializer(puntuaciones, many=True).data
 
+class PuntuacionSerializer(serializers.ModelSerializer):
+    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+    
+    class Meta:
+        model = Puntuacion
+        fields = ['id', 'jugador', 'jugador_nombre', 'jornada', 'jornada_numero', 'puntos']
+
 class EquipoSerializer(serializers.ModelSerializer):
     usuario_username = serializers.CharField(source='usuario.username', read_only=True)
     liga_nombre = serializers.CharField(source='liga.nombre', read_only=True)
@@ -73,14 +81,6 @@ class EquipoSerializer(serializers.ModelSerializer):
         jugadores_banquillo = obj.jugadores.filter(en_banquillo=True)
         return JugadorSerializer(jugadores_banquillo, many=True).data
 
-class PuntuacionSerializer(serializers.ModelSerializer):
-    jugador_nombre = serializers.CharField(source='jugador.nombre', read_only=True)
-    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
-    
-    class Meta:
-        model = Puntuacion
-        fields = ['id', 'jugador', 'jugador_nombre', 'jornada', 'jornada_numero', 'puntos']
-
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -93,7 +93,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name']
+        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name'] 
     
     def validate(self, data):
         if data['password'] != data['password2']:
@@ -242,3 +242,21 @@ class JugadorMercadoSerializer(serializers.ModelSerializer):
     
     def get_expirado(self, obj):
         return obj.expirado
+
+class NotificacionSerializer(serializers.ModelSerializer):
+    tipo = serializers.CharField(source='tipo.codigo', read_only=True)
+    icono = serializers.CharField(source='tipo.icono', read_only=True)
+    
+    class Meta:
+        model = Notificacion
+        fields = [
+            'id', 'tipo', 'titulo', 'mensaje', 'icono', 
+            'fecha_creacion', 'es_leida', 'datos_extra'
+        ]
+        read_only_fields = ['fecha_creacion']
+
+class TransaccionEconomicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransaccionEconomica
+        fields = ['id', 'tipo', 'monto', 'descripcion', 'fecha']
+        read_only_fields = ['fecha']

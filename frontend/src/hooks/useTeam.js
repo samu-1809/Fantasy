@@ -5,7 +5,8 @@ import {
   intercambiarJugadores, 
   ponerEnVenta,
   guardarAlineacion,
-  quitarJugadorDelMercado
+  quitarJugadorDelMercado,
+  getClasificacion
 } from '../services/api';
 
 // Función pura fuera del hook para evitar recreación
@@ -19,34 +20,20 @@ const determinarAlineacionBase = (jugadoresList) => {
     };
   }
 
-  const portero = jugadoresList.find(j => j.posicion === 'POR');
-  const defensas = jugadoresList.filter(j => j.posicion === 'DEF');
-  const delanteros = jugadoresList.filter(j => j.posicion === 'DEL');
-
-  let defensas_titulares, delanteros_titulares;
-
-  const defensasEnCampo = defensas.filter(d => d.en_banquillo === false);
-  const delanterosEnCampo = delanteros.filter(d => d.en_banquillo === false);
-
-  if (defensasEnCampo.length >= 2) {
-    defensas_titulares = defensasEnCampo.slice(0, 2);
-  } else {
-    defensas_titulares = [...defensas]
-      .sort((a, b) => b.puntos_totales - a.puntos_totales)
-      .slice(0, 2);
-  }
-
-  if (delanterosEnCampo.length >= 2) {
-    delanteros_titulares = delanterosEnCampo.slice(0, 2);
-  } else {
-    delanteros_titulares = [...delanteros]
-      .sort((a, b) => b.puntos_totales - a.puntos_totales)
-      .slice(0, 2);
-  }
-
-  const portero_titular = portero;
-  const titulares = [portero_titular, ...defensas_titulares, ...delanteros_titulares].filter(Boolean);
-  const banquillo = jugadoresList.filter(jugador => !titulares.includes(jugador));
+  console.log('🔄 Calculando alineación basada en en_banquillo...');
+  
+  // Filtrar por posición y estado de banquillo
+  const portero_titular = jugadoresList.find(j => j.posicion === 'POR' && !j.en_banquillo) || null;
+  
+  const defensas_titulares = jugadoresList
+    .filter(j => j.posicion === 'DEF' && !j.en_banquillo)
+    .sort((a, b) => b.puntos_totales - a.puntos_totales);
+  
+  const delanteros_titulares = jugadoresList
+    .filter(j => j.posicion === 'DEL' && !j.en_banquillo)
+    .sort((a, b) => b.puntos_totales - a.puntos_totales);
+  
+  const banquillo = jugadoresList.filter(j => j.en_banquillo);
 
   return {
     portero_titular,
@@ -59,8 +46,13 @@ const determinarAlineacionBase = (jugadoresList) => {
 export const useTeam = (equipoId) => {
   const [equipo, setEquipo] = useState(null);
   const [jugadores, setJugadores] = useState([]);
+  const [ligaActual, setLigaActual] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingPosicion, setLoadingPosicion] = useState(false);
   const [error, setError] = useState(null);
+  const [posicionLiga, setPosicionLiga] = useState(null);
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(new Date().toLocaleTimeString());
+  const [alineacion, setAlineacion] = useState(determinarAlineacionBase([]));
 
   const cargarEquipo = useCallback(async () => {
     if (!equipoId) return;
@@ -73,6 +65,10 @@ export const useTeam = (equipoId) => {
       
       setEquipo(datosIniciales.equipo);
       setJugadores(datosIniciales.jugadores || []);
+      setLigaActual(datosIniciales.ligaActual);
+      setUltimaActualizacion(new Date().toLocaleTimeString());
+      
+      console.log('✅ useTeam: Datos cargados exitosamente');
     } catch (err) {
       setError('Error cargando datos del equipo');
       console.error('Error:', err);
@@ -81,12 +77,47 @@ export const useTeam = (equipoId) => {
     }
   }, [equipoId]);
 
-  // Determinar alineación automáticamente - versión memoizada
+  // Actualizar alineación cuando cambian los jugadores
+  useEffect(() => {
+    const nuevaAlineacion = determinarAlineacionBase(jugadores);
+    setAlineacion(nuevaAlineacion);
+  }, [jugadores]);
+
+  // Cargar posición en liga
+  useEffect(() => {
+    const cargarPosicionLiga = async () => {
+      if (!equipo || !equipo.id) return;
+
+      const ligaId = equipo.liga_id || ligaActual?.id;
+      if (!ligaId) return;
+
+      setLoadingPosicion(true);
+      try {
+        const clasificacion = await getClasificacion(ligaId);
+        
+        if (clasificacion && Array.isArray(clasificacion)) {
+          const equipoEnClasificacion = clasificacion.find(
+            eq => eq.equipo_id === equipo.id || eq.nombre === equipo.nombre
+          );
+          setPosicionLiga(equipoEnClasificacion?.posicion || null);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando posición:', error);
+        setPosicionLiga(null);
+      } finally {
+        setLoadingPosicion(false);
+      }
+    };
+
+    if (equipo && equipo.id) {
+      cargarPosicionLiga();
+    }
+  }, [equipo, ligaActual]);
+
   const determinarAlineacion = useCallback((jugadoresList) => {
     return determinarAlineacionBase(jugadoresList || jugadores);
   }, [jugadores]);
 
-  // Sincronizar alineación con el backend
   const sincronizarAlineacion = useCallback(async (alineacion) => {
     if (!equipoId) return;
 
@@ -105,7 +136,7 @@ export const useTeam = (equipoId) => {
     }
   }, [equipoId, jugadores]);
 
-  // Realizar cambio entre jugadores
+  // 🆕 CORREGIDO: Función mejorada para realizar cambios
   const realizarCambio = useCallback(async (jugadorOrigenId, jugadorDestinoId) => {
     if (!equipoId) return;
 
@@ -133,15 +164,18 @@ export const useTeam = (equipoId) => {
     }
   }, [equipoId, cargarEquipo]);
 
-  // Retirar jugador del mercado
+  // 🆕 CORREGIDO: Función mejorada para quitar del mercado
   const retirarJugadorDelMercado = useCallback(async (jugadorId) => {
     if (!equipoId) return;
 
     try {
-      await quitarJugadorDelMercado(equipoId, jugadorId);
+      console.log('🔄 useTeam: Quitando jugador del mercado:', jugadorId);
+      const resultado = await quitarJugadorDelMercado(equipoId, jugadorId);
+      console.log('✅ useTeam: Jugador quitado del mercado exitosamente:', resultado);
       await cargarEquipo(); // Recargar datos
+      return resultado;
     } catch (err) {
-      console.error('Error retirando jugador del mercado:', err);
+      console.error('❌ useTeam: Error retirando jugador del mercado:', err);
       throw err;
     }
   }, [equipoId, cargarEquipo]);
@@ -163,6 +197,45 @@ export const useTeam = (equipoId) => {
     return true;
   }, [jugadores]);
 
+  // 🆕 Función para forzar actualización
+  const forzarActualizacion = useCallback(async () => {
+    console.log('🔄 useTeam: Forzando actualización de datos');
+    await cargarEquipo();
+  }, [cargarEquipo]);
+
+  // 🆕 Calcular puntos totales
+  const calcularPuntosTotales = useCallback(() => {
+    return jugadores.reduce((sum, j) => sum + (j.puntos_totales || 0), 0);
+  }, [jugadores]);
+
+  // 🆕 Función para encontrar jugadores intercambiables (CORREGIDA)
+  const encontrarJugadoresIntercambiables = useCallback((jugadorSeleccionado) => {
+    if (!jugadorSeleccionado) return [];
+    
+    console.log('🔍 Buscando jugadores intercambiables para:', jugadorSeleccionado.nombre);
+    console.log('📍 Posición:', jugadorSeleccionado.posicion);
+    console.log('🏟️ En banquillo:', jugadorSeleccionado.en_banquillo);
+
+    // 🆕 CORRECCIÓN: Permitir intercambios entre titulares y banquillo
+    const intercambiables = jugadores.filter(j => 
+      j.id !== jugadorSeleccionado.id && 
+      j.posicion === jugadorSeleccionado.posicion && 
+      !j.en_venta &&
+      // 🆕 CAMBIO IMPORTANTE: Permitir intercambio entre cualquier estado
+      // Solo excluir si está en venta
+      true
+    );
+
+    console.log('🎯 Jugadores intercambiables encontrados:', intercambiables.map(j => ({
+      nombre: j.nombre,
+      posicion: j.posicion,
+      en_banquillo: j.en_banquillo,
+      en_venta: j.en_venta
+    })));
+
+    return intercambiables;
+  }, [jugadores]);
+
   useEffect(() => {
     cargarEquipo();
   }, [cargarEquipo]);
@@ -170,14 +243,22 @@ export const useTeam = (equipoId) => {
   return {
     equipo,
     jugadores,
+    ligaActual,
+    alineacion,
     loading,
+    loadingPosicion,
     error,
+    posicionLiga,
+    ultimaActualizacion,
     cargarEquipo,
     determinarAlineacion,
     sincronizarAlineacion,
     realizarCambio,
     venderJugador: ponerJugadorEnVenta,
     retirarJugadorDelMercado,
-    puedeVenderJugador
+    puedeVenderJugador,
+    forzarActualizacion,
+    calcularPuntosTotales,
+    encontrarJugadoresIntercambiables // 🆕 Nueva función
   };
 };

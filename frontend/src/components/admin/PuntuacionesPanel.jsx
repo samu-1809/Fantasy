@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Save, Calendar, TrendingUp } from 'lucide-react';
 import { useAdmin } from '../../hooks/useAdmin';
 
@@ -8,6 +8,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
   const [asignandoPuntos, setAsignandoPuntos] = useState(false);
   const [puntosTemporales, setPuntosTemporales] = useState({});
   const [historialJugadores, setHistorialJugadores] = useState({});
+  const [historialCargado, setHistorialCargado] = useState(false);
   
   // 🆕 Usar todas las funciones y estados del hook useAdmin
   const {
@@ -15,7 +16,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     jornadaSeleccionada,
     setJornadaSeleccionada,
     cargarPuntuacionesJugador,
-    asignarPuntos
+    actualizarPuntuacionJugador,
   } = useAdmin();
 
   // 🆕 Inicializar puntos temporales cuando cambia la jornada o los jugadores
@@ -30,70 +31,139 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     }
   }, [jornadaSeleccionada, jugadores]);
 
-  // 🆕 Cargar historial de puntuaciones para los jugadores
+  // 🆕 Cargar historial de puntuaciones SOLO UNA VEZ
   useEffect(() => {
     const cargarHistorial = async () => {
-      if (!jugadores || jugadores.length === 0) return;
+      // Evitar cargar múltiples veces
+      if (historialCargado || !jugadores || jugadores.length === 0) return;
+      
+      console.log('🔄 Cargando historial de puntuaciones...');
+      setHistorialCargado(true);
       
       const nuevoHistorial = {};
-      for (const jugador of jugadores) {
-        try {
-          const puntuaciones = await cargarPuntuacionesJugador(jugador.id);
-          // Ordenar por jornada_numero descendente y tomar las últimas 5
-          const ultimasPuntuaciones = puntuaciones
-            .sort((a, b) => b.jornada_numero - a.jornada_numero)
-            .slice(0, 5);
-          nuevoHistorial[jugador.id] = ultimasPuntuaciones;
-        } catch (err) {
-          console.error(`Error cargando historial para ${jugador.nombre}:`, err);
-          nuevoHistorial[jugador.id] = [];
-        }
+      const jugadoresUnicos = jugadores.filter((jugador, index, self) => 
+        index === self.findIndex(j => j.id === jugador.id)
+      );
+      
+      // Limitar a 10 jugadores por lote para no saturar
+      const lotes = [];
+      for (let i = 0; i < jugadoresUnicos.length; i += 10) {
+        lotes.push(jugadoresUnicos.slice(i, i + 10));
       }
+      
+      for (const lote of lotes) {
+        const promesas = lote.map(async (jugador) => {
+          try {
+            const puntuaciones = await cargarPuntuacionesJugador(jugador.id);
+            // Ordenar por jornada_numero descendente y tomar las últimas 5
+            const ultimasPuntuaciones = puntuaciones
+              .sort((a, b) => b.jornada_numero - a.jornada_numero)
+              .slice(0, 5);
+            return { jugadorId: jugador.id, puntuaciones: ultimasPuntuaciones };
+          } catch (err) {
+            console.error(`Error cargando historial para ${jugador.nombre}:`, err);
+            return { jugadorId: jugador.id, puntuaciones: [] };
+          }
+        });
+        
+        const resultados = await Promise.all(promesas);
+        resultados.forEach(({ jugadorId, puntuaciones }) => {
+          nuevoHistorial[jugadorId] = puntuaciones;
+        });
+        
+        // Pequeña pausa entre lotes
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       setHistorialJugadores(nuevoHistorial);
+      console.log('✅ Historial de puntuaciones cargado');
     };
 
     cargarHistorial();
-  }, [jugadores, cargarPuntuacionesJugador]);
+  }, [jugadores, cargarPuntuacionesJugador, historialCargado]);
 
-  // 🆕 Manejar cambio de puntos para un jugador
-  const handlePuntosChange = (jugadorId, puntos) => {
+  // 🆕 Manejar cambio de puntos para un jugador (MEJORADA)
+  const handlePuntosChange = (jugadorId, valor) => {
+    // Si el valor está vacío, guardar como cadena vacía
+    if (valor === '' || valor === null || valor === undefined) {
+      setPuntosTemporales(prev => ({
+        ...prev,
+        [jugadorId]: ''
+      }));
+      return;
+    }
+
+    // Convertir a número y asegurar que no sea NaN
+    const puntosNum = parseInt(valor);
     setPuntosTemporales(prev => ({
       ...prev,
-      [jugadorId]: puntos === '' ? '' : parseInt(puntos) || 0
+      [jugadorId]: isNaN(puntosNum) ? '' : puntosNum
     }));
   };
 
-  // 🆕 Asignar puntos para la jornada seleccionada
-  const asignarPuntosJornada = async () => {
+ const asignarPuntosJornada = async () => {
     if (!jornadaSeleccionada) {
       alert('Por favor selecciona una jornada');
       return;
     }
 
-    if (Object.keys(puntosTemporales).length === 0) {
-      alert('No hay puntos para asignar');
-      return;
-    }
-
     setAsignandoPuntos(true);
     try {
-      // Convertir a formato esperado por el backend
-      const puntosArray = Object.entries(puntosTemporales)
-        .filter(([_, puntos]) => puntos !== '' && puntos !== 0) // Solo enviar jugadores con puntos no vacíos y no cero
-        .map(([jugador_id, puntos]) => ({
-          jugador_id: parseInt(jugador_id),
-          puntos: puntos === '' ? 0 : puntos
-        }));
+      const resultados = [];
+      const errores = [];
 
-      if (puntosArray.length === 0) {
-        alert('No hay puntos para asignar (todos están vacíos o son 0)');
+      // Procesar cada jugador con puntos asignados
+      for (const [jugadorId, puntos] of Object.entries(puntosTemporales)) {
+        // Saltar jugadores sin puntos
+        if (puntos === '' || puntos === null || puntos === undefined) {
+          continue;
+        }
+
+        const puntosNum = parseInt(puntos);
+        if (isNaN(puntosNum)) {
+          continue;
+        }
+
+        try {
+          const resultado = await actualizarPuntuacionJugador(
+            parseInt(jugadorId),
+            jornadaSeleccionada,
+            puntosNum
+          );
+          resultados.push({ 
+            jugadorId, 
+            success: true, 
+            data: resultado,
+            jugadorNombre: jugadores.find(j => j.id === parseInt(jugadorId))?.nombre || 'Desconocido'
+          });
+        } catch (error) {
+          errores.push({ 
+            jugadorId, 
+            error: error.message,
+            jugadorNombre: jugadores.find(j => j.id === parseInt(jugadorId))?.nombre || 'Desconocido'
+          });
+        }
+      }
+
+      if (resultados.length === 0 && errores.length === 0) {
+        alert('No hay puntos para asignar');
         return;
       }
 
-      await asignarPuntos(jornadaSeleccionada, puntosArray);
-      alert(`Puntos asignados exitosamente para la jornada ${jornadaActual?.numero}`);
+      if (errores.length > 0) {
+        const erroresTexto = errores.map(e => `${e.jugadorNombre}: ${e.error}`).join('\n');
+        alert(`Se asignaron puntos a ${resultados.length} jugadores, pero hubo ${errores.length} errores:\n\n${erroresTexto}`);
+      } else {
+        alert(`✅ Puntos asignados exitosamente para la jornada ${jornadaActual?.numero} a ${resultados.length} jugadores`);
+      }
+      
       onAsignarPuntosSuccess?.();
+      
+      // Recargar historial después de asignar puntos
+      setHistorialCargado(false);
+      
     } catch (err) {
+      console.error('Error general asignando puntos:', err);
       alert('Error al asignar puntos: ' + err.message);
     } finally {
       setAsignandoPuntos(false);
@@ -157,7 +227,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     if (historial.length === 0) {
       return (
         <div className="flex items-center justify-center h-8 text-xs text-gray-400">
-          Sin datos históricos
+          Sin datos
         </div>
       );
     }
@@ -193,13 +263,16 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
   // 🆕 Calcular estadísticas de la jornada actual
   const estadisticas = {
     totalJugadores: jugadoresFiltrados.length,
-    jugadoresConPuntos: jugadoresFiltrados.filter(j => puntosTemporales[j.id] !== '' && puntosTemporales[j.id] !== 0).length,
+    jugadoresConPuntos: jugadoresFiltrados.filter(j => {
+      const puntos = puntosTemporales[j.id];
+      return puntos !== '' && puntos !== null && puntos !== undefined && puntos !== 0;
+    }).length,
     puntosTotalesJornada: jugadoresFiltrados.reduce((sum, j) => {
       const puntos = puntosTemporales[j.id];
-      return sum + (puntos === '' ? 0 : puntos);
+      return sum + (puntos === '' ? 0 : (puntos || 0));
     }, 0),
     get promedioPuntosJornada() {
-      return this.puntosTotalesJornada / (this.jugadoresConPuntos || 1);
+      return this.jugadoresConPuntos > 0 ? (this.puntosTotalesJornada / this.jugadoresConPuntos) : 0;
     }
   };
 
@@ -365,13 +438,31 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={puntosTemporales[jugador.id] || ''}
-                    onChange={(e) => handlePuntosChange(jugador.id, e.target.value)}
+                    value={puntosTemporales[jugador.id] === '' ? '' : (puntosTemporales[jugador.id] || 0)}
+                    onChange={(e) => {
+                      const valor = e.target.value;
+                      // Permitir campo vacío o números
+                      if (valor === '' || /^\d*$/.test(valor)) {
+                        handlePuntosChange(jugador.id, valor);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Cuando pierde el foco, convertir a número o dejar vacío
+                      const valor = e.target.value;
+                      if (valor === '') {
+                        handlePuntosChange(jugador.id, '');
+                      } else {
+                        const num = parseInt(valor);
+                        handlePuntosChange(jugador.id, isNaN(num) ? '' : num);
+                      }
+                    }}
                     className="w-20 border-2 border-gray-300 p-2 rounded text-center focus:border-blue-500 focus:outline-none"
                     placeholder="0"
+                    min="0"
+                    max="20"
                   />
                   <span className={`px-3 py-2 rounded text-sm font-bold border ${getColorPuntos(puntosTemporales[jugador.id] || '')}`}>
-                    {puntosTemporales[jugador.id] === '' ? '-' : puntosTemporales[jugador.id]}
+                    {puntosTemporales[jugador.id] === '' ? '-' : (puntosTemporales[jugador.id] || 0)}
                   </span>
                 </div>
               </div>

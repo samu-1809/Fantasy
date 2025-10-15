@@ -1,722 +1,442 @@
-import React, { useState, useEffect } from 'react';
-import { Users, RefreshCw, Trophy } from 'lucide-react';
-import { 
-  getClasificacion
-} from '../../services/api';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTeam } from '../../hooks/useTeam';
 import FieldView from './FieldView';
 
+// Componentes modulares
+import DashboardHeader from './components/DashboardHeader';
+import StatsPanel from './components/StatsPanel';
+import ExchangeModeBanner from './components/ExchangeModeBanner';
+import PlayerOptionsModal from './components/PlayerOptionsModal';
+import SellPlayerModal from './components/SellPlayerModal';
+import SaleConfirmationAnimation from './components/SaleConfirmationAnimation';
+import EmptyTeamMessage from './components/EmptyTeamMessage';
+import FieldSection from './components/FieldSection';
+import LoadingState from './components/LoadingState';
+
 const DashboardScreen = ({ datosUsuario, onRefresh }) => {
+  const equipoId = datosUsuario?.equipo?.id;
   
-  // Usar el hook useTeam para gestionar el estado del equipo
-  const { 
-    equipo, 
-    jugadores, 
-    loading, 
-    error, 
-    cargarEquipo,
-    determinarAlineacion,
+  // Usar el hook useTeam
+  const {
+    equipo,
+    jugadores,
+    ligaActual,
+    alineacion,
+    loading,
+    loadingPosicion,
+    error,
+    posicionLiga,
+    ultimaActualizacion,
     realizarCambio,
     venderJugador,
-    puedeVenderJugador,
     retirarJugadorDelMercado,
-  } = useTeam(datosUsuario?.equipo?.id);
+    forzarActualizacion,
+    calcularPuntosTotales,
+    encontrarJugadoresIntercambiables
+  } = useTeam(equipoId);
 
-  // Estados para la UI
-  const [loadingAlineacion, setLoadingAlineacion] = useState(false);
-  const [loadingPosicion, setLoadingPosicion] = useState(false);
-  const [posicionLiga, setPosicionLiga] = useState(null);
-  
-  // Estados para gestión de cambios
+  // Estados de UI
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
-  const [modoCambio, setModoCambio] = useState(false);
-  const [jugadorOrigenCambio, setJugadorOrigenCambio] = useState(null);
-  const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
-  const [jugadorAVender, setJugadorAVender] = useState(null);
   const [mostrarModalOpciones, setMostrarModalOpciones] = useState(false);
-  const [loadingVenta, setLoadingVenta] = useState(false);
-  
-  // Estados para retirar del mercado
-  const [mostrarModalRetirar, setMostrarModalRetirar] = useState(false);
-  const [jugadorARetirar, setJugadorARetirar] = useState(null);
-  const [loadingRetirar, setLoadingRetirar] = useState(false);
-  
-  // Estados para la alineación
-  const [alineacion, setAlineacion] = useState({
-    portero_titular: null,
-    defensas_titulares: [],
-    delanteros_titulares: [],
-    banquillo: []
-  });
-  const [alineacionCargada, setAlineacionCargada] = useState(false);
+  const [modoCambio, setModoCambio] = useState(false);
+  const [mostrarModalVenta, setMostrarModalVenta] = useState(false);
+  const [precioVenta, setPrecioVenta] = useState('');
+  const [jugadoresIntercambiables, setJugadoresIntercambiables] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [mostrarAnimacionVenta, setMostrarAnimacionVenta] = useState(false);
+  const [jugadorVendido, setJugadorVendido] = useState(null);
 
-  // Effect para cargar la posición en la liga
+  // 🆕 Referencia para detectar clics fuera del campo
+  const fieldRef = useRef(null);
+
+  // 🆕 Efecto para manejar clics fuera del campo (cancelar modo cambio)
   useEffect(() => {
-    const cargarPosicionLiga = async () => {
-      console.log('🏆 Intentando cargar posición en liga...');
-      
-      const ligaId = equipo?.liga_id || datosUsuario?.ligaActual?.id;
-      
-      console.log('   Liga ID final:', ligaId);
-      console.log('   Equipo actual:', equipo?.nombre, 'ID:', equipo?.id);
-      
-      if (!ligaId) {
-        console.log('❌ No hay liga_id disponible');
-        setPosicionLiga(null);
-        return;
-      }
-      
-      // Si no hay equipo, no podemos buscar posición
-      if (!equipo || !equipo.id) {
-        console.log('⏸️  No hay equipo cargado, esperando...');
-        setPosicionLiga(null);
-        return;
-      }
-      
-      setLoadingPosicion(true);
-      try {
-        console.log(`📡 Obteniendo clasificación para liga_id: ${ligaId}`);
-        const clasificacion = await getClasificacion(ligaId);
-        console.log('📊 Clasificación obtenida:', clasificacion);
-        
-        if (!clasificacion || !Array.isArray(clasificacion)) {
-          console.log('❌ Clasificación no es un array válido');
-          setPosicionLiga(null);
-          return;
-        }
-        
-        // Buscar la posición del equipo actual en la clasificación
-        const equipoEnClasificacion = clasificacion.find(
-          equipoClasif => equipoClasif.equipo_id === equipo.id
-        );
-        
-        if (equipoEnClasificacion) {
-          console.log(`✅ Equipo encontrado en posición: ${equipoEnClasificacion.posicion}`);
-          setPosicionLiga(equipoEnClasificacion.posicion);
-        } else {
-          console.log('⚠️ Equipo no encontrado en la clasificación por ID. Buscando por nombre...');
-          const equipoPorNombre = clasificacion.find(
-            equipoClasif => equipoClasif.nombre_equipo === equipo.nombre
-          );
-          if (equipoPorNombre) {
-            console.log(`✅ Equipo encontrado por nombre en posición: ${equipoPorNombre.posicion}`);
-            setPosicionLiga(equipoPorNombre.posicion);
-          } else {
-            console.log('❌ Equipo no encontrado en clasificación (ni por ID ni por nombre)');
-            console.log('   Equipos en clasificación:', clasificacion.map(e => ({ id: e.equipo_id, nombre: e.nombre_equipo })));
-            setPosicionLiga(null);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error cargando posición en liga:', error);
-        setPosicionLiga(null);
-      } finally {
-        setLoadingPosicion(false);
+    const handleClickOutside = (event) => {
+      if (modoCambio && fieldRef.current && !fieldRef.current.contains(event.target)) {
+        cancelarModoCambio();
       }
     };
 
-    // Recargar posición cuando cambie el equipo o los datos del usuario
-    const ligaId = equipo?.liga_id || datosUsuario?.ligaActual?.id;
-    if (equipo && equipo.id && ligaId) {
-      console.log('🚀 Iniciando carga de posición en liga...');
-      cargarPosicionLiga();
-    } else {
-      console.log('⏸️  No se puede cargar posición: falta equipo o liga_id');
-      console.log('   Equipo:', equipo);
-      console.log('   Liga ID disponible:', ligaId);
-      setPosicionLiga(null);
-    }
-  }, [equipo, datosUsuario]);
-
-  // Effect para recargar datos cuando el componente se hace visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log('🔄 Dashboard visible - verificando si necesito recargar...');
-        // Podemos considerar recargar datos si es necesario
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [modoCambio]);
 
-  // Effect para escuchar eventos de actualización
+  // Efecto para escuchar eventos de actualización
   useEffect(() => {
-    const handleMercadoUpdate = () => {
-      console.log('📢 Evento mercadoShouldUpdate recibido - recargando datos...');
-      cargarEquipo();
+    const handleMercadoUpdate = async () => {
+      console.log('🔄 Dashboard: Recibido evento de actualización del mercado');
+      await forzarActualizacion();
+      if (onRefresh) onRefresh();
     };
 
-    window.addEventListener('mercadoShouldUpdate', handleMercadoUpdate);
-    
-    return () => {
-      window.removeEventListener('mercadoShouldUpdate', handleMercadoUpdate);
-    };
-  }, [cargarEquipo]);
-
-  // Effect para calcular la alineación cuando cambian los jugadores
-  useEffect(() => {
-    const calcularAlineacion = () => {
-      if (!jugadores || jugadores.length === 0) {
-        console.log('❌ No hay jugadores para calcular alineación');
-        return;
-      }
-
-      console.log('🔄 Calculando alineación con useTeam...');
-      setLoadingAlineacion(true);
+    const handleOfertaAceptadaConExito = async (event) => {
+      console.log('🎯 Dashboard: Recibido evento ofertaAceptadaConExito', event.detail);
       
-      try {
-        const nuevaAlineacion = determinarAlineacion(jugadores);
-        console.log('✅ Alineación calculada:', nuevaAlineacion);
+      if (event.detail.jugadorVendido) {
+        setJugadorVendido(event.detail.jugadorVendido);
+        setMostrarAnimacionVenta(true);
         
-        setAlineacion(nuevaAlineacion);
-        setAlineacionCargada(true);
-      } catch (err) {
-        console.error('❌ Error calculando alineación:', err);
-      } finally {
-        setLoadingAlineacion(false);
+        setTimeout(() => {
+          setMostrarAnimacionVenta(false);
+          setJugadorVendido(null);
+        }, 3000);
       }
+      
+      setTimeout(async () => {
+        await forzarActualizacion();
+        if (onRefresh) onRefresh();
+      }, 800);
     };
 
-    // Solo calcular si tenemos jugadores y no estamos ya cargando
-    if (jugadores && jugadores.length > 0 && !loadingAlineacion) {
-      calcularAlineacion();
-    }
-  }, [jugadores, determinarAlineacion, loadingAlineacion]);
+    const handleJugadorPuestoEnVenta = async () => {
+      console.log('🔄 Dashboard: Recibido evento jugadorPuestoEnVenta');
+      await forzarActualizacion();
+      if (onRefresh) onRefresh();
+    };
 
-  // Funciones de gestión de jugadores
+    const handleDashboardUpdate = async () => {
+      console.log('🔄 Dashboard: Recibido evento dashboardShouldUpdate');
+      await forzarActualizacion();
+      if (onRefresh) onRefresh();
+    };
+
+    const handleJugadorQuitadoDelMercado = async () => {
+      console.log('🔄 Dashboard: Recibido evento jugadorQuitadoDelMercado');
+      await forzarActualizacion();
+      if (onRefresh) onRefresh();
+    };
+
+    const handleIntercambioExitoso = async () => {
+      console.log('🔄 Dashboard: Recibido evento intercambioExitoso');
+      await forzarActualizacion();
+      if (onRefresh) onRefresh();
+    };
+
+    // Escuchar eventos de actualización
+    const events = [
+      ['mercadoShouldUpdate', handleMercadoUpdate],
+      ['jugadorVendido', handleMercadoUpdate],
+      ['fichajeExitoso', handleMercadoUpdate],
+      ['ofertaAceptada', handleMercadoUpdate],
+      ['ofertaRechazada', handleMercadoUpdate],
+      ['ofertaAceptadaConExito', handleOfertaAceptadaConExito],
+      ['jugadorPuestoEnVenta', handleJugadorPuestoEnVenta],
+      ['dashboardShouldUpdate', handleDashboardUpdate],
+      ['jugadorQuitadoDelMercado', handleJugadorQuitadoDelMercado],
+      ['intercambioExitoso', handleIntercambioExitoso]
+    ];
+
+    events.forEach(([event, handler]) => {
+      window.addEventListener(event, handler);
+    });
+
+    return () => {
+      events.forEach(([event, handler]) => {
+        window.removeEventListener(event, handler);
+      });
+    };
+  }, [forzarActualizacion, onRefresh]);
+
+  // Handlers
   const handleClicJugador = (jugador) => {
-    if (modoCambio && jugadorOrigenCambio) {
-      realizarCambioJugadores(jugadorOrigenCambio, jugador);
-    } else {
-      setJugadorSeleccionado(jugador);
-      setMostrarModalOpciones(true);
-    }
-  };
-
-  const iniciarModoCambio = (jugador) => {
-    setJugadorOrigenCambio(jugador);
-    setModoCambio(true);
-    setMostrarModalOpciones(false);
-    setJugadorSeleccionado(null);
-  };
-
-  const cancelarModoCambio = () => {
-    setModoCambio(false);
-    setJugadorOrigenCambio(null);
-  };
-
-  const realizarCambioJugadores = async (origen, destino) => {
-    console.log('🔄 REALIZAR CAMBIO - Datos completos:');
-    console.log('   Origen:', origen);
-    console.log('   Destino:', destino);
-    
-    if (!equipo?.id) {
-      alert('❌ Error: No se pudo identificar el equipo');
-      cancelarModoCambio();
-      return;
-    }
-    
-    // ✅ Validar que el jugador destino no esté en venta
-    if (destino.en_venta) {
-      alert('❌ No puedes cambiar con un jugador que está en venta. Primero retíralo del mercado.');
-      cancelarModoCambio();
-      return;
-    }
-    
-    if (origen.posicion !== destino.posicion) {
-      alert(`❌ No puedes cambiar un ${origen.posicion} por un ${destino.posicion}. Deben ser de la misma posición.`);
-      cancelarModoCambio();
-      return;
-    }
-
-    try {
-      console.log('📡 Llamando a realizarCambio...');
-      await realizarCambio(origen.id, destino.id);
+    if (modoCambio) {
+      // 🆕 CORRECCIÓN: Permitir cancelar haciendo clic en el mismo jugador
+      if (jugador.id === jugadorSeleccionado?.id) {
+        cancelarModoCambio();
+        return;
+      }
       
-      console.log('✅ Cambio completado');
-      alert(`✅ Cambio realizado: ${origen.nombre} ↔ ${destino.nombre}`);
-      
-    } catch (err) {
-      console.error('❌ Error en realizarCambio:', err);
-      alert('❌ Error al realizar el cambio: ' + err.message);
-    } finally {
-      cancelarModoCambio();
+      if (jugadoresIntercambiables.some(j => j.id === jugador.id)) {
+        realizarIntercambio(jugador);
+      }
+      return;
     }
+    
+    setJugadorSeleccionado(jugador);
+    setMostrarModalOpciones(true);
   };
 
-  const getEstadoJugador = (jugador) => {
-    if (modoCambio && jugadorOrigenCambio) {
-      if (jugador.id === jugadorOrigenCambio?.id) {
-        return 'origen-cambio';
-      } else if (jugador.posicion === jugadorOrigenCambio?.posicion) {
-        // ✅ NO permitir cambio con jugadores en venta
-        if (jugador.en_venta) {
-          return 'no-apto-cambio';
-        }
+  const getPlayerState = (jugador) => {
+    if (modoCambio && jugador.id === jugadorSeleccionado?.id) {
+      return 'origen-cambio';
+    }
+    
+    if (modoCambio) {
+      if (jugadoresIntercambiables.some(j => j.id === jugador.id)) {
         return 'apto-cambio';
       } else {
         return 'no-apto-cambio';
       }
-    } else if (jugador.id === jugadorSeleccionado?.id) {
-      return 'seleccionado';
     }
+    
     return 'normal';
   };
 
-  // Función para abrir modal de venta
-  const abrirModalVenta = (jugador) => {
-    setJugadorAVender(jugador);
+  const activarModoCambio = () => {
+    if (!jugadorSeleccionado) return;
+    
+    console.log('🎯 Activando modo cambio para:', jugadorSeleccionado.nombre);
+    console.log('📍 Es titular:', !jugadorSeleccionado.en_banquillo);
+
+    // 🆕 CORRECCIÓN: Usar la nueva función del hook
+    const intercambiables = encontrarJugadoresIntercambiables(jugadorSeleccionado);
+    
+    if (intercambiables.length === 0) {
+      alert(`No hay jugadores de la posición ${jugadorSeleccionado.posicion} disponibles para intercambio`);
+      return;
+    }
+    
+    setJugadoresIntercambiables(intercambiables);
+    setModoCambio(true);
+    setMostrarModalOpciones(false);
+  };
+
+  const realizarIntercambio = async (jugadorDestino) => {
+    if (!jugadorSeleccionado || !equipo) return;
+
+    setCargando(true);
+    try {
+      console.log('🔄 Realizando intercambio:', {
+        origen: jugadorSeleccionado.nombre,
+        destino: jugadorDestino.nombre
+      });
+
+      await realizarCambio(jugadorSeleccionado.id, jugadorDestino.id);
+      
+      console.log('✅ Intercambio realizado exitosamente');
+      
+      window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('intercambioExitoso'));
+      
+    } catch (error) {
+      console.error('❌ Error en intercambio:', error);
+      alert('Error al realizar el intercambio: ' + error.message);
+    } finally {
+      setCargando(false);
+      setModoCambio(false);
+      setJugadorSeleccionado(null);
+      setJugadoresIntercambiables([]);
+    }
+  };
+
+  const cancelarModoCambio = () => {
+    console.log('❌ Cancelando modo cambio');
+    setModoCambio(false);
+    setJugadorSeleccionado(null);
+    setJugadoresIntercambiables([]);
+  };
+
+  const handlePonerEnVenta = () => {
+    if (!jugadorSeleccionado || !equipo) return;
+
+    const valorActual = jugadorSeleccionado.valor || 0;
+    const precioSugerido = Math.floor(valorActual * 1.2);
+
+    setPrecioVenta(precioSugerido.toString());
     setMostrarModalVenta(true);
-    setJugadorSeleccionado(null);
     setMostrarModalOpciones(false);
   };
 
-  const cerrarModalVenta = () => {
+  // 🆕 CORREGIDO: Función mejorada para quitar del mercado
+  const handleQuitarDelMercado = async () => {
+    if (!jugadorSeleccionado || !equipo) return;
+
+    setCargando(true);
+    try {
+      console.log('🔄 Dashboard: Quitando del mercado:', jugadorSeleccionado.nombre);
+      
+      // 🆕 Usar la función del hook que ahora maneja mejor los errores
+      await retirarJugadorDelMercado(jugadorSeleccionado.id);
+      
+      console.log('✅ Dashboard: Jugador quitado del mercado exitosamente');
+      
+      // Disparar eventos de actualización
+      window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+      
+      setMostrarModalOpciones(false);
+      
+    } catch (error) {
+      console.error('❌ Dashboard: Error quitando del mercado:', error);
+      alert('❌ Error al quitar del mercado: ' + (error.message || 'Error interno del servidor'));
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const confirmarVenta = async () => {
+    if (!jugadorSeleccionado || !precioVenta || !equipo) return;
+
+    setCargando(true);
+    try {
+      const precio = parseInt(precioVenta);
+      if (isNaN(precio) || precio <= 0) {
+        alert('Por favor ingresa un precio válido');
+        return;
+      }
+
+      const valorActual = jugadorSeleccionado.valor || 0;
+      const precioMinimo = Math.floor(valorActual * 0.8);
+      
+      if (precio < precioMinimo) {
+        alert(`El precio mínimo permitido es €${formatNumber(precioMinimo)} (80% del valor actual)`);
+        return;
+      }
+
+      console.log('💰 Confirmando venta:', {
+        jugador: jugadorSeleccionado.nombre,
+        precio: precio
+      });
+
+      await venderJugador(jugadorSeleccionado.id, precio);
+      
+      console.log('✅ Jugador puesto en venta exitosamente');
+      
+      window.dispatchEvent(new CustomEvent('jugadorPuestoEnVenta', {
+        detail: {
+          jugadorId: jugadorSeleccionado.id,
+          equipoId: equipo.id,
+          precioVenta: precio
+        }
+      }));
+      
+      window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
+      
+      setMostrarModalVenta(false);
+      setPrecioVenta('');
+      
+      alert(`✅ ${jugadorSeleccionado.nombre} puesto en venta por €${formatNumber(precio)}`);
+      
+    } catch (error) {
+      console.error('❌ Error poniendo en venta:', error);
+      alert('❌ Error al poner en venta: ' + error.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const cancelarVenta = () => {
     setMostrarModalVenta(false);
-    setJugadorAVender(null);
-    setLoadingVenta(false);
+    setPrecioVenta('');
   };
 
-  // Funciones para retirar del mercado
-  const abrirModalRetirar = (jugador) => {
-    setJugadorARetirar(jugador);
-    setMostrarModalRetirar(true);
-    setJugadorSeleccionado(null);
-    setMostrarModalOpciones(false);
+  // Helper functions
+  const formatValue = (value) => {
+    if (!value) return '€0.0M';
+    return `€${(value / 1000000).toFixed(1)}M`;
   };
 
-  const cerrarModalRetirar = () => {
-    setMostrarModalRetirar(false);
-    setJugadorARetirar(null);
-    setLoadingRetirar(false);
+  const formatNumber = (number) => {
+    if (!number && number !== 0) return '0';
+    const num = parseInt(number) || 0;
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
-  const confirmarPonerEnVenta = async () => {
-    if (!jugadorAVender || !equipo?.id) {
-      alert('❌ Error: Datos incompletos');
-      return;
-    }
-
-    setLoadingVenta(true);
-    try {
-      console.log(`🔄 Poniendo en venta jugador: ${jugadorAVender.nombre}`);
-      
-      await venderJugador(jugadorAVender.id, jugadorAVender.valor);
-      
-      console.log('✅ Jugador puesto en venta correctamente');
-      
-      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
-      
-      alert(`✅ ${jugadorAVender.nombre} ha sido puesto en venta en el mercado`);
-      cerrarModalVenta();
-      
-    } catch (err) {
-      console.error('❌ Error al poner en venta:', err);
-      alert('❌ Error al poner en venta: ' + err.message);
-    } finally {
-      setLoadingVenta(false);
-    }
-  };
-
-  const confirmarRetirarDelMercado = async () => {
-    if (!jugadorARetirar || !equipo?.id) {
-      alert('❌ Error: Datos incompletos');
-      return;
-    }
-
-    setLoadingRetirar(true);
-    try {
-      console.log(`🔄 Retirando del mercado: ${jugadorARetirar.nombre}`);
-      
-      await retirarJugadorDelMercado(jugadorARetirar.id); 
-
-      console.log('✅ Jugador retirado del mercado correctamente');
-      
-      window.dispatchEvent(new CustomEvent('mercadoShouldUpdate'));
-      
-      alert(`✅ ${jugadorARetirar.nombre} ha sido retirado del mercado`);
-      cerrarModalRetirar();
-      
-    } catch (err) {
-      console.error('❌ Error al retirar del mercado:', err);
-      alert('❌ Error al retirar del mercado: ' + err.message);
-    } finally {
-      setLoadingRetirar(false);
-    }
-  };
-
-  const handleVenderJugador = (jugador) => {
-    // Verificar si el jugador está en el campo (no en el banquillo)
-    if (!jugador.en_banquillo) {
-      alert('❌ Para vender un jugador, debe estar en el banquillo. Por favor, colócalo en el banquillo primero.');
-      return;
-    }
-
-    if (!puedeVenderJugador(jugador)) {
-      const mensajesError = {
-        'POR': 'No puedes vender a tu único portero. Necesitas al menos 1 portero en el equipo.',
-        'DEF': 'No puedes vender este defensa. Necesitas al menos 2 defensas en el equipo.',
-        'DEL': 'No puedes vender este delantero. Necesitas al menos 2 delanteros en el equipo.'
-      };
-      alert(mensajesError[jugador.posicion]);
-      return;
-    }
-    abrirModalVenta(jugador);
-  };
-
-  // Helpers
-  const formatValue = (value) => `€${(value / 1000000).toFixed(1)}M`;
-  const calcularPuntosTotales = () => jugadores?.reduce((sum, j) => sum + j.puntos_totales, 0) || 0;
-  const totalJugadores = jugadores?.length || 0;
-  const maxJugadores = 13;
-
-  // Función para formatear la posición de manera elegante
-  const formatearPosicion = (posicion) => {
-    if (posicion === null || posicion === undefined) {
-      return 'Sin datos';
-    }
-    
-    if (posicion === 1) return '1º 🥇';
-    if (posicion === 2) return '2º 🥈'; 
-    if (posicion === 3) return '3º 🥉';
-    
-    return `${posicion}º`;
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
-          <p className="text-xl">Cargando datos...</p>
-        </div>
-      </div>
-    );
+  if (loading && !equipo) {
+    return <LoadingState tipo="loading" />;
   }
 
-  if (error) {
+  if (error || !equipo) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-red-50 border-2 border-red-300 p-6 rounded-lg">
-          <p className="text-red-600 font-bold">Error: {error}</p>
-          <button 
-            onClick={cargarEquipo}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-          >
-            Reintentar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!equipo) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <p>No hay equipo disponible</p>
-      </div>
-    );
-  }
-
-  if (!alineacionCargada || loadingAlineacion) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
-          <p className="text-xl">Cargando alineación...</p>
-        </div>
-      </div>
+      <LoadingState 
+        tipo="no-team" 
+        onRetry={forzarActualizacion}
+        onReload={() => window.location.reload()}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="p-6">
-        {/* Contador de jugadores */}
-        <div className="mb-4 bg-white p-4 rounded-lg shadow border-2 border-gray-300">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-bold text-gray-800">Plantilla del Equipo</h3>
-              <p className="text-sm text-gray-600">
-                {totalJugadores}/{maxJugadores} jugadores
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {modoCambio ? (
-                <button
-                  onClick={cancelarModoCambio}
-                  className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700"
-                >
-                  ✕ Cancelar Cambio
-                </button>
-              ) : (
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  totalJugadores >= maxJugadores 
-                    ? 'bg-red-100 text-red-800' 
-                    : totalJugadores >= 10 
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-green-100 text-green-800'
-                }`}>
-                  {totalJugadores >= maxJugadores ? 'Plantilla completa' : 
-                   totalJugadores >= 10 ? 'Casi completa' : 'Disponible para fichajes'}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Información del modo cambio */}
-          {modoCambio && jugadorOrigenCambio && (
-            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-sm text-yellow-800">
-                🔄 <strong>Modo cambio activado:</strong> Has seleccionado <strong>{jugadorOrigenCambio.nombre}</strong>. 
-                Ahora selecciona un {jugadorOrigenCambio.posicion === 'POR' ? 'portero' : 
-                jugadorOrigenCambio.posicion === 'DEF' ? 'defensa' : 'delantero'} para intercambiarlo.
-              </p>
-            </div>
-          )}
-          
-          {jugadorSeleccionado && !modoCambio && (
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-              <p className="text-sm text-blue-800">
-                💡 <strong>{jugadorSeleccionado.nombre}</strong> seleccionado. Elige una opción del menú.
-              </p>
-            </div>
-          )}
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+      <SaleConfirmationAnimation 
+        mostrarAnimacionVenta={mostrarAnimacionVenta}
+        jugadorVendido={jugadorVendido}
+      />
 
-        <div className="mb-6 grid grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-            <div className="text-sm text-gray-600">Presupuesto</div>
-            <div className="text-2xl font-bold text-blue-600">{formatValue(equipo.presupuesto)}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
-            <div className="text-sm text-gray-600">Puntos Totales</div>
-            <div className="text-2xl font-bold text-green-600">{calcularPuntosTotales()}</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border-l-4 border-purple-500">
-            <div className="text-sm text-gray-600 flex items-center gap-1">
-              <Trophy size={16} />
-              Posición Liga
-            </div>
-            <div className="text-2xl font-bold text-purple-600">
-              {loadingPosicion ? (
-                <RefreshCw className="animate-spin" size={20} />
-              ) : (
-                formatearPosicion(posicionLiga)
-              )}
-            </div>
-            {!loadingPosicion && (!equipo.liga_id || !posicionLiga) && (
-              <div className="text-xs text-gray-500 mt-1">
-                {!equipo.liga_id ? 'Sin liga asignada' : 'Posición no disponible'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <h2 className="text-2xl font-bold text-black mb-4 flex items-center gap-2">
-          <Users size={28} />
-          {equipo.nombre}
-        </h2>
-
-        {/* Campo de fútbol */}
-        <FieldView
-          portero_titular={alineacion.portero_titular}
-          defensas_titulares={alineacion.defensas_titulares}
-          delanteros_titulares={alineacion.delanteros_titulares}
-          banquillo={alineacion.banquillo}
-          onPlayerClick={handleClicJugador}
-          onSellPlayer={handleVenderJugador}
-          getPlayerState={getEstadoJugador}
-          modoCambio={modoCambio}
+      <div className="max-w-7xl mx-auto px-4">
+        <DashboardHeader
+          equipo={equipo}
+          ligaActual={ligaActual}
+          ultimaActualizacion={ultimaActualizacion}
+          onRefresh={forzarActualizacion}
         />
 
-        {/* Modal de opciones cuando un jugador está seleccionado */}
-        {mostrarModalOpciones && jugadorSeleccionado && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
-              <h3 className="text-xl font-bold mb-4">Opciones para {jugadorSeleccionado.nombre}</h3>
-              
-              <div className="mb-4 p-3 bg-gray-50 rounded">
-                <p className="font-semibold">{jugadorSeleccionado.nombre}</p>
-                <p className="text-sm text-gray-600">
-                  {jugadorSeleccionado.posicion === 'POR' ? 'Portero' : 
-                   jugadorSeleccionado.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
-                </p>
-                <p className="text-sm">Valor: {formatValue(jugadorSeleccionado.valor)}</p>
-                <p className="text-sm">Puntos: {jugadorSeleccionado.puntos_totales}</p>
-                <p className={`text-sm ${jugadorSeleccionado.en_banquillo ? 'text-blue-600' : 'text-green-600'}`}>
-                  {jugadorSeleccionado.en_banquillo ? '🪑 En banquillo' : '⚽ Titular'}
-                </p>
-                {jugadorSeleccionado.en_venta && (
-                  <p className="text-sm text-orange-600 font-semibold">
-                    💰 Actualmente en venta
-                  </p>
-                )}
-              </div>
-
-              <div className="flex gap-2 flex-col">
-                {/* JUGADOR EN VENTA - Solo mostrar opción de retirar */}
-                {jugadorSeleccionado.en_venta ? (
-                  <button
-                    onClick={() => abrirModalRetirar(jugadorSeleccionado)}
-                    className="bg-yellow-600 text-white py-3 px-4 rounded text-sm hover:bg-yellow-700 flex items-center justify-center gap-2"
-                  >
-                    <span>↩️</span>
-                    Retirar del mercado
-                  </button>
-                ) : (
-                  /* JUGADOR NO EN VENTA - Mostrar opciones normales */
-                  <>
-                    <button
-                      onClick={() => iniciarModoCambio(jugadorSeleccionado)}
-                      className="bg-blue-600 text-white py-3 px-4 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-2"
-                    >
-                      <RefreshCw size={16} />
-                      Cambiar
-                    </button>
-                    <button
-                      onClick={() => handleVenderJugador(jugadorSeleccionado)}
-                      className="bg-red-600 text-white py-3 px-4 rounded text-sm hover:bg-red-700 flex items-center justify-center gap-2"
-                    >
-                      <span>💰</span>
-                      Poner en el mercado
-                    </button>
-                  </>
-                )}
-                
-                <button
-                  onClick={() => {
-                    setJugadorSeleccionado(null);
-                    setMostrarModalOpciones(false);
-                  }}
-                  className="bg-gray-600 text-white py-3 px-4 rounded text-sm hover:bg-gray-700 flex items-center justify-center gap-2"
-                >
-                  <span>✕</span>
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
+        {modoCambio && (
+          <ExchangeModeBanner
+            jugadorSeleccionado={jugadorSeleccionado}
+            jugadoresIntercambiables={jugadoresIntercambiables}
+            cargando={cargando}
+            onCancel={cancelarModoCambio}
+          />
         )}
 
-        {/* Modal de venta en mercado */}
-        {mostrarModalVenta && jugadorAVender && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
-              <h3 className="text-xl font-bold mb-4">Poner en el Mercado</h3>
-              
-              <div className="mb-4 p-3 bg-gray-50 rounded">
-                <p className="font-semibold">{jugadorAVender.nombre}</p>
-                <p className="text-sm text-gray-600">
-                  {jugadorAVender.posicion === 'POR' ? 'Portero' : 
-                   jugadorAVender.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
-                </p>
-                <p className="text-sm">Valor: {formatValue(jugadorAVender.valor)}</p>
-                <p className="text-sm">Puntos: {jugadorAVender.puntos_totales}</p>
-                <p className="text-sm text-blue-600">
-                  {jugadorAVender.en_banquillo ? '🪑 En banquillo' : '⚽ Titular'}
-                </p>
-              </div>
+        <div className="space-y-6">
+          <StatsPanel
+            equipo={equipo}
+            puntosTotales={calcularPuntosTotales()}
+            posicionLiga={posicionLiga}
+            loadingPosicion={loadingPosicion}
+            formatValue={formatValue}
+          />
 
-              <div className="mb-4">
-                <p className="text-sm text-gray-700">
-                  ¿Estás seguro de que quieres poner a <strong>{jugadorAVender.nombre}</strong> en el mercado?
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  📢 El jugador aparecerá en el mercado para que otros equipos puedan pujar por él.
-                  Podrás retirarlo del mercado en cualquier momento.
-                </p>
+          <FieldSection
+            titularesCount={jugadores.filter(j => !j.en_banquillo).length}
+            totalCount={jugadores.length}
+            onRefresh={forzarActualizacion}
+          >
+            {jugadores.length === 0 ? (
+              <EmptyTeamMessage />
+            ) : (
+              <div 
+                ref={fieldRef}
+                className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200"
+              >
+                <FieldView
+                  portero_titular={alineacion.portero_titular}
+                  defensas_titulares={alineacion.defensas_titulares}
+                  delanteros_titulares={alineacion.delanteros_titulares}
+                  banquillo={alineacion.banquillo}
+                  onPlayerClick={handleClicJugador}
+                  onSellPlayer={handlePonerEnVenta}
+                  onRemoveFromMarket={handleQuitarDelMercado}
+                  getPlayerState={getPlayerState}
+                  modoCambio={modoCambio}
+                />
               </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={confirmarPonerEnVenta}
-                  disabled={loadingVenta}
-                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:bg-green-400 flex items-center justify-center gap-2"
-                >
-                  {loadingVenta ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <span>✅</span>
-                      Confirmar
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={cerrarModalVenta}
-                  disabled={loadingVenta}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700 disabled:bg-gray-400"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal de retirar del mercado */}
-        {mostrarModalRetirar && jugadorARetirar && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 modal-content">
-              <h3 className="text-xl font-bold mb-4">Retirar del Mercado</h3>
-              
-              <div className="mb-4 p-3 bg-gray-50 rounded">
-                <p className="font-semibold">{jugadorARetirar.nombre}</p>
-                <p className="text-sm text-gray-600">
-                  {jugadorARetirar.posicion === 'POR' ? 'Portero' : 
-                   jugadorARetirar.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
-                </p>
-                <p className="text-sm">Precio actual: {formatValue(jugadorARetirar.precio_venta)}</p>
-              </div>
-
-              <div className="mb-4">
-                <p className="text-sm text-gray-700">
-                  ¿Estás seguro de que quieres retirar a <strong>{jugadorARetirar.nombre}</strong> del mercado?
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  📢 El jugador dejará de estar disponible para otros equipos y volverá a tu plantilla.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={confirmarRetirarDelMercado}
-                  disabled={loadingRetirar}
-                  className="flex-1 bg-yellow-600 text-white py-2 px-4 rounded hover:bg-yellow-700 disabled:bg-yellow-400 flex items-center justify-center gap-2"
-                >
-                  {loadingRetirar ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <span>↩️</span>
-                      Retirar del mercado
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={cerrarModalRetirar}
-                  disabled={loadingRetirar}
-                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700 disabled:bg-gray-400"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
+          </FieldSection>
+        </div>
       </div>
+
+      {mostrarModalOpciones && jugadorSeleccionado && (
+        <PlayerOptionsModal
+          jugadorSeleccionado={jugadorSeleccionado}
+          onClose={() => setMostrarModalOpciones(false)}
+          onSell={handlePonerEnVenta}
+          onExchange={activarModoCambio}
+          onRemoveFromMarket={handleQuitarDelMercado}
+          formatValue={formatValue}
+          formatNumber={formatNumber}
+        />
+      )}
+
+      {mostrarModalVenta && jugadorSeleccionado && (
+        <SellPlayerModal
+          jugadorSeleccionado={jugadorSeleccionado}
+          equipo={equipo}
+          precioVenta={precioVenta}
+          setPrecioVenta={setPrecioVenta}
+          onCancel={cancelarVenta}
+          onConfirm={confirmarVenta}
+          cargando={cargando}
+          formatValue={formatValue}
+          formatNumber={formatNumber}
+        />
+      )}
     </div>
   );
 };
