@@ -5,7 +5,6 @@ from django.db.models import Prefetch
 from django.db import transaction
 from ..models import Equipo, Jugador, Puja
 from ..serializers import EquipoSerializer, JugadorSerializer
-from .notificacion_views import crear_notificacion
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -107,11 +106,6 @@ def poner_en_venta(request, equipo_id, jugador_id):
         return Response({'error': 'Jugador o equipo no encontrado'}, status=404)
     
     precio_venta = request.data.get('precio_venta', jugador.valor)
-    
-    if precio_venta < jugador.valor * 0.5:
-        return Response({
-            'error': f'El precio de venta (€{precio_venta:,}) debe ser al menos el 50% del valor del jugador (€{jugador.valor * 0.5:,.0f})'
-        }, status=400)
     
     try:
         jugador.poner_en_mercado(precio_venta)

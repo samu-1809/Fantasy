@@ -30,7 +30,6 @@ const NavBar = ({ onNavigate, onRefresh, onLogout, currentScreen }) => {
         ))}
         
         <div className="w-px h-6 bg-gray-600"></div>
-        
         <button 
           onClick={onRefresh}
           className="hover:text-gray-300 flex items-center gap-1 transition-colors"

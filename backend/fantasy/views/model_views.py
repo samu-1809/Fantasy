@@ -1,6 +1,8 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from ..models import Liga, Jugador, Equipo, Jornada, Partido, EquipoReal, Puntuacion
 from ..serializers import (
@@ -73,17 +75,6 @@ class JornadaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-class PartidoViewSet(viewsets.ModelViewSet):
-    queryset = Partido.objects.all()
-    serializer_class = PartidoSerializer
-
-    def get_queryset(self):
-        return Partido.objects.select_related('equipo_local', 'equipo_visitante', 'jornada')
-
-class EquipoRealViewSet(viewsets.ModelViewSet):
-    queryset = EquipoReal.objects.all()
-    serializer_class = EquipoRealSerializer
-
 class PuntuacionViewSet(viewsets.ModelViewSet): 
     queryset = Puntuacion.objects.all()
     serializer_class = PuntuacionSerializer
@@ -108,3 +99,46 @@ class PuntuacionViewSet(viewsets.ModelViewSet):
             })
         
         return JsonResponse({'transacciones': transacciones_data})
+
+class PartidoViewSet(viewsets.ModelViewSet):
+    queryset = Partido.objects.all()
+    serializer_class = PartidoSerializer
+
+    def get_queryset(self):
+        return Partido.objects.select_related('equipo_local', 'equipo_visitante', 'jornada')
+
+class EquipoRealViewSet(viewsets.ModelViewSet):
+    queryset = EquipoReal.objects.all()
+    serializer_class = EquipoRealSerializer
+
+def plantilla_equipo_real(request, equipo_id):
+    try:
+        equipo = get_object_or_404(EquipoReal, id=equipo_id)
+        jugadores = Jugador.objects.filter(equipo_real=equipo).select_related('equipo_real')
+        
+        # Serializar los datos
+        jugadores_data = []
+        for jugador in jugadores:
+            jugadores_data.append({
+                'id': jugador.id,
+                'nombre': jugador.nombre,
+                'posicion': jugador.posicion,
+                'posicion_display': jugador.posicion_display,
+                'valor': jugador.valor,
+                'puntos_totales': jugador.puntos_totales,
+                'en_venta': jugador.en_venta,
+                'equipo_fantasy_nombre': jugador.equipo.nombre if jugador.equipo else None,
+                'dorsal': getattr(jugador, 'dorsal', None),  # Si no existe dorsal, será None
+            })
+        
+        return JsonResponse({
+            'equipo': {
+                'id': equipo.id,
+                'nombre': equipo.nombre
+            },
+            'jugadores': jugadores_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+

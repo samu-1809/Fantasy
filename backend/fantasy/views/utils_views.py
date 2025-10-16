@@ -5,8 +5,83 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
 from django.db import transaction
-from ..models import Equipo, Jugador, Liga, Oferta, EquipoReal
+from ..models import Equipo, Jugador, Liga, Oferta, EquipoReal, Notificacion
 from ..serializers import EquipoRealSerializer, EquipoSerializer, JugadorSerializer
+
+def crear_notificacion_distribucion_dinero(monto_total, jornada=None):
+    """Crea una notificación pública de distribución de dinero"""
+    mensaje = f'Se ha repartido un total de {monto_total}€ al final de la jornada'
+    if jornada:
+        mensaje += f' {jornada.numero}'
+    
+    return Notificacion.objects.create(
+        tipo='publica',
+        categoria='distribucion_dinero',
+        titulo='Distribución de dinero',
+        mensaje=mensaje
+    )
+
+def crear_notificacion_traspaso(jugador, equipo_origen, equipo_destino):
+    """Crea una notificación pública de traspaso"""
+    return Notificacion.objects.create(
+        tipo='publica',
+        categoria='traspaso',
+        titulo=f'Traspaso: {jugador.nombre}',
+        mensaje=f'{jugador.nombre} se traspasa de {equipo_origen.nombre} a {equipo_destino.nombre}'
+    )
+
+def crear_notificacion_oferta_rechazada(jugador, ofertante):
+    """Crea una notificación privada de oferta rechazada"""
+    return Notificacion.objects.create(
+        tipo='privada',
+        categoria='oferta_rechazada',
+        titulo='Oferta rechazada',
+        mensaje=f'Tu oferta por {jugador.nombre} ha sido rechazada',
+        destinatario=ofertante.usuario
+    )
+
+def crear_notificacion_publica(categoria, titulo, mensaje, objeto_relacionado=None):
+    """Crea una notificación pública"""
+    notificacion = Notificacion.objects.create(
+        tipo='publica',
+        categoria=categoria,
+        titulo=titulo,
+        mensaje=mensaje,
+        objeto_relacionado=objeto_relacionado
+    )
+    return notificacion
+
+def crear_notificacion_privada(destinatario, categoria, titulo, mensaje, objeto_relacionado=None):
+    """Crea una notificación privada para un usuario específico"""
+    notificacion = Notificacion.objects.create(
+        tipo='privada',
+        categoria=categoria,
+        titulo=titulo,
+        mensaje=mensaje,
+        destinatario=destinatario,
+        objeto_relacionado=objeto_relacionado
+    )
+    return notificacion
+
+def crear_notificacion_oferta_editada(jugador, ofertante, monto_anterior, monto_nuevo):
+    """Crea una notificación privada de oferta editada"""
+    return Notificacion.objects.create(
+        tipo='privada',
+        categoria='oferta_editada',
+        titulo='Oferta editada',
+        mensaje=f'Has editado tu oferta por {jugador.nombre} de {monto_anterior}€ a {monto_nuevo}€',
+        destinatario=ofertante.usuario
+    )
+
+def crear_notificacion_oferta_retirada(jugador, ofertante, monto):
+    """Crea una notificación privada de oferta retirada"""
+    return Notificacion.objects.create(
+        tipo='privada',
+        categoria='oferta_retirada',
+        titulo='Oferta retirada',
+        mensaje=f'Has retirado tu oferta por {jugador.nombre} de {monto}€. El dinero ha sido devuelto a tu presupuesto.',
+        destinatario=ofertante.usuario
+    )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

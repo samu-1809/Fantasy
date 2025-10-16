@@ -2,11 +2,11 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
 from datetime import datetime, timedelta
 from django.utils import timezone
-
-
 
 class EquipoReal(models.Model):
     nombre = models.CharField(max_length=100, unique=True)    
@@ -213,6 +213,49 @@ class Partido(models.Model):
             return "Pendiente"
         return f"{self.goles_local} - {self.goles_visitante}"
 
+class Notificacion(models.Model):
+    TIPOS = (
+        ('publica', 'Pública'),
+        ('privada', 'Privada'),
+    )
+    
+    CATEGORIAS = (
+        ('distribucion_dinero', 'Distribución de Dinero'),
+        ('traspaso', 'Traspaso'),
+        ('oferta_rechazada', 'Oferta Rechazada'),
+        ('oferta_editada', 'Oferta Editada'),        
+        ('oferta_retirada', 'Oferta Retirada'),      
+    )
+    
+    tipo = models.CharField(max_length=10, choices=TIPOS)
+    categoria = models.CharField(max_length=20, choices=CATEGORIAS)
+    titulo = models.CharField(max_length=200)
+    mensaje = models.TextField()
+    
+    # Para notificaciones privadas
+    destinatario = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='notificaciones_recibidas'
+    )
+    
+    # Para relacionar con objetos específicos (traspasos, ofertas, etc.)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    objeto_relacionado = GenericForeignKey('content_type', 'object_id')
+    
+    # Metadata
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    leida = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-fecha_creacion']
+    
+    def __str__(self):
+        return f"{self.tipo} - {self.titulo}"
+
 class Oferta(models.Model):
     ESTADO_CHOICES = [
         ('pendiente', 'Pendiente'),
@@ -285,72 +328,3 @@ class Puja(models.Model):
     
     def __str__(self):
         return f"{self.equipo.nombre} puja ${self.monto} por {self.jugador.nombre}"
-
-class TipoNotificacion(models.Model):
-    nombre = models.CharField(max_length=100)
-    codigo = models.CharField(max_length=50, unique=True)
-    es_publica = models.BooleanField(default=False)
-    icono = models.CharField(max_length=50, default='📢')
-    
-    def __str__(self):
-        return self.nombre
-
-def crear_tipos_notificacion():
-    tipos_base = [
-        # Ofertas que tú haces (como comprador)
-        {'nombre': 'Oferta Aceptada por Ti', 'codigo': 'oferta_aceptada_comprador', 'icono': '✅', 'es_publica': False},
-        {'nombre': 'Oferta Rechazada por Ti', 'codigo': 'oferta_rechazada_comprador', 'icono': '❌', 'es_publica': False},
-        
-        # Ofertas que te hacen a ti (como vendedor)
-        {'nombre': 'Oferta que Aceptaste', 'codigo': 'oferta_aceptada_vendedor', 'icono': '💰', 'es_publica': False},
-        {'nombre': 'Oferta que Rechazaste', 'codigo': 'oferta_rechazada_vendedor', 'icono': '🚫', 'es_publica': False},
-        
-        # Fichajes públicos (PARA TODOS LOS USUARIOS)
-        {'nombre': 'Fichaje en la Liga', 'codigo': 'fichaje_publico', 'icono': '⚽', 'es_publica': True},
-        {'nombre': 'Oferta Aceptada en Liga', 'codigo': 'oferta_aceptada_liga', 'icono': '🔄', 'es_publica': True},
-        
-        # Transacciones y otros
-        {'nombre': 'Jugador No Adquirido', 'codigo': 'jugador_no_adquirido', 'icono': '❌', 'es_publica': False},
-        {'nombre': 'Jugador Retirado Mercado', 'codigo': 'jugador_retirado_mercado', 'icono': '↩️', 'es_publica': False},
-        {'nombre': 'Pago Jornada', 'codigo': 'pago_jornada', 'icono': '💸', 'es_publica': False},
-        {'nombre': 'Fichaje Exitoso', 'codigo': 'fichaje_exitoso', 'icono': '⚽', 'es_publica': False},
-        {'nombre': 'Venta Exitosa', 'codigo': 'venta_exitosa', 'icono': '🛒', 'es_publica': False},
-    ]
-    
-    for tipo_data in tipos_base:
-        tipo, created = TipoNotificacion.objects.get_or_create(
-            codigo=tipo_data['codigo'],
-            defaults=tipo_data
-        )
-        if created:
-            print(f"✅ Tipo de notificación creado: {tipo_data['codigo']}")
-
-class Notificacion(models.Model):
-    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notificaciones')
-    tipo = models.ForeignKey(TipoNotificacion, on_delete=models.CASCADE)
-    titulo = models.CharField(max_length=200)
-    mensaje = models.TextField()
-    datos_extra = models.JSONField(default=dict, blank=True)
-    es_leida = models.BooleanField(default=False)
-    fecha_creacion = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-fecha_creacion']
-    
-    def __str__(self):
-        return f"{self.tipo.nombre} - {self.usuario.username}"
-
-class TransaccionEconomica(models.Model):
-    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
-    tipo = models.CharField(max_length=50, choices=[
-        ('ingreso_jornada', 'Ingreso por Jornada'),
-        ('compra_jugador', 'Compra de Jugador'),
-        ('venta_jugador', 'Venta de Jugador'),
-        ('puja_retirada', 'Puja Retirada'),
-    ])
-    monto = models.BigIntegerField()
-    descripcion = models.TextField()
-    fecha = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        ordering = ['-fecha']

@@ -5,6 +5,12 @@ from rest_framework.response import Response
 from django.db import transaction
 from ..models import Oferta, Equipo, Jugador
 from ..serializers import OfertaSerializer
+from .utils_views import (
+    crear_notificacion_oferta_rechazada,
+    crear_notificacion_oferta_editada,    
+    crear_notificacion_oferta_retirada,
+    crear_notificacion_traspaso   
+)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -137,59 +143,20 @@ def aceptar_oferta(request, oferta_id):
             oferta.estado = 'aceptada'
             oferta.fecha_respuesta = timezone.now()
             oferta.save()
-            print(f"✅ Oferta marcada como aceptada")
+            
+            # CREAR NOTIFICACIÓN PÚBLICA DE TRASPASO
+            crear_notificacion_traspaso(
+                jugador=jugador,
+                equipo_origen=equipo_anterior,
+                equipo_destino=oferta.equipo_ofertante
+            )
+            print(f"✅ Notificación pública creada para traspaso")
             
             # Rechazar automáticamente otras ofertas pendientes para el mismo jugador
             ofertas_pendientes = Oferta.objects.filter(
                 jugador=jugador,
                 estado='pendiente'
             ).exclude(id=oferta_id)
-            
-            # NOTIFICACIONES
-            from .notificacion_views import crear_notificacion, crear_notificacion_publica
-            
-            # 🆕 NOTIFICACIÓN PÚBLICA PARA TODOS LOS USUARIOS
-            crear_notificacion_publica(
-                tipo_codigo='fichaje_publico',
-                titulo='¡Nuevo Fichaje!',
-                mensaje=f'El jugador {jugador.nombre} ha sido fichado por {oferta.equipo_ofertante.nombre} procedente de {oferta.equipo_receptor.nombre} por €{oferta.monto:,}.',
-                datos_extra={
-                    'jugador_id': jugador.id,
-                    'jugador_nombre': jugador.nombre,
-                    'equipo_comprador': oferta.equipo_ofertante.nombre,
-                    'equipo_vendedor': oferta.equipo_receptor.nombre,
-                    'monto': oferta.monto,
-                    'tipo': 'fichaje_publico'
-                }
-            )
-            
-            # Notificar al comprador
-            crear_notificacion(
-                usuario=oferta.equipo_ofertante.usuario,
-                tipo_codigo='oferta_aceptada_comprador',
-                titulo='¡Oferta aceptada!',
-                mensaje=f'Tu oferta de €{oferta.monto:,} por {jugador.nombre} ha sido aceptada. ¡Felicidades!',
-                datos_extra={
-                    'jugador_id': jugador.id,
-                    'jugador_nombre': jugador.nombre,
-                    'monto': oferta.monto,
-                    'equipo_vendedor': oferta.equipo_receptor.nombre
-                }
-            )
-            
-            # Notificar al vendedor
-            crear_notificacion(
-                usuario=request.user,
-                tipo_codigo='oferta_aceptada_vendedor',
-                titulo='Venta realizada',
-                mensaje=f'Has vendido a {jugador.nombre} a {oferta.equipo_ofertante.nombre} por €{oferta.monto:,}.',
-                datos_extra={
-                    'jugador_id': jugador.id,
-                    'jugador_nombre': jugador.nombre,
-                    'monto': oferta.monto,
-                    'equipo_comprador': oferta.equipo_ofertante.nombre
-                }
-            )
             
             for oferta_pendiente in ofertas_pendientes:
                 # Devolver dinero de las ofertas rechazadas
@@ -200,23 +167,13 @@ def aceptar_oferta(request, oferta_id):
                 oferta_pendiente.estado = 'rechazada'
                 oferta_pendiente.fecha_respuesta = timezone.now()
                 oferta_pendiente.save()
-                print(f"✅ Oferta {oferta_pendiente.id} rechazada automáticamente")
                 
-                # Notificar al equipo rechazado
-                crear_notificacion(
-                    usuario=equipo_rechazado.usuario,
-                    tipo_codigo='jugador_no_adquirido',
-                    titulo='Jugador vendido a otro equipo',
-                    mensaje=f'El jugador {jugador.nombre} ha sido vendido a otro equipo. Tu oferta de €{oferta_pendiente.monto:,} ha sido cancelada.',
-                    datos_extra={
-                        'jugador_id': jugador.id,
-                        'jugador_nombre': jugador.nombre,
-                        'monto': oferta_pendiente.monto,
-                        'equipo_ganador': oferta.equipo_ofertante.nombre
-                    }
+                # CREAR NOTIFICACIÓN DE OFERTA RECHAZADA PARA CADA OFERTANTE
+                crear_notificacion_oferta_rechazada(
+                    jugador=jugador,
+                    ofertante=oferta_pendiente.equipo_ofertante
                 )
-            
-            print(f"🎉 Oferta aceptada exitosamente - {jugador.nombre} transferido a {oferta.equipo_ofertante.nombre}")
+                print(f"✅ Oferta {oferta_pendiente.id} rechazada automáticamente y notificación creada")
         
         return Response({
             'success': True,
@@ -250,7 +207,9 @@ def rechazar_oferta(request, oferta_id):
     print(f"🔄 Rechazando oferta ID: {oferta_id}")
     
     try:
-        oferta = Oferta.objects.select_related('equipo_ofertante', 'equipo_receptor').get(id=oferta_id)
+        oferta = Oferta.objects.select_related(
+            'equipo_ofertante', 'equipo_receptor', 'jugador'
+        ).get(id=oferta_id)
         print(f"✅ Oferta encontrada: {oferta.jugador.nombre}")
         
         # Verificar que el usuario es el receptor de la oferta (vendedor)
@@ -273,37 +232,13 @@ def rechazar_oferta(request, oferta_id):
             oferta.fecha_respuesta = timezone.now()
             oferta.save()
             print(f"✅ Oferta rechazada")
-            
-            # NOTIFICACIÓN PARA EL OFERTANTE (comprador)
-            from .notificacion_views import crear_notificacion
-            crear_notificacion(
-                usuario=equipo_ofertante.usuario,
-                tipo_codigo='oferta_rechazada_comprador',
-                titulo='Oferta rechazada',
-                mensaje=f'Tu oferta de €{oferta.monto:,} por {oferta.jugador.nombre} ha sido rechazada.',
-                datos_extra={
-                    'jugador_id': oferta.jugador.id,
-                    'jugador_nombre': oferta.jugador.nombre,
-                    'monto': oferta.monto,
-                    'equipo_receptor': oferta.equipo_receptor.nombre
-                }
+
+            # CREAR NOTIFICACIÓN DE OFERTA RECHAZADA
+            crear_notificacion_oferta_rechazada(
+                jugador=oferta.jugador,
+                ofertante=equipo_ofertante
             )
-            
-            # NOTIFICACIÓN PARA EL VENDEDOR (tú)
-            crear_notificacion(
-                usuario=request.user,
-                tipo_codigo='oferta_rechazada_vendedor',
-                titulo='Oferta rechazada',
-                mensaje=f'Has rechazado la oferta de €{oferta.monto:,} por {oferta.jugador.nombre} de {equipo_ofertante.nombre}.',
-                datos_extra={
-                    'jugador_id': oferta.jugador.id,
-                    'jugador_nombre': oferta.jugador.nombre,
-                    'monto': oferta.monto,
-                    'equipo_ofertante': equipo_ofertante.nombre
-                }
-            )
-            
-            print(f"✅ Notificaciones enviadas")
+            print(f"✅ Notificación de oferta rechazada creada para {equipo_ofertante.nombre}")
         
         return Response({
             'success': True,
@@ -431,8 +366,10 @@ def editar_oferta(request, oferta_id):
 
     try:
         with transaction.atomic():
+            # Guardar monto anterior para la notificación
+            monto_anterior = oferta.monto
+            
             # Actualizar la oferta
-            oferta_anterior = oferta.monto
             oferta.monto = nuevo_monto
             oferta.fecha_oferta = timezone.now()
             oferta.save()
@@ -441,7 +378,16 @@ def editar_oferta(request, oferta_id):
             equipo.presupuesto -= diferencia
             equipo.save()
 
-            print(f"✅ Oferta actualizada: €{oferta_anterior} -> €{nuevo_monto}. Diferencia: €{diferencia}")
+            # CREAR NOTIFICACIÓN DE OFERTA EDITADA
+            crear_notificacion_oferta_editada(
+                jugador=oferta.jugador,
+                ofertante=oferta.equipo_ofertante,
+                monto_anterior=monto_anterior,
+                monto_nuevo=nuevo_monto
+            )
+
+            print(f"✅ Oferta actualizada: €{monto_anterior} -> €{nuevo_monto}. Diferencia: €{diferencia}")
+            print(f"✅ Notificación creada para oferta editada")
 
         return Response({
             'success': True,
@@ -463,7 +409,7 @@ def editar_oferta(request, oferta_id):
 @permission_classes([IsAuthenticated])
 def retirar_oferta(request, oferta_id):
     try:
-        oferta = Oferta.objects.get(
+        oferta = Oferta.objects.select_related('equipo_ofertante', 'jugador').get(
             id=oferta_id,
             equipo_ofertante__usuario=request.user,
             estado='pendiente'
@@ -471,20 +417,39 @@ def retirar_oferta(request, oferta_id):
     except Oferta.DoesNotExist:
         return Response({'error': 'Oferta no encontrada o no se puede retirar'}, status=404)
     
-    # Devolver el dinero al equipo ofertante
-    equipo = oferta.equipo_ofertante
-    equipo.presupuesto += oferta.monto
-    equipo.save()
+    try:
+        with transaction.atomic():
+            # Devolver el dinero al equipo ofertante
+            equipo = oferta.equipo_ofertante
+            equipo.presupuesto += oferta.monto
+            equipo.save()
+            
+            # Marcar la oferta como retirada
+            oferta.estado = 'retirada'
+            oferta.fecha_respuesta = timezone.now()
+            oferta.save()
+            
+            # CREAR NOTIFICACIÓN DE OFERTA RETIRADA
+            crear_notificacion_oferta_retirada(
+                jugador=oferta.jugador,
+                ofertante=oferta.equipo_ofertante,
+                monto=oferta.monto
+            )
+            
+            print(f"✅ Oferta {oferta_id} retirada. Dinero devuelto: €{oferta.monto}")
+            print(f"✅ Notificación creada para oferta retirada")
+        
+        return Response({
+            'success': True,
+            'message': 'Oferta retirada correctamente',
+            'nuevo_presupuesto': equipo.presupuesto
+        })
     
-    # Marcar la oferta como retirada
-    oferta.estado = 'retirada'
-    oferta.fecha_respuesta = timezone.now()
-    oferta.save()
-    
-    print(f"✅ Oferta {oferta_id} retirada. Dinero devuelto: €{oferta.monto}")
-    
-    return Response({
-        'success': True,
-        'message': 'Oferta retirada correctamente',
-        'nuevo_presupuesto': equipo.presupuesto
-    })
+    except Exception as e:
+        print(f"❌ Error retirando oferta: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': f'Error interno del servidor: {str(e)}'}, 
+            status=500
+        )

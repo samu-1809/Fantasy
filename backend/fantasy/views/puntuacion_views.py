@@ -19,6 +19,82 @@ def puntuaciones_jugador(request, jugador_id):
             status=404
         )
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def puntuaciones_por_partido(request, partido_id):
+    try:
+        partido = Partido.objects.select_related(
+            'equipo_local', 'equipo_visitante', 'jornada'
+        ).get(id=partido_id)
+        
+        # Obtener jugadores de ambos equipos reales
+        jugadores_local = Jugador.objects.filter(
+            equipo_real=partido.equipo_local
+        ).select_related('equipo_real')
+        
+        jugadores_visitante = Jugador.objects.filter(
+            equipo_real=partido.equipo_visitante
+        ).select_related('equipo_real')
+        
+        # Obtener puntuaciones para esta jornada
+        puntuaciones_jornada = Puntuacion.objects.filter(
+            jornada=partido.jornada,
+            jugador__in=list(jugadores_local) + list(jugadores_visitante)
+        ).select_related('jugador')
+        
+        # Crear diccionario de puntuaciones por jugador
+        puntuaciones_dict = {
+            punt.jugador_id: punt.puntos 
+            for punt in puntuaciones_jornada
+        }
+        
+        # Serializar datos
+        def serializar_jugadores(jugadores_queryset):
+            jugadores_data = []
+            for jugador in jugadores_queryset:
+                puntos_jornada = puntuaciones_dict.get(jugador.id, 0)
+                jugadores_data.append({
+                    'id': jugador.id,
+                    'nombre': jugador.nombre,
+                    'posicion': jugador.posicion,
+                    'posicion_display': jugador.posicion_display,
+                    'valor': jugador.valor,
+                    'puntos_totales': jugador.puntos_totales,
+                    'puntos_jornada': puntos_jornada,
+                    'equipo_fantasy_nombre': jugador.equipo.nombre if jugador.equipo else 'Libre',
+                    'en_venta': jugador.en_venta
+                })
+            return jugadores_data
+        
+        response_data = {
+            'partido': {
+                'id': partido.id,
+                'equipo_local': partido.equipo_local.nombre,
+                'equipo_visitante': partido.equipo_visitante.nombre,
+                'goles_local': partido.goles_local,
+                'goles_visitante': partido.goles_visitante,
+                'fecha': partido.fecha,
+                'jornada_numero': partido.jornada.numero,
+                'jugado': partido.jugado
+            },
+            'jugadores_local': serializar_jugadores(jugadores_local),
+            'jugadores_visitante': serializar_jugadores(jugadores_visitante)
+        }
+        
+        return Response(response_data)
+        
+    except Partido.DoesNotExist:
+        return Response(
+            {"error": "Partido no encontrado"}, 
+            status=404
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=500
+        )
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def actualizar_puntuacion_jugador(request):
