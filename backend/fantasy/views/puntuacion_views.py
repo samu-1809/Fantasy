@@ -19,7 +19,7 @@ def puntuaciones_jugador(request, jugador_id):
             status=404
         )
 
-
+# views.py - Añadir esta vista
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def puntuaciones_por_partido(request, partido_id):

@@ -14,6 +14,10 @@ import AdminScreen from '../admin/AdminScreen';
 import NavBar from '../common/NavBar';
 import TeamDetailScreen from '../team/TeamDetailScreen';
 import NotificacionScreen from '../notificacion/NotificacionScreen';
+import MovimientosMercadoScreen from '../common/MovimientosMercadoScreen';
+import RealTeamsScreen from '../real_teams/RealTeamsScreen';
+import RealTeamDetailScreen from '../real_teams/RealTeamDetailScreen';
+
 
 // Componente de carga
 const LoadingScreen = () => (
@@ -49,6 +53,7 @@ const Fantasy = () => {
   const [appLoading, setAppLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [selectedRealTeamId, setSelectedRealTeamId] = useState(null);
   
   // 🎯 VOLVER al uso simple del contexto
   const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
@@ -148,6 +153,16 @@ const Fantasy = () => {
     setCurrentScreen('team-detail');
   };
 
+   const handleRealTeamClick = (teamId) => {
+    setSelectedRealTeamId(teamId);
+    setCurrentScreen('real-team-detail');
+  };
+
+  const handleBackFromRealTeam = () => {
+    setCurrentScreen('real-teams');
+    setSelectedRealTeamId(null);
+  };
+
   const handleBackFromTeam = () => {
     setCurrentScreen('rankings');
     setSelectedTeamId(null);
@@ -161,6 +176,7 @@ const Fantasy = () => {
     setError(null);
   };
 
+  // Fantasy.jsx - en handleRefreshData
   const handleRefreshData = async () => {
     if (user) {
       setAppLoading(true);
@@ -170,6 +186,9 @@ const Fantasy = () => {
         const datos = await cargarDatosIniciales(user);
         setDatosUsuario(datos);
         console.log('✅ Datos actualizados correctamente');
+        
+        // Disparar evento para actualizar notificaciones
+        window.dispatchEvent(new Event('notificacionesActualizadas'));
       } catch (err) {
         console.error('❌ Error actualizando datos:', err);
         setError('Error al actualizar los datos: ' + err.message);
@@ -237,7 +256,21 @@ const Fantasy = () => {
             onFichajeExitoso={handleRefreshData}
           />
         );
-      
+      case 'real-teams':
+        return (
+          <RealTeamsScreen 
+            onTeamClick={handleRealTeamClick}
+          />
+        );
+
+      case 'real-team-detail':
+        return (
+          <RealTeamDetailScreen 
+            equipoRealId={selectedRealTeamId}
+            onBack={handleBackFromRealTeam}
+          />
+        );
+
       case 'rankings':
         return (
           <RankingsScreen 
@@ -253,6 +286,9 @@ const Fantasy = () => {
             onRefresh={handleRefreshData}
           />
         );
+
+      case 'movimientos-mercado':
+        return <MovimientosMercadoScreen />;
 
       case 'calendar':
         return <CalendarScreen />;
@@ -305,8 +341,8 @@ const Fantasy = () => {
     }
   };
 
-  const showNavBar = isAuthenticated && 
-                    !['login', 'register', 'admin', 'team-detail', 'createTeam'].includes(currentScreen) && 
+   const showNavBar = isAuthenticated && 
+                    !['login', 'register', 'admin', 'team-detail', 'real-team-detail', 'createTeam'].includes(currentScreen) && 
                     !appLoading && 
                     !error;
 

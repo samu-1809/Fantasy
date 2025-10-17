@@ -71,7 +71,8 @@ urlpatterns = [
     
     # ==================== JORNADAS Y PARTIDOS ====================
     path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
-    
+    path('equipos-reales/<int:equipo_id>/plantilla/', views.plantilla_equipo, name='plantilla_equipo'),
+    path('partidos/<int:partido_id>/puntuaciones/', views.puntuaciones_por_partido, name='puntuaciones-partido'),
     # ==================== ADMINISTRACIÓN ====================
     path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
     path('', include(router.urls)),
