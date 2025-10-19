@@ -1,7 +1,8 @@
 // components/screens/CalendarScreen.js
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
+import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, Trophy, Users } from 'lucide-react';
 import { getJornadas, getPartidosJornada } from '../../services/api';
+import PartidoDetailScreen from './PartidoDetailScreen';
 
 const CalendarScreen = () => {
   const [jornadas, setJornadas] = useState([]);
@@ -9,6 +10,10 @@ const CalendarScreen = () => {
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Estados para la navegación
+  const [vistaActual, setVistaActual] = useState('calendario'); // 'calendario' o 'detallePartido'
+  const [partidoSeleccionado, setPartidoSeleccionado] = useState(null);
 
   useEffect(() => {
     const cargarJornadas = async () => {
@@ -60,6 +65,28 @@ const CalendarScreen = () => {
     }
   };
 
+  // Función para manejar el clic en un partido
+  const handlePartidoClick = (partido) => {
+    setPartidoSeleccionado(partido);
+    setVistaActual('detallePartido');
+  };
+
+  // Función para volver al calendario
+  const handleVolverAlCalendario = () => {
+    setVistaActual('calendario');
+    setPartidoSeleccionado(null);
+  };
+
+  // Si estamos en la vista de detalle, mostrar PartidoDetailScreen
+  if (vistaActual === 'detallePartido' && partidoSeleccionado) {
+    return (
+      <PartidoDetailScreen 
+        partido={partidoSeleccionado} 
+        onVolver={handleVolverAlCalendario}
+      />
+    );
+  }
+
   const jornadaActual = jornadas.find(j => j.id === jornadaSeleccionada);
 
   if (loading && jornadas.length === 0) {
@@ -104,7 +131,7 @@ const CalendarScreen = () => {
               Calendario de Partidos
             </h1>
           </div>
-          <p className="text-gray-600">Sigue todos los partidos de la temporada</p>
+          <p className="text-gray-600">Haz clic en cualquier partido para ver los detalles y puntuaciones</p>
         </div>
 
         {/* Selector de Jornadas */}
@@ -147,9 +174,6 @@ const CalendarScreen = () => {
 
           {/* Selector rápido */}
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Seleccionar Jornada Rápida:
-            </label>
             <select
               value={jornadaSeleccionada || ''}
               onChange={(e) => setJornadaSeleccionada(Number(e.target.value))}
@@ -157,7 +181,7 @@ const CalendarScreen = () => {
             >
               {jornadas.map((jornada) => (
                 <option key={jornada.id} value={jornada.id}>
-                  Jornada {jornada.numero} - {jornada.fecha_inicio ? new Date(jornada.fecha_inicio).toLocaleDateString() : 'Por definir'}
+                  Jornada {jornada.numero}
                 </option>
               ))}
             </select>
@@ -176,19 +200,15 @@ const CalendarScreen = () => {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {partidos.map((partido) => (
-              <div key={partido.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+              <div 
+                key={partido.id} 
+                className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer group"
+                onClick={() => handlePartidoClick(partido)}
+              >
                 {/* Header de la tarjeta */}
                 <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <MapPin size={16} />
-                      <span className="text-sm font-medium">Estadio {partido.estadio || 'Principal'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} />
-                      <span className="text-sm">
-                        {partido.fecha ? new Date(partido.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -254,33 +274,15 @@ const CalendarScreen = () => {
                   </div>
                 </div>
 
-                {/* Footer con detalles */}
-                {(partido.goles_local !== null && partido.goles_visitante !== null) && (
-                  <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
-                    <div className="text-center text-sm text-gray-600">
-                      {partido.goles_local > partido.goles_visitante 
-                        ? `Victoria del ${partido.equipo_local_nombre}`
-                        : partido.goles_local < partido.goles_visitante
-                        ? `Victoria del ${partido.equipo_visitante_nombre}`
-                        : 'Empate'
-                      }
-                    </div>
+                {/* Footer con CTA */}
+                <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
+                  <div className="flex items-center justify-center gap-2 text-sm text-gray-600 group-hover:text-green-600 transition-colors">
+                    <Users size={16} />
+                    <span className="font-medium">Ver jugadores y puntuaciones</span>
                   </div>
-                )}
+                </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* Contador de partidos */}
-        {partidos.length > 0 && (
-          <div className="mt-6 text-center">
-            <div className="inline-flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow">
-              <Trophy size={16} className="text-yellow-500" />
-              <span className="text-sm text-gray-600">
-                {partidos.length} partido{partidos.length !== 1 ? 's' : ''} en esta jornada
-              </span>
-            </div>
           </div>
         )}
       </div>

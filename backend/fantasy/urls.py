@@ -1,6 +1,6 @@
+# fantasy/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
 from . import views  
 from .auth_views import CookieTokenObtainPairView, CookieTokenRefreshView, LogoutView
 
@@ -17,14 +17,12 @@ router.register(r'puntuaciones', views.PuntuacionViewSet)
 router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
 router.register(r'pujas', views.PujaViewSet, basename='pujas')
 router.register(r'notificaciones', views.NotificacionViewSet, basename='notificaciones')
-router.register(r'transacciones', views.TransaccionEconomicaViewSet, basename='transacciones')
 
 urlpatterns = [
-    # ==================== RUTAS DEL ROUTER ====================
-        # ==================== PUNTUACIONES ====================
+    # ==================== PUNTUACIONES ====================
     path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
     path('puntuaciones/actualizar/', views.actualizar_puntuacion_jugador, name='actualizar_puntuacion_jugador'),
-    path('', include(router.urls)),
+    path('partidos/<int:partido_id>/puntuaciones/', views.puntuaciones_por_partido, name='puntuaciones-partido'),
     
     # ==================== AUTENTICACIÓN ====================
     path('auth/register/', views.RegisterView.as_view(), name='register'),
@@ -36,7 +34,11 @@ urlpatterns = [
     # ==================== DATOS GENERALES ====================
     path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
-    
+
+    # ==================== EQUIPOS REALES ====================
+    path('equipos-reales/<int:equipo_id>/plantilla/', views.plantilla_equipo_real, name='plantilla_equipo'),
+    path('goleadores/', views.goleadores, name='goleadores'),
+     path('clasificacion-equipos-reales/', views.clasificacion_equipos_reales, name='clasificacion_equipos_reales'),
     # ==================== EQUIPOS ====================
     path('equipos/<int:equipo_id>/plantilla/', views.plantilla_equipo, name='plantilla_equipo'),
     path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
@@ -62,15 +64,17 @@ urlpatterns = [
     path('pujas/<int:puja_id>/retirar/', views.retirar_puja, name='retirar_puja'),
     path('pujas/<int:puja_id>/editar/', views.editar_puja, name='editar_puja'),
 
-
+    # ==================== NOTIFICACIONES ====================
+    path('notificaciones/usuario/', views.listar_notificaciones, name='listar-notificaciones'),
+    path('notificaciones/contar-no-leidas/', views.contar_no_leidas, name='contar-no-leidas'),
+    path('notificaciones/marcar-todas-leidas/', views.marcar_todas_leidas, name='marcar-todas-leidas'),
+    path('notificaciones/<int:notificacion_id>/marcar-leida/', views.marcar_como_leida, name='marcar-notificacion-leida'),
+    
     # ==================== JORNADAS Y PARTIDOS ====================
     path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
-    
+    path('partidos/<int:partido_id>/puntuaciones/', views.puntuaciones_por_partido, name='puntuaciones-partido'),
     # ==================== ADMINISTRACIÓN ====================
     path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),
+    path('', include(router.urls)),
 
-    # ==================== NOTIFICACIONES Y TRANSACCIONES ====================
-    path('notificaciones/mis_notificaciones/', views.mis_notificaciones, name='mis-notificaciones'),
-    path('notificaciones/<int:notificacion_id>/marcar_leida/', views.marcar_notificacion_leida, name='marcar-notificacion-leida'),
-    path('transacciones/mis_transacciones/', views.mis_transacciones, name='mis-transacciones'),
 ]

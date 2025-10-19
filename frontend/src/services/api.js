@@ -258,6 +258,11 @@ export const getPuntuacionesJugador = async (jugadorId) => {
   }
 };
 
+export const getJugadorDetalles = async (jugadorId) => {
+  const response = await fetch(`${API_URL}/jugadores/${jugadorId}/`);
+  return handleResponse(response);
+};
+
 // ==================== EQUIPOS ====================
 
 export const getEquipos = async () => {
@@ -531,10 +536,25 @@ export const crearJornada = async (numero) => {
   return handleResponse(response);
 };
 
-// ==================== ADMIN - EQUIPOS REALES ====================
+// ==================== EQUIPOS REALES ====================
 
 export const getEquiposReales = async () => {
   const response = await fetch(`${API_URL}/equipos-reales/`);
+  return handleResponse(response);
+};
+
+export const getJugadoresPorEquipoReal = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos-reales/${equipoId}/plantilla/`);
+  return handleResponse(response);
+};
+
+export const getClasificacionEquiposReales = async () => {
+  const response = await fetch(`${API_URL}/clasificacion-equipos-reales/`);
+  return handleResponse(response);
+};
+
+export const getGoleadores = async () => {
+  const response = await fetch(`${API_URL}/goleadores/`);
   return handleResponse(response);
 };
 
@@ -630,6 +650,28 @@ export const asignarPuntos = async (jornadaId, puntos) => {
   }
 
   return response.json();
+};
+
+export const getPuntuacionesPartido = async (partidoId) => {
+  try {
+    console.log(`🔍 Solicitando puntuaciones del partido: ${partidoId}`);
+    const response = await fetch(`${API_URL}/partidos/${partidoId}/puntuaciones/`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Puntuaciones del partido cargadas:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error en getPuntuacionesPartido:', error);
+    throw error;
+  }
 };
 
 // ==================== SISTEMA DE SUBASTAS ====================
@@ -1143,13 +1185,74 @@ export const getNotificaciones = async () => {
   return await response.json();
 };
 
-export const marcarNotificacionLeida = async (notificacionId) => {
-  const response = await fetch(`${API_URL}/notificaciones/${notificacionId}/marcar_leida/`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
+export const obtenerNotificaciones = async () => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/notificaciones/usuario/`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
   });
-  if (!response.ok) throw new Error('Error al marcar notificación como leída');
-  return await response.json();
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al cargar notificaciones');
+  }
+  
+  return response.json();
+};
+
+export const contarNotificacionesNoLeidas = async () => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/notificaciones/contar-no-leidas/`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al cargar contador de notificaciones');
+  }
+  
+  return response.json();
+};
+
+export const marcarTodasNotificacionesLeidas = async () => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/notificaciones/marcar-todas-leidas/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al marcar notificaciones como leídas');
+  }
+  
+  return response.json();
+};
+
+export const marcarNotificacionLeida = async (notificacionId) => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/notificaciones/${notificacionId}/marcar-leida/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al marcar notificación como leída');
+  }
+  
+  return response.json();
 };
 
 export const getTransacciones = async () => {

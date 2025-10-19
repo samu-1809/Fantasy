@@ -12,8 +12,9 @@ import RankingsScreen from '../common/RankingsScreen';
 import CalendarScreen from '../common/CalendarScreen';
 import AdminScreen from '../admin/AdminScreen';
 import NavBar from '../common/NavBar';
-import TeamDetailScreen from '../team/TeamDetailScreen';
-import NotificacionScreen from '../notificacion/NotificacionScreen';
+import MovimientosMercadoScreen from '../common/MovimientosMercadoScreen';
+import RealTeamsScreen from '../real_teams/RealTeamsScreen';
+
 
 // Componente de carga
 const LoadingScreen = () => (
@@ -49,6 +50,7 @@ const Fantasy = () => {
   const [appLoading, setAppLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [selectedRealTeamId, setSelectedRealTeamId] = useState(null);
   
   // 🎯 VOLVER al uso simple del contexto
   const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
@@ -148,6 +150,16 @@ const Fantasy = () => {
     setCurrentScreen('team-detail');
   };
 
+   const handleRealTeamClick = (teamId) => {
+    setSelectedRealTeamId(teamId);
+    setCurrentScreen('real-team-detail');
+  };
+
+  const handleBackFromRealTeam = () => {
+    setCurrentScreen('real-teams');
+    setSelectedRealTeamId(null);
+  };
+
   const handleBackFromTeam = () => {
     setCurrentScreen('rankings');
     setSelectedTeamId(null);
@@ -161,6 +173,7 @@ const Fantasy = () => {
     setError(null);
   };
 
+  // Fantasy.jsx - en handleRefreshData
   const handleRefreshData = async () => {
     if (user) {
       setAppLoading(true);
@@ -170,6 +183,9 @@ const Fantasy = () => {
         const datos = await cargarDatosIniciales(user);
         setDatosUsuario(datos);
         console.log('✅ Datos actualizados correctamente');
+        
+        // Disparar evento para actualizar notificaciones
+        window.dispatchEvent(new Event('notificacionesActualizadas'));
       } catch (err) {
         console.error('❌ Error actualizando datos:', err);
         setError('Error al actualizar los datos: ' + err.message);
@@ -224,6 +240,7 @@ const Fantasy = () => {
     }
     
     switch (currentScreen) {
+
       case 'dashboard':
         return <DashboardScreen 
           datosUsuario={datosUsuario} 
@@ -237,6 +254,9 @@ const Fantasy = () => {
             onFichajeExitoso={handleRefreshData}
           />
         );
+
+      case 'movimientos-mercado':
+        return <MovimientosMercadoScreen />;
       
       case 'rankings':
         return (
@@ -246,22 +266,13 @@ const Fantasy = () => {
           />
         );
 
-      case 'notificacion':
-        return (
-          <NotificacionScreen 
-            onNavigate={setCurrentScreen}
-            onRefresh={handleRefreshData}
-          />
-        );
-
       case 'calendar':
         return <CalendarScreen />;
-      
-      case 'team-detail':
+
+        case 'real-teams':
         return (
-          <TeamDetailScreen 
-            equipoId={selectedTeamId}
-            onBack={handleBackFromTeam}
+          <RealTeamsScreen 
+            onTeamClick={handleRealTeamClick}
           />
         );
       
@@ -278,23 +289,6 @@ const Fantasy = () => {
           />
         );
       
-      // 🎯 AÑADIR caso para createTeam si existe
-      case 'createTeam':
-        return (
-          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-            <div className="bg-white p-8 rounded-lg shadow-lg max-w-md text-center">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Crear Equipo</h2>
-              <p className="text-gray-600 mb-6">Necesitas crear un equipo antes de continuar</p>
-              <button
-                onClick={() => setCurrentScreen('dashboard')}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Crear Mi Equipo
-              </button>
-            </div>
-          </div>
-        );
-      
       default:
         return (
           <ErrorScreen
@@ -305,8 +299,8 @@ const Fantasy = () => {
     }
   };
 
-  const showNavBar = isAuthenticated && 
-                    !['login', 'register', 'admin', 'team-detail', 'createTeam'].includes(currentScreen) && 
+   const showNavBar = isAuthenticated && 
+                    !['login', 'register', 'admin'].includes(currentScreen) && 
                     !appLoading && 
                     !error;
 

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion, TransaccionEconomica
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -13,7 +13,7 @@ class PuntuacionJornadaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Puntuacion
-        fields = ['jornada_id', 'jornada_numero', 'puntos']
+        fields = ['jornada_id', 'jornada_numero', 'puntos','goles']
 
 class JugadorSerializer(serializers.ModelSerializer):
     equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
@@ -26,7 +26,7 @@ class JugadorSerializer(serializers.ModelSerializer):
         model = Jugador
         fields = ['id', 'nombre', 'posicion', 'valor', 'precio_venta', 'en_venta', 
                  'fecha_mercado', 'equipo_nombre', 'equipo_real_nombre', 'usuario_vendedor', 'usuario_vendedor_id',
-                 'puntos_totales', 'en_banquillo', 'puntuaciones_jornadas']
+                 'puntos_totales', 'en_banquillo', 'puntuaciones_jornadas','goles']
 
     def get_puntuaciones_jornadas(self, obj):
         # Obtener las puntuaciones del jugador por jornada
@@ -226,6 +226,21 @@ class PujaSerializer(serializers.ModelSerializer):
             'puntos_jugador', 'jugador_en_venta', 'jugador_expirado', 'fecha_mercado'
         ]
 
+class NotificacionSerializer(serializers.ModelSerializer):
+    tiempo_desde_creacion = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Notificacion
+        fields = [
+            'id', 'tipo', 'categoria', 'titulo', 'mensaje', 
+            'leida', 'fecha_creacion', 'tiempo_desde_creacion'
+        ]
+        read_only_fields = ['fecha_creacion']
+    
+    def get_tiempo_desde_creacion(self, obj):
+        from django.utils.timesince import timesince
+        return timesince(obj.fecha_creacion) + ' atrás'
+
 class JugadorMercadoSerializer(serializers.ModelSerializer):
     equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
     pujador_actual = serializers.CharField(source='equipo_pujador.nombre', read_only=True)
@@ -242,21 +257,3 @@ class JugadorMercadoSerializer(serializers.ModelSerializer):
     
     def get_expirado(self, obj):
         return obj.expirado
-
-class NotificacionSerializer(serializers.ModelSerializer):
-    tipo = serializers.CharField(source='tipo.codigo', read_only=True)
-    icono = serializers.CharField(source='tipo.icono', read_only=True)
-    
-    class Meta:
-        model = Notificacion
-        fields = [
-            'id', 'tipo', 'titulo', 'mensaje', 'icono', 
-            'fecha_creacion', 'es_leida', 'datos_extra'
-        ]
-        read_only_fields = ['fecha_creacion']
-
-class TransaccionEconomicaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TransaccionEconomica
-        fields = ['id', 'tipo', 'monto', 'descripcion', 'fecha']
-        read_only_fields = ['fecha']
