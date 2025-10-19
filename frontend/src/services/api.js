@@ -224,11 +224,6 @@ export const getJugadores = async (posicion = null, equipoId = null) => {
   return handleResponse(response);
 };
 
-export const getJugadoresPorEquipoReal = async (equipoId) => {
-  const response = await fetch(`${API_URL}/equipos-reales/${equipoId}/plantilla/`);
-  return handleResponse(response);
-};
-
 export const getJugadoresPorEquipo = async (equipoId) => {
   const response = await fetch(`${API_URL}/jugadores/?equipo=${equipoId}`);
   return handleResponse(response);
@@ -541,27 +536,26 @@ export const crearJornada = async (numero) => {
   return handleResponse(response);
 };
 
-// ==================== ADMIN - EQUIPOS REALES ====================
+// ==================== EQUIPOS REALES ====================
 
 export const getEquiposReales = async () => {
   const response = await fetch(`${API_URL}/equipos-reales/`);
   return handleResponse(response);
 };
 
-export const obtenerEquiposReales = async () => {
-  const response = await fetch(`${API_URL}/equipos-reales/`);
-  if (!response.ok) {
-    throw new Error('Error al obtener equipos reales');
-  }
-  return response.json();
+export const getJugadoresPorEquipoReal = async (equipoId) => {
+  const response = await fetch(`${API_URL}/equipos-reales/${equipoId}/plantilla/`);
+  return handleResponse(response);
 };
 
-export const obtenerJugadoresEquipoReal = async (equipoRealId) => {
-  const response = await fetch(`${API_URL}/equipos-reales/${equipoRealId}/jugadores/`);
-  if (!response.ok) {
-    throw new Error('Error al obtener jugadores del equipo real');
-  }
-  return response.json();
+export const getClasificacionEquiposReales = async () => {
+  const response = await fetch(`${API_URL}/clasificacion-equipos-reales/`);
+  return handleResponse(response);
+};
+
+export const getGoleadores = async () => {
+  const response = await fetch(`${API_URL}/goleadores/`);
+  return handleResponse(response);
 };
 
 // ==================== ADMIN - EQUIPOS DISPONIBLES ====================

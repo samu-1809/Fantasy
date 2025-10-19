@@ -1,8 +1,8 @@
 # Importa todas las views para facilitar el acceso desde otros módulos
 from .auth_views import RegisterView, LoginView
 from .model_views import (
-    LigaViewSet, JugadorViewSet, EquipoViewSet, EquipoRealViewSet,
-    JornadaViewSet, PartidoViewSet, PuntuacionViewSet, plantilla_equipo_real
+    LigaViewSet, JugadorViewSet, EquipoViewSet, EquipoRealViewSet, goleadores,
+    JornadaViewSet, PartidoViewSet, PuntuacionViewSet, plantilla_equipo_real, clasificacion_equipos_reales
 )
 from .mercado_views import MercadoViewSet, OfertaViewSet, PujaViewSet
 from .clasificacion_views import ClasificacionViewSet
@@ -64,8 +64,8 @@ from .utils_views import (
 __all__ = [
     # ViewSets
     'RegisterView', 'LoginView', 'LigaViewSet', 'JugadorViewSet', 
-    'EquipoViewSet', 'EquipoRealViewSet', 'JornadaViewSet', 
-    'PartidoViewSet', 'PuntuacionViewSet', 'MercadoViewSet',
+    'EquipoViewSet', 'EquipoRealViewSet', 'JornadaViewSet', 'goleadores',
+    'PartidoViewSet', 'PuntuacionViewSet', 'MercadoViewSet', 'clasificacion_equipos_reales',
     'OfertaViewSet', 'PujaViewSet', 'ClasificacionViewSet', 'plantilla_equipo_real',
     'NotificacionViewSet',  # Añadido aquí
     

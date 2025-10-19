@@ -16,7 +16,7 @@ router.register(r'equipos-reales', views.EquipoRealViewSet)
 router.register(r'puntuaciones', views.PuntuacionViewSet)
 router.register(r'ofertas', views.OfertaViewSet, basename='ofertas')
 router.register(r'pujas', views.PujaViewSet, basename='pujas')
-router.register(r'notificaciones', views.NotificacionViewSet, basename='notificaciones')  # Asegúrate de tener esta línea
+router.register(r'notificaciones', views.NotificacionViewSet, basename='notificaciones')
 
 urlpatterns = [
     # ==================== PUNTUACIONES ====================
@@ -37,7 +37,8 @@ urlpatterns = [
 
     # ==================== EQUIPOS REALES ====================
     path('equipos-reales/<int:equipo_id>/plantilla/', views.plantilla_equipo_real, name='plantilla_equipo'),
-    
+    path('goleadores/', views.goleadores, name='goleadores'),
+     path('clasificacion-equipos-reales/', views.clasificacion_equipos_reales, name='clasificacion_equipos_reales'),
     # ==================== EQUIPOS ====================
     path('equipos/<int:equipo_id>/plantilla/', views.plantilla_equipo, name='plantilla_equipo'),
     path('equipos/<int:equipo_id>/guardar_alineacion/', views.guardar_alineacion, name='guardar_alineacion'),
@@ -71,7 +72,6 @@ urlpatterns = [
     
     # ==================== JORNADAS Y PARTIDOS ====================
     path('jornadas/<int:jornada_id>/equipos-disponibles/', views.equipos_disponibles_jornada, name='equipos_disponibles_jornada'),
-    path('equipos-reales/<int:equipo_id>/plantilla/', views.plantilla_equipo, name='plantilla_equipo'),
     path('partidos/<int:partido_id>/puntuaciones/', views.puntuaciones_por_partido, name='puntuaciones-partido'),
     # ==================== ADMINISTRACIÓN ====================
     path('finalizar-subastas/', views.finalizar_subastas, name='finalizar_subastas'),

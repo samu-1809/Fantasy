@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Save, Calendar, TrendingUp } from 'lucide-react';
+import { Search, Save, Calendar, TrendingUp, Goal, X } from 'lucide-react';
 import { useAdmin } from '../../hooks/useAdmin';
+import MiniGrafico from '../market/components/MiniGrafico'; 
 
 const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess }) => {
   const [busqueda, setBusqueda] = useState('');
   const [filtroEquipo, setFiltroEquipo] = useState('todos');
   const [asignandoPuntos, setAsignandoPuntos] = useState(false);
   const [puntosTemporales, setPuntosTemporales] = useState({});
+  const [golesTemporales, setGolesTemporales] = useState({});
   const [historialJugadores, setHistorialJugadores] = useState({});
   const [historialCargado, setHistorialCargado] = useState(false);
-  
-  // 🆕 Usar todas las funciones y estados del hook useAdmin
+  const [jugadorModal, setJugadorModal] = useState(null); // 🆕 Estado para el modal
+
   const {
     jornadas,
     jornadaSeleccionada,
@@ -19,22 +21,55 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     actualizarPuntuacionJugador,
   } = useAdmin();
 
-  // 🆕 Inicializar puntos temporales cuando cambia la jornada o los jugadores
+  // 🆕 Función para abrir el modal con el jugador seleccionado
+  const abrirModalJugador = (jugador) => {
+    setJugadorModal(jugador);
+  };
+
+  // 🆕 Función para cerrar el modal
+  const cerrarModal = () => {
+    setJugadorModal(null);
+  };
+
+  // 🆕 Cargar historial completo para el modal
+  const [historialCompleto, setHistorialCompleto] = useState({});
+  
+  const cargarHistorialCompleto = async (jugadorId) => {
+    try {
+      const puntuaciones = await cargarPuntuacionesJugador(jugadorId);
+      setHistorialCompleto(prev => ({
+        ...prev,
+        [jugadorId]: puntuaciones
+      }));
+    } catch (err) {
+      console.error(`Error cargando historial completo para jugador ${jugadorId}:`, err);
+    }
+  };
+
+  // 🆕 Cargar historial completo cuando se abre el modal
+  useEffect(() => {
+    if (jugadorModal) {
+      cargarHistorialCompleto(jugadorModal.id);
+    }
+  }, [jugadorModal]);
+
+  // Inicializar puntos y goles temporales cuando cambia la jornada
   useEffect(() => {
     if (jornadaSeleccionada && jugadores) {
       const nuevosPuntos = {};
+      const nuevosGoles = {};
       jugadores.forEach(jugador => {
-        // Inicializar con campo vacío para cada jugador en esta jornada
         nuevosPuntos[jugador.id] = '';
+        nuevosGoles[jugador.id] = '';
       });
       setPuntosTemporales(nuevosPuntos);
+      setGolesTemporales(nuevosGoles);
     }
   }, [jornadaSeleccionada, jugadores]);
 
-  // 🆕 Cargar historial de puntuaciones SOLO UNA VEZ
+  // Cargar historial de puntuaciones
   useEffect(() => {
     const cargarHistorial = async () => {
-      // Evitar cargar múltiples veces
       if (historialCargado || !jugadores || jugadores.length === 0) return;
       
       console.log('🔄 Cargando historial de puntuaciones...');
@@ -45,7 +80,6 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
         index === self.findIndex(j => j.id === jugador.id)
       );
       
-      // Limitar a 10 jugadores por lote para no saturar
       const lotes = [];
       for (let i = 0; i < jugadoresUnicos.length; i += 10) {
         lotes.push(jugadoresUnicos.slice(i, i + 10));
@@ -55,7 +89,6 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
         const promesas = lote.map(async (jugador) => {
           try {
             const puntuaciones = await cargarPuntuacionesJugador(jugador.id);
-            // Ordenar por jornada_numero descendente y tomar las últimas 5
             const ultimasPuntuaciones = puntuaciones
               .sort((a, b) => b.jornada_numero - a.jornada_numero)
               .slice(0, 5);
@@ -71,7 +104,6 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
           nuevoHistorial[jugadorId] = puntuaciones;
         });
         
-        // Pequeña pausa entre lotes
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       
@@ -82,9 +114,8 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     cargarHistorial();
   }, [jugadores, cargarPuntuacionesJugador, historialCargado]);
 
-  // 🆕 Manejar cambio de puntos para un jugador (MEJORADA)
+  // Manejar cambio de puntos
   const handlePuntosChange = (jugadorId, valor) => {
-    // Si el valor está vacío, guardar como cadena vacía
     if (valor === '' || valor === null || valor === undefined) {
       setPuntosTemporales(prev => ({
         ...prev,
@@ -93,7 +124,6 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
       return;
     }
 
-    // Convertir a número y asegurar que no sea NaN
     const puntosNum = parseInt(valor);
     setPuntosTemporales(prev => ({
       ...prev,
@@ -101,7 +131,25 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     }));
   };
 
- const asignarPuntosJornada = async () => {
+  // Manejar cambio de goles
+  const handleGolesChange = (jugadorId, valor) => {
+    if (valor === '' || valor === null || valor === undefined) {
+      setGolesTemporales(prev => ({
+        ...prev,
+        [jugadorId]: ''
+      }));
+      return;
+    }
+
+    const golesNum = parseInt(valor);
+    setGolesTemporales(prev => ({
+      ...prev,
+      [jugadorId]: isNaN(golesNum) ? '' : golesNum
+    }));
+  };
+
+  // Función para asignar puntos y goles
+  const asignarPuntosJornada = async () => {
     if (!jornadaSeleccionada) {
       alert('Por favor selecciona una jornada');
       return;
@@ -112,29 +160,34 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
       const resultados = [];
       const errores = [];
 
-      // Procesar cada jugador con puntos asignados
       for (const [jugadorId, puntos] of Object.entries(puntosTemporales)) {
-        // Saltar jugadores sin puntos
-        if (puntos === '' || puntos === null || puntos === undefined) {
+        const goles = golesTemporales[jugadorId] || 0;
+        
+        if ((puntos === '' || puntos === null || puntos === undefined) && 
+            (goles === '' || goles === null || goles === undefined || goles === 0)) {
           continue;
         }
 
-        const puntosNum = parseInt(puntos);
-        if (isNaN(puntosNum)) {
-          continue;
-        }
+        const puntosNum = puntos === '' ? 0 : parseInt(puntos);
+        const golesNum = goles === '' ? 0 : parseInt(goles);
+
+        if (isNaN(puntosNum)) continue;
+        if (isNaN(golesNum)) continue;
 
         try {
           const resultado = await actualizarPuntuacionJugador(
             parseInt(jugadorId),
             jornadaSeleccionada,
-            puntosNum
+            puntosNum,
+            golesNum
           );
           resultados.push({ 
             jugadorId, 
             success: true, 
             data: resultado,
-            jugadorNombre: jugadores.find(j => j.id === parseInt(jugadorId))?.nombre || 'Desconocido'
+            jugadorNombre: jugadores.find(j => j.id === parseInt(jugadorId))?.nombre || 'Desconocido',
+            puntos: puntosNum,
+            goles: golesNum
           });
         } catch (error) {
           errores.push({ 
@@ -146,20 +199,19 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
       }
 
       if (resultados.length === 0 && errores.length === 0) {
-        alert('No hay puntos para asignar');
+        alert('No hay puntos ni goles para asignar');
         return;
       }
 
       if (errores.length > 0) {
         const erroresTexto = errores.map(e => `${e.jugadorNombre}: ${e.error}`).join('\n');
-        alert(`Se asignaron puntos a ${resultados.length} jugadores, pero hubo ${errores.length} errores:\n\n${erroresTexto}`);
+        alert(`Se asignaron puntos/goles a ${resultados.length} jugadores, pero hubo ${errores.length} errores:\n\n${erroresTexto}`);
       } else {
-        alert(`✅ Puntos asignados exitosamente para la jornada ${jornadaActual?.numero} a ${resultados.length} jugadores`);
+        const totalGoles = resultados.reduce((sum, r) => sum + (r.goles || 0), 0);
+        alert(`✅ Puntos y goles asignados exitosamente para la jornada ${jornadaActual?.numero}\n\n${resultados.length} jugadores actualizados\n${totalGoles} goles totales`);
       }
       
       onAsignarPuntosSuccess?.();
-      
-      // Recargar historial después de asignar puntos
       setHistorialCargado(false);
       
     } catch (err) {
@@ -170,25 +222,35 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     }
   };
 
-  // 🆕 Asignar puntos masivamente por equipo real
-  const asignarPuntosMasivos = (puntos) => {
+  // Asignar puntos masivamente por equipo real
+  const asignarPuntosMasivos = (puntos, goles = 0) => {
     const jugadoresFiltradosActuales = jugadoresFiltrados;
     const nuevosPuntos = { ...puntosTemporales };
+    const nuevosGoles = { ...golesTemporales };
     
     jugadoresFiltradosActuales.forEach(jugador => {
       nuevosPuntos[jugador.id] = puntos;
+      if (goles > 0) {
+        nuevosGoles[jugador.id] = goles;
+      }
     });
     
     setPuntosTemporales(nuevosPuntos);
+    if (goles > 0) {
+      setGolesTemporales(nuevosGoles);
+    }
   };
 
-  // 🆕 Limpiar todos los puntos temporales (poner en blanco)
+  // Limpiar todos los puntos y goles temporales
   const limpiarPuntos = () => {
     const nuevosPuntos = {};
+    const nuevosGoles = {};
     jugadores.forEach(jugador => {
       nuevosPuntos[jugador.id] = '';
+      nuevosGoles[jugador.id] = '';
     });
     setPuntosTemporales(nuevosPuntos);
+    setGolesTemporales(nuevosGoles);
   };
 
   // Filtrar jugadores
@@ -220,7 +282,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     return 'text-red-600 bg-red-100 border-red-200';
   };
 
-  // 🆕 Función para renderizar el mini gráfico de barras
+  // Función para renderizar el mini gráfico de barras
   const renderMiniGrafico = (jugadorId) => {
     const historial = historialJugadores[jugadorId] || [];
     
@@ -232,24 +294,35 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
       );
     }
 
-    // Encontrar el valor máximo para escalar las barras
     const maxPuntos = Math.max(...historial.map(p => p.puntos), 1);
     
     return (
       <div className="flex items-end gap-1 h-8">
         {historial.map((puntuacion, index) => {
-          const altura = (puntuacion.puntos / maxPuntos) * 24; // 24px de altura máxima
+          const altura = (puntuacion.puntos / maxPuntos) * 24;
           const color = puntuacion.puntos >= 8 ? 'bg-green-500' : 
                        puntuacion.puntos >= 5 ? 'bg-blue-500' : 
                        puntuacion.puntos >= 0 ? 'bg-gray-400' : 'bg-red-500';
           
           return (
             <div key={index} className="flex flex-col items-center">
-              <div
-                className={`w-3 ${color} rounded-t transition-all duration-300`}
-                style={{ height: `${Math.max(altura, 4)}px` }} // Mínimo 4px de altura
-                title={`J${puntuacion.jornada_numero}: ${puntuacion.puntos} pts`}
-              />
+              <div className="flex flex-col items-center">
+                {puntuacion.goles > 0 && (
+                  <div className="mb-0.5 flex items-center justify-center">
+                    <div className="flex items-center gap-0.5 bg-orange-100 px-1 py-0.5 rounded text-xs">
+                      <span className="text-xs font-bold text-orange-700">{puntuacion.goles}</span>
+                      <span className="text-[10px]">⚽</span>
+                    </div>
+                  </div>
+                )}
+                
+                <div
+                  className={`w-3 ${color} rounded-t transition-all duration-300 relative group`}
+                  style={{ height: `${Math.max(altura, 4)}px` }}
+                  title={`J${puntuacion.jornada_numero}: ${puntuacion.puntos} pts${puntuacion.goles > 0 ? `, ${puntuacion.goles} goles` : ''}`}
+                />
+              </div>
+              
               <span className="text-[10px] text-gray-500 mt-1">
                 J{puntuacion.jornada_numero}
               </span>
@@ -260,16 +333,24 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
     );
   };
 
-  // 🆕 Calcular estadísticas de la jornada actual
+  // Calcular estadísticas de la jornada actual
   const estadisticas = {
     totalJugadores: jugadoresFiltrados.length,
     jugadoresConPuntos: jugadoresFiltrados.filter(j => {
       const puntos = puntosTemporales[j.id];
       return puntos !== '' && puntos !== null && puntos !== undefined && puntos !== 0;
     }).length,
+    jugadoresConGoles: jugadoresFiltrados.filter(j => {
+      const goles = golesTemporales[j.id];
+      return goles !== '' && goles !== null && goles !== undefined && goles !== 0;
+    }).length,
     puntosTotalesJornada: jugadoresFiltrados.reduce((sum, j) => {
       const puntos = puntosTemporales[j.id];
       return sum + (puntos === '' ? 0 : (puntos || 0));
+    }, 0),
+    golesTotalesJornada: jugadoresFiltrados.reduce((sum, j) => {
+      const goles = golesTemporales[j.id];
+      return sum + (goles === '' ? 0 : (goles || 0));
     }, 0),
     get promedioPuntosJornada() {
       return this.jugadoresConPuntos > 0 ? (this.puntosTotalesJornada / this.jugadoresConPuntos) : 0;
@@ -284,8 +365,8 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
       <div className="mb-6">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800">Asignación de Puntos</h2>
-            <p className="text-gray-600">Selecciona una jornada y asigna puntos a los jugadores</p>
+            <h2 className="text-2xl font-bold text-gray-800">Asignación de Puntos y Goles</h2>
+            <p className="text-gray-600">Selecciona una jornada y asigna puntos y goles a los jugadores</p>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
@@ -350,7 +431,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
         </div>
       </div>
 
-      {/* Controles rápidos de puntos */}
+      {/* Controles rápidos de puntos y goles */}
       {jornadaSeleccionada && (
         <div className="mb-6 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
           <h4 className="font-semibold text-yellow-800 mb-3">Asignación Rápida</h4>
@@ -374,8 +455,22 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
               +8 Puntos a Todos
             </button>
             <button
+              onClick={() => asignarPuntosMasivos(0, 1)}
+              className="px-3 py-2 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 flex items-center gap-1"
+            >
+              <Goal size={14} />
+              +1 Gol a Todos
+            </button>
+            <button
+              onClick={() => asignarPuntosMasivos(0, 2)}
+              className="px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 flex items-center gap-1"
+            >
+              <Goal size={14} />
+              +2 Goles a Todos
+            </button>
+            <button
               onClick={limpiarPuntos}
-              className="px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+              className="px-3 py-2 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
             >
               Limpiar Campos
             </button>
@@ -399,7 +494,11 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
           </div>
         ) : (
           jugadoresFiltrados.map((jugador) => (
-            <div key={jugador.id} className="flex items-center gap-6 p-4 bg-white rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-all duration-200">
+            <div 
+              key={jugador.id} 
+              className="flex items-center gap-6 p-4 bg-white rounded-lg border-2 border-gray-200 hover:border-blue-300 transition-all duration-200 cursor-pointer"
+              onClick={() => abrirModalJugador(jugador)} // 🆕 Hacer click en toda la fila
+            >
               {/* Información del jugador */}
               <div className="flex items-center gap-4 flex-1">
                 <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
@@ -421,7 +520,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
                 </div>
               </div>
               
-              {/* 🆕 Mini gráfico de últimas jornadas */}
+              {/* Mini gráfico de últimas jornadas */}
               <div className="flex-1 max-w-[200px]">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={14} className="text-gray-500" />
@@ -430,40 +529,77 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
                 {renderMiniGrafico(jugador.id)}
               </div>
               
-              {/* Input de puntos */}
-              <div className="flex items-center gap-3">
+              {/* Inputs de puntos y goles */}
+              <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}> {/* 🆕 Evitar que el click en inputs abra el modal */}
                 <div className="text-right">
-                  <div className="text-sm text-gray-600 font-medium">Puntos Jornada {jornadaActual?.numero}</div>
+                  <div className="text-sm text-gray-600 font-medium">Puntos</div>
+                  <div className="text-sm text-gray-600 font-medium">Goles</div>
                 </div>
+                
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={puntosTemporales[jugador.id] === '' ? '' : (puntosTemporales[jugador.id] || 0)}
-                    onChange={(e) => {
-                      const valor = e.target.value;
-                      // Permitir campo vacío o números
-                      if (valor === '' || /^\d*$/.test(valor)) {
-                        handlePuntosChange(jugador.id, valor);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      // Cuando pierde el foco, convertir a número o dejar vacío
-                      const valor = e.target.value;
-                      if (valor === '') {
-                        handlePuntosChange(jugador.id, '');
-                      } else {
-                        const num = parseInt(valor);
-                        handlePuntosChange(jugador.id, isNaN(num) ? '' : num);
-                      }
-                    }}
-                    className="w-20 border-2 border-gray-300 p-2 rounded text-center focus:border-blue-500 focus:outline-none"
-                    placeholder="0"
-                    min="0"
-                    max="20"
-                  />
-                  <span className={`px-3 py-2 rounded text-sm font-bold border ${getColorPuntos(puntosTemporales[jugador.id] || '')}`}>
-                    {puntosTemporales[jugador.id] === '' ? '-' : (puntosTemporales[jugador.id] || 0)}
-                  </span>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="number"
+                      value={puntosTemporales[jugador.id] === '' ? '' : (puntosTemporales[jugador.id] || 0)}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        if (valor === '' || /^\d*$/.test(valor)) {
+                          handlePuntosChange(jugador.id, valor);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const valor = e.target.value;
+                        if (valor === '') {
+                          handlePuntosChange(jugador.id, '');
+                        } else {
+                          const num = parseInt(valor);
+                          handlePuntosChange(jugador.id, isNaN(num) ? '' : num);
+                        }
+                      }}
+                      className="w-16 border-2 border-gray-300 p-2 rounded text-center focus:border-blue-500 focus:outline-none"
+                      placeholder="0"
+                      min="0"
+                      max="20"
+                    />
+                    
+                    <input
+                      type="number"
+                      value={golesTemporales[jugador.id] === '' ? '' : (golesTemporales[jugador.id] || 0)}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        if (valor === '' || /^\d*$/.test(valor)) {
+                          handleGolesChange(jugador.id, valor);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const valor = e.target.value;
+                        if (valor === '') {
+                          handleGolesChange(jugador.id, '');
+                        } else {
+                          const num = parseInt(valor);
+                          handleGolesChange(jugador.id, isNaN(num) ? '' : num);
+                        }
+                      }}
+                      className="w-16 border-2 border-gray-300 p-2 rounded text-center focus:border-orange-500 focus:outline-none"
+                      placeholder="0"
+                      min="0"
+                      max="10"
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col gap-2">
+                    <span className={`px-3 py-2 rounded text-sm font-bold border ${getColorPuntos(puntosTemporales[jugador.id] || '')}`}>
+                      {puntosTemporales[jugador.id] === '' ? '-' : (puntosTemporales[jugador.id] || 0)}
+                    </span>
+                    
+                    <span className={`px-3 py-2 rounded text-sm font-bold border ${
+                      golesTemporales[jugador.id] === '' || golesTemporales[jugador.id] === 0 
+                        ? 'text-gray-400 bg-gray-100 border-gray-200' 
+                        : 'text-orange-600 bg-orange-100 border-orange-200'
+                    }`}>
+                      {golesTemporales[jugador.id] === '' ? '-' : (golesTemporales[jugador.id] || 0)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -471,14 +607,57 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
         )}
       </div>
 
+      {/* 🆕 Modal para ver el gráfico completo del jugador */}
+      {jugadorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header del modal */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">{jugadorModal.nombre}</h2>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    {jugadorModal.equipo_real_nombre || 'Sin equipo'}
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    {formatValue(jugadorModal.valor)}
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                    {jugadorModal.posicion}
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                    {jugadorModal.puntos_totales || 0} pts totales
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={cerrarModal}
+                className="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Contenido del modal */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <MiniGrafico 
+                puntuaciones={historialCompleto[jugadorModal.id] || []} 
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Botón de guardar */}
       {jornadaSeleccionada && jugadoresFiltrados.length > 0 && (
         <div className="mt-6 pt-6 border-t border-gray-200">
           <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
             <div className="text-sm text-gray-600">
-              <strong>{estadisticas.jugadoresConPuntos}</strong> jugadores con puntos asignados • 
-              Total: <strong>{estadisticas.puntosTotalesJornada}</strong> puntos • 
-              Promedio: <strong>{estadisticas.promedioPuntosJornada.toFixed(1)}</strong>
+              <strong>{estadisticas.jugadoresConPuntos}</strong> jugadores con puntos • 
+              <strong>{estadisticas.jugadoresConGoles}</strong> jugadores con goles • 
+              Total: <strong>{estadisticas.puntosTotalesJornada}</strong> pts, 
+              <strong>{estadisticas.golesTotalesJornada}</strong> goles • 
+              Promedio: <strong>{estadisticas.promedioPuntosJornada.toFixed(1)}</strong> pts
             </div>
             
             <button
@@ -487,7 +666,7 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
               className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
               <Save size={20} />
-              {asignandoPuntos ? 'Asignando...' : `Guardar Puntos - Jornada ${jornadaActual?.numero}`}
+              {asignandoPuntos ? 'Asignando...' : `Guardar Puntos y Goles - Jornada ${jornadaActual?.numero}`}
             </button>
           </div>
         </div>

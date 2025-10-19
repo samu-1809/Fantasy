@@ -40,6 +40,7 @@ class Jugador(models.Model):
     en_venta = models.BooleanField(default=False)
     equipo = models.ForeignKey('Equipo', on_delete=models.SET_NULL, null=True, blank=True, related_name='jugadores')
     en_banquillo = models.BooleanField(default=True)
+    goles = models.IntegerField(default=0)
     fecha_mercado = models.DateTimeField(null=True, blank=True)
     fecha_fichaje = models.DateTimeField(null=True, blank=True)
     precio_venta = models.IntegerField(null=True, blank=True)
@@ -182,7 +183,7 @@ class Puntuacion(models.Model):
     jugador = models.ForeignKey(Jugador, on_delete=models.CASCADE)
     jornada = models.ForeignKey(Jornada, on_delete=models.CASCADE)
     puntos = models.IntegerField()
-    
+    goles = models.IntegerField(default=0)
     class Meta:
         unique_together = ('jugador', 'jornada')
     

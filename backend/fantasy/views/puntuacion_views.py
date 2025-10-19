@@ -19,7 +19,6 @@ def puntuaciones_jugador(request, jugador_id):
             status=404
         )
 
-# views.py - Añadir esta vista
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def puntuaciones_por_partido(request, partido_id):
@@ -43,17 +42,19 @@ def puntuaciones_por_partido(request, partido_id):
             jugador__in=list(jugadores_local) + list(jugadores_visitante)
         ).select_related('jugador')
         
-        # Crear diccionario de puntuaciones por jugador
-        puntuaciones_dict = {
-            punt.jugador_id: punt.puntos 
-            for punt in puntuaciones_jornada
-        }
+        # Crear diccionario de puntuaciones y goles por jugador
+        puntuaciones_dict = {}
+        goles_dict = {}
+        for punt in puntuaciones_jornada:
+            puntuaciones_dict[punt.jugador_id] = punt.puntos
+            goles_dict[punt.jugador_id] = punt.goles  # 🆕 Guardar goles por jugador
         
         # Serializar datos
         def serializar_jugadores(jugadores_queryset):
             jugadores_data = []
             for jugador in jugadores_queryset:
                 puntos_jornada = puntuaciones_dict.get(jugador.id, 0)
+                goles_jornada = goles_dict.get(jugador.id, 0)  # 🆕 Obtener goles de esta jornada
                 jugadores_data.append({
                     'id': jugador.id,
                     'nombre': jugador.nombre,
@@ -62,8 +63,10 @@ def puntuaciones_por_partido(request, partido_id):
                     'valor': jugador.valor,
                     'puntos_totales': jugador.puntos_totales,
                     'puntos_jornada': puntos_jornada,
+                    'goles': goles_jornada,  # 🆕 Añadir goles a la respuesta
                     'equipo_fantasy_nombre': jugador.equipo.nombre if jugador.equipo else 'Libre',
-                    'en_venta': jugador.en_venta
+                    'en_venta': jugador.en_venta,
+                    'equipo_real_nombre': jugador.equipo_real.nombre  # 🆕 Añadir nombre equipo real
                 })
             return jugadores_data
         
@@ -101,6 +104,7 @@ def actualizar_puntuacion_jugador(request):
     jugador_id = request.data.get('jugador_id')
     jornada_id = request.data.get('jornada_id')
     puntos = request.data.get('puntos')
+    goles = request.data.get('goles', 0)
     
     try:
         jugador = Jugador.objects.get(id=jugador_id)
@@ -109,7 +113,11 @@ def actualizar_puntuacion_jugador(request):
         puntuacion, created = Puntuacion.objects.update_or_create(
             jugador=jugador,
             jornada=jornada,
-            defaults={'puntos': puntos}
+            defaults={
+                'puntos': puntos,
+                'goles': goles
+            }
+            
         )
         
         jugador.puntos_totales = Puntuacion.objects.filter(jugador=jugador).aggregate(

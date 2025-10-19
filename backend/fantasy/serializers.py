@@ -13,7 +13,7 @@ class PuntuacionJornadaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Puntuacion
-        fields = ['jornada_id', 'jornada_numero', 'puntos']
+        fields = ['jornada_id', 'jornada_numero', 'puntos','goles']
 
 class JugadorSerializer(serializers.ModelSerializer):
     equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
@@ -26,7 +26,7 @@ class JugadorSerializer(serializers.ModelSerializer):
         model = Jugador
         fields = ['id', 'nombre', 'posicion', 'valor', 'precio_venta', 'en_venta', 
                  'fecha_mercado', 'equipo_nombre', 'equipo_real_nombre', 'usuario_vendedor', 'usuario_vendedor_id',
-                 'puntos_totales', 'en_banquillo', 'puntuaciones_jornadas']
+                 'puntos_totales', 'en_banquillo', 'puntuaciones_jornadas','goles']
 
     def get_puntuaciones_jornadas(self, obj):
         # Obtener las puntuaciones del jugador por jornada

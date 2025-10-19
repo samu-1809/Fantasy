@@ -28,6 +28,36 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
     cargarPuntuaciones();
   }, [partido.id]);
 
+  // Función para renderizar balones según la cantidad de goles en ESTA JORNADA
+  const renderBalones = (goles) => {
+    if (!goles || goles === 0) return null;
+    
+    const balones = [];
+    const maxBalones = 8;
+    
+    for (let i = 0; i < Math.min(goles, maxBalones); i++) {
+      balones.push(
+        <span key={i} className="inline-block transform hover:scale-110 transition-transform text-base">
+          ⚽
+        </span>
+      );
+    }
+    
+    if (goles > maxBalones) {
+      balones.push(
+        <span key="extra" className="text-xs font-bold text-gray-600 ml-1">
+          +{goles - maxBalones}
+        </span>
+      );
+    }
+    
+    return (
+      <div className="flex flex-wrap gap-1">
+        {balones}
+      </div>
+    );
+  };
+
   // Componente para mostrar jugadores
   const ListaJugadores = ({ jugadores, equipoNombre, esLocal }) => (
     <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -51,24 +81,27 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
       </div>
 
       <div className="space-y-4 max-h-96 overflow-y-auto">
-        {jugadores.map((jugador, index) => (
+        {jugadores.map((jugador) => (
           <div key={jugador.id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="font-semibold text-lg text-gray-800">{jugador.nombre}</span>
+                  {/* Mostrar badge con goles si el jugador tiene goles en ESTA JORNADA */}
+                  {jugador.goles > 0 && (
+                    <div className="flex items-center gap-1 bg-green-50 px-2 py-1 rounded-full border border-green-200">
+                      <span className="text-xs font-bold text-green-700">{jugador.goles}</span>
+                      <span className="text-xs">⚽</span>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
                   <div>
-                    <span className="font-medium">Equipo Fantasy:</span>
+                    <span className="font-medium">Posición:</span>
                     <div className="text-gray-800 mt-1">
-                      {jugador.equipo_fantasy_nombre || 'Jugador libre'}
-                      {jugador.en_venta && (
-                        <span className="ml-2 text-orange-600 text-xs font-medium bg-orange-100 px-2 py-1 rounded-full">
-                          💰 En venta
-                        </span>
-                      )}
+                      {jugador.posicion === 'POR' ? 'Portero' : 
+                       jugador.posicion === 'DEF' ? 'Defensa' : 'Delantero'}
                     </div>
                   </div>
                   
@@ -80,7 +113,6 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
                   </div>
                 </div>
               </div>
-              
               <div className="text-right ml-4">
                 <div className="flex items-center gap-2 justify-end mb-2">
                   <Star className="text-yellow-500" size={20} />
@@ -91,25 +123,6 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
                 <div className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
                   Total: <span className="font-semibold">{jugador.puntos_totales}</span>
                 </div>
-              </div>
-            </div>
-            
-            {/* Sección corregida - siempre se muestra pero con colores diferentes */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <div className={`flex items-center gap-2 text-sm font-medium ${
-                jugador.puntos_jornada > 0 
-                  ? 'text-green-600' 
-                  : jugador.puntos_jornada === 0 
-                    ? 'text-yellow-600' 
-                    : 'text-red-600'
-              }`}>
-                <Target size={14} />
-                <span>
-                  {jugador.puntos_jornada > 0 
-                    ? `+${jugador.puntos_jornada} puntos en esta jornada`
-                    : `${jugador.puntos_jornada} puntos en esta jornada`
-                  }
-                </span>
               </div>
             </div>
           </div>
@@ -255,7 +268,7 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
         <div className="max-w-7xl mx-auto px-4 pb-8">
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">Resumen del Partido</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-blue-600">
                   {puntuacionesPartido.jugadores_local.length + puntuacionesPartido.jugadores_visitante.length}
@@ -269,6 +282,14 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
                    puntuacionesPartido.jugadores_visitante.reduce((sum, j) => sum + j.puntos_jornada, 0)}
                 </div>
                 <div className="text-green-800 font-medium">Puntos Totales Jornada</div>
+              </div>
+
+              <div className="bg-orange-50 rounded-lg p-4">
+                <div className="text-2xl font-bold text-orange-600">
+                  {puntuacionesPartido.jugadores_local.reduce((sum, j) => sum + (j.goles || 0), 0) +
+                   puntuacionesPartido.jugadores_visitante.reduce((sum, j) => sum + (j.goles || 0), 0)}
+                </div>
+                <div className="text-orange-800 font-medium">Goles en Jornada</div>
               </div>
               
               <div className="bg-purple-50 rounded-lg p-4">
@@ -326,6 +347,12 @@ const PartidoDetailScreen = ({ partido, onVolver }) => {
                         <div className="text-xl font-bold text-purple-700 mb-1">
                         {mvp.puntos_jornada} pts
                         </div>
+                        {mvp.goles > 0 && (
+                          <div className="text-sm text-purple-600 flex items-center justify-center gap-1">
+                            <span>{mvp.goles} goles</span>
+                            <span>⚽</span>
+                          </div>
+                        )}
                     </div>
                     ) : (
                     <div>

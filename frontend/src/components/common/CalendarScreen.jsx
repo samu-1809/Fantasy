@@ -174,9 +174,6 @@ const CalendarScreen = () => {
 
           {/* Selector rápido */}
           <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Seleccionar Jornada Rápida:
-            </label>
             <select
               value={jornadaSeleccionada || ''}
               onChange={(e) => setJornadaSeleccionada(Number(e.target.value))}
@@ -184,7 +181,7 @@ const CalendarScreen = () => {
             >
               {jornadas.map((jornada) => (
                 <option key={jornada.id} value={jornada.id}>
-                  Jornada {jornada.numero} - {jornada.fecha_inicio ? new Date(jornada.fecha_inicio).toLocaleDateString() : 'Por definir'}
+                  Jornada {jornada.numero}
                 </option>
               ))}
             </select>
@@ -212,14 +209,6 @@ const CalendarScreen = () => {
                 <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <MapPin size={16} />
-                      <span className="text-sm font-medium">Estadio {partido.estadio || 'Principal'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} />
-                      <span className="text-sm">
-                        {partido.fecha ? new Date(partido.fecha).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -294,18 +283,6 @@ const CalendarScreen = () => {
                 </div>
               </div>
             ))}
-          </div>
-        )}
-
-        {/* Contador de partidos */}
-        {partidos.length > 0 && (
-          <div className="mt-6 text-center">
-            <div className="inline-flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow">
-              <Trophy size={16} className="text-yellow-500" />
-              <span className="text-sm text-gray-600">
-                {partidos.length} partido{partidos.length !== 1 ? 's' : ''} en esta jornada
-              </span>
-            </div>
           </div>
         )}
       </div>

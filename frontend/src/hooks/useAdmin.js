@@ -308,7 +308,7 @@ export const useAdmin = () => {
     }
   };
 
-  const actualizarPuntuacionJugador = async (jugadorId, jornadaId, puntos) => {
+  const actualizarPuntuacionJugador = async (jugadorId, jornadaId, puntos, goles) => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_URL}/puntuaciones/actualizar/`, {
@@ -320,7 +320,8 @@ export const useAdmin = () => {
         body: JSON.stringify({
           jugador_id: jugadorId,
           jornada_id: jornadaId,
-          puntos: puntos
+          puntos: puntos,
+          goles: goles
         }),
       });
 
