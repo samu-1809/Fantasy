@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, AlineacionCongelada
 
 @admin.register(Liga)
 class LigaAdmin(admin.ModelAdmin):
@@ -42,9 +42,22 @@ class PartidoAdmin(admin.ModelAdmin):
 
 @admin.register(Jornada)
 class JornadaAdmin(admin.ModelAdmin):
-    list_display = ('numero', 'fecha', 'total_partidos')
-    search_fields = ('numero',)  
-    
+    list_display = ('numero', 'fecha', 'fecha_inicio', 'alineaciones_congeladas', 'total_partidos')
+    search_fields = ('numero',)
+    list_filter = ('alineaciones_congeladas',)
+
     def total_partidos(self, obj):
         return obj.partidos.count()
     total_partidos.short_description = 'Partidos'
+
+@admin.register(AlineacionCongelada)
+class AlineacionCongeladaAdmin(admin.ModelAdmin):
+    list_display = ('equipo', 'jornada', 'fecha_congelacion', 'tiene_posiciones_completas', 'puntos_obtenidos', 'dinero_ganado', 'total_titulares')
+    list_filter = ('jornada', 'tiene_posiciones_completas')
+    search_fields = ('equipo__nombre', 'jornada__numero')
+    readonly_fields = ('fecha_congelacion', 'puntos_obtenidos', 'dinero_ganado')
+    filter_horizontal = ('jugadores_titulares',)
+
+    def total_titulares(self, obj):
+        return obj.jugadores_titulares.count()
+    total_titulares.short_description = 'Titulares'

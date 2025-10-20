@@ -23,6 +23,7 @@ urlpatterns = [
     path('jugadores/<int:jugador_id>/puntuaciones/', views.puntuaciones_jugador, name='puntuaciones_jugador'),
     path('puntuaciones/actualizar/', views.actualizar_puntuacion_jugador, name='actualizar_puntuacion_jugador'),
     path('partidos/<int:partido_id>/puntuaciones/', views.puntuaciones_por_partido, name='puntuaciones-partido'),
+    path('equipos/<int:equipo_id>/jornadas/<int:jornada_id>/alineacion-congelada/', views.alineacion_congelada_jornada, name='alineacion_congelada_jornada'),
     
     # ==================== AUTENTICACIÓN ====================
     path('auth/register/', views.RegisterView.as_view(), name='register'),

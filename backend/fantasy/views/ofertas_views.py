@@ -107,25 +107,40 @@ def aceptar_oferta(request, oferta_id):
         oferta = Oferta.objects.select_related(
             'jugador', 'equipo_ofertante', 'equipo_receptor', 'jugador__equipo_real'
         ).get(id=oferta_id)
-        
+
         print(f"✅ Oferta encontrada: {oferta.jugador.nombre}")
-        
+
         # Verificar que el usuario es el receptor de la oferta (vendedor)
         if oferta.equipo_receptor.usuario != request.user:
             print("❌ Usuario no autorizado para aceptar esta oferta")
             return Response(
-                {'error': 'No tienes permisos para aceptar esta oferta'}, 
+                {'error': 'No tienes permisos para aceptar esta oferta'},
                 status=403
             )
-        
+
         with transaction.atomic():
             jugador = oferta.jugador
-            
-            # Transferir el jugador al equipo ofertante
             equipo_anterior = jugador.equipo
-            jugador.equipo = oferta.equipo_ofertante
-            jugador.en_venta = False
-            jugador.fecha_mercado = None
+
+            # Determinar si es oferta del sistema
+            if oferta.es_del_sistema:
+                # Oferta del sistema: jugador vuelve al mercado libre
+                jugador.equipo = None
+                jugador.en_venta = True
+                jugador.fecha_mercado = timezone.now()
+            else:
+                # Oferta de usuario: transferir jugador
+                jugador.equipo = oferta.equipo_ofertante
+                jugador.en_venta = False
+                jugador.fecha_mercado = None
+
+                # Actualizar presupuesto del comprador
+                equipo_comprador = oferta.equipo_ofertante
+                equipo_comprador.presupuesto -= oferta.monto
+                equipo_comprador.save()
+
+            # ⚠️ SIEMPRE al banquillo
+            jugador.en_banquillo = True
             jugador.precio_venta = None
             jugador.puja_actual = None
             jugador.equipo_pujador = None
@@ -268,28 +283,52 @@ def crear_oferta_directa(request):
     print("🎯 INICIANDO OFERTA DIRECTA")
     print(f"👤 Usuario: {request.user.username}")
     print(f"📦 Datos: {request.data}")
-    
+
     try:
         jugador_id = request.data.get('jugador_id')
         monto = request.data.get('monto')
-        
+
         if not jugador_id or not monto:
             return Response({'error': 'Se requiere jugador_id y monto'}, status=400)
-        
+
         # Obtener jugador y equipo del usuario
         jugador = Jugador.objects.select_related('equipo').get(id=jugador_id)
         equipo_ofertante = Equipo.objects.get(usuario=request.user)
-        
+
         print(f"✅ Jugador: {jugador.nombre} - Equipo: {jugador.equipo.nombre if jugador.equipo else 'Libre'}")
         print(f"✅ Ofertante: {equipo_ofertante.nombre}")
-        
+
         # Validaciones
         if not jugador.equipo:
             return Response({'error': 'No se puede hacer oferta por jugador libre'}, status=400)
-        
+
         if jugador.equipo == equipo_ofertante:
             return Response({'error': 'No puedes hacer oferta por tu propio jugador'}, status=400)
-        
+
+        # ✅ NO validar si es titular (permitido desde clasificación)
+
+        # 🆕 VALIDAR LÍMITE DE OFERTAS/PUJAS
+        jugadores_actuales = equipo_ofertante.jugadores.count()
+        espacios_disponibles = 11 - jugadores_actuales
+
+        pujas_activas = Puja.objects.filter(
+            equipo=equipo_ofertante,
+            activa=True
+        ).count()
+
+        ofertas_activas = Oferta.objects.filter(
+            equipo_ofertante=equipo_ofertante,
+            estado='pendiente'
+        ).count()
+
+        total_activas = pujas_activas + ofertas_activas
+
+        if total_activas >= espacios_disponibles:
+            return Response({
+                'error': f'Has alcanzado el límite de pujas/ofertas activas ({total_activas}/{espacios_disponibles}). '
+                        f'Gana, retira o espera resolución antes de hacer más ofertas.'
+            }, status=400)
+
         if equipo_ofertante.presupuesto < monto:
             return Response({'error': 'Presupuesto insuficiente'}, status=400)
         

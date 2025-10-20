@@ -21,10 +21,35 @@ def pujar_jugador(request, equipo_id):
     except Equipo.DoesNotExist:
         print("❌ Equipo no encontrado o no pertenece al usuario")
         return Response(
-            {'error': 'Equipo no encontrado o no tienes permisos'}, 
+            {'error': 'Equipo no encontrado o no tienes permisos'},
             status=404
         )
-    
+
+    # 🆕 VALIDAR LÍMITE DE PUJAS/OFERTAS
+    jugadores_actuales = equipo.jugadores.count()
+    espacios_disponibles = 11 - jugadores_actuales
+
+    pujas_activas = Puja.objects.filter(
+        equipo=equipo,
+        activa=True
+    ).count()
+
+    ofertas_activas = Oferta.objects.filter(
+        equipo_ofertante=equipo,
+        estado='pendiente'
+    ).count()
+
+    total_activas = pujas_activas + ofertas_activas
+
+    if total_activas >= espacios_disponibles:
+        print(f"❌ Límite alcanzado: {total_activas}/{espacios_disponibles}")
+        return Response({
+            'error': f'Has alcanzado el límite de pujas/ofertas activas ({total_activas}/{espacios_disponibles}). '
+                    f'Gana, retira o espera resolución de alguna antes de hacer más ofertas.'
+        }, status=400)
+
+    print(f"✅ Validación límite OK: {total_activas}/{espacios_disponibles} pujas/ofertas activas")
+
     jugador_id = request.data.get('jugador_id')
     monto_puja = request.data.get('monto_puja')
     

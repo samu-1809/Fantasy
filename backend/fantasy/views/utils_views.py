@@ -83,6 +83,24 @@ def crear_notificacion_oferta_retirada(jugador, ofertante, monto):
         destinatario=ofertante.usuario
     )
 
+def notificar_fichaje_global(jugador, equipo):
+    """
+    Notifica a todos los usuarios de la liga sobre un fichaje.
+    Envía notificación a todos EXCEPTO al equipo que fichó al jugador.
+    """
+    liga = equipo.liga
+    usuarios = Equipo.objects.filter(liga=liga).exclude(id=equipo.id).values_list('usuario', flat=True)
+
+    for usuario_id in usuarios:
+        Notificacion.objects.create(
+            destinatario_id=usuario_id,
+            tipo='publica',
+            categoria='fichaje_global',
+            titulo='🔔 Nuevo fichaje',
+            mensaje=f'{equipo.nombre} ha fichado a {jugador.nombre}',
+            leida=False
+        )
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def datos_iniciales(request):

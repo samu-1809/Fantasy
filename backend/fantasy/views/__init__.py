@@ -28,10 +28,11 @@ from .equipo_views import (
 
 # Importa funciones de puntuación
 from .puntuacion_views import (
-    puntuaciones_jugador, 
-    actualizar_puntuacion_jugador, 
+    puntuaciones_jugador,
+    actualizar_puntuacion_jugador,
     equipos_disponibles_jornada,
-    puntuaciones_por_partido
+    puntuaciones_por_partido,
+    alineacion_congelada_jornada
 )
 
 # Importa funciones de ofertas
@@ -55,9 +56,10 @@ from .pujas_views import (
 
 # Importa utilidades
 from .utils_views import (
-    datos_iniciales, 
-    current_user, 
-    finalizar_subastas
+    datos_iniciales,
+    current_user,
+    finalizar_subastas,
+    notificar_fichaje_global
 )
 
 # 🎯 Define qué se exporta cuando se hace: from views import *
@@ -75,7 +77,8 @@ __all__ = [
     
     # Funciones de puntuación
     'puntuaciones_jugador', 'actualizar_puntuacion_jugador',
-    'equipos_disponibles_jornada','puntuaciones_por_partido',
+    'equipos_disponibles_jornada', 'puntuaciones_por_partido',
+    'alineacion_congelada_jornada',
     
     # Funciones de ofertas
     'ofertas_recibidas', 'ofertas_realizadas', 'aceptar_oferta',
@@ -88,5 +91,6 @@ __all__ = [
     'contar_no_leidas','listar_notificaciones','marcar_todas_leidas','marcar_como_leida',
     
     # Utilidades
-    'datos_iniciales', 'current_user', 'finalizar_subastas'
+    'datos_iniciales', 'current_user', 'finalizar_subastas',
+    'notificar_fichaje_global'
 ]

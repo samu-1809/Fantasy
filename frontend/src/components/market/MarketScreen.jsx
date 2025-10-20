@@ -8,6 +8,7 @@ import MercadoTab from './components/MercadoTab';
 import OfertasRecibidasTab from './components/OfertasRecibidasTab';
 import OfertasRealizadasTab from './components/OfertasRealizadasTab';
 import PujaModal from './components/PujaModal';
+import BidLimitBanner from './components/BidLimitBanner';
 import { ShoppingCart, TrendingUp, Users, AlertCircle } from 'lucide-react';
 import { retirarOferta, editarPuja, editarOferta } from '../../services/api'; // 🆕 Importar funciones
 
@@ -695,19 +696,34 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                 />
               )}
               {pestañaActiva === 'ofertas-realizadas' && (
-                <OfertasRealizadasTab
-                  ofertasRealizadas={ofertasRealizadas || []}
-                  pujasRealizadas={pujasRealizadas || []}
-                  mercado={mercado || []}
-                  handleEditarPuja={handleEditarPuja}
-                  handleRetirarPuja={handleRetirarPuja}
-                  handleRetirarOferta={handleRetirarOferta}
-                  handleEditarOferta={handleEditarOferta} // 🆕 Pasar la nueva función
-                  formatNormalValue={formatNormalValue}
-                  totalJugadores={totalJugadores}
-                  maxJugadores={maxJugadores}
-                  equipoId={equipoId}
-                />
+                <>
+                  <BidLimitBanner
+                    pujasActivas={pujasRealizadas.filter(puja =>
+                      !puja.es_ganadora &&
+                      puja.jugador_en_venta &&
+                      !puja.jugador_expirado
+                    ).length}
+                    ofertasActivas={ofertasRealizadas.filter(oferta =>
+                      oferta.estado === 'pendiente'
+                    ).length}
+                    espaciosDisponibles={Math.max(0, maxJugadores - totalJugadores)}
+                    totalJugadores={totalJugadores}
+                    maxJugadores={maxJugadores}
+                  />
+                  <OfertasRealizadasTab
+                    ofertasRealizadas={ofertasRealizadas || []}
+                    pujasRealizadas={pujasRealizadas || []}
+                    mercado={mercado || []}
+                    handleEditarPuja={handleEditarPuja}
+                    handleRetirarPuja={handleRetirarPuja}
+                    handleRetirarOferta={handleRetirarOferta}
+                    handleEditarOferta={handleEditarOferta} // 🆕 Pasar la nueva función
+                    formatNormalValue={formatNormalValue}
+                    totalJugadores={totalJugadores}
+                    maxJugadores={maxJugadores}
+                    equipoId={equipoId}
+                  />
+                </>
               )}
             </>
           )}

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion, AlineacionCongelada
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -257,3 +257,21 @@ class JugadorMercadoSerializer(serializers.ModelSerializer):
     
     def get_expirado(self, obj):
         return obj.expirado
+
+class AlineacionCongeladaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para alineaciones congeladas.
+    Incluye información del equipo, jornada y jugadores titulares.
+    """
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+    jugadores_titulares_data = JugadorSerializer(source='jugadores_titulares', many=True, read_only=True)
+
+    class Meta:
+        model = AlineacionCongelada
+        fields = [
+            'id', 'equipo', 'equipo_nombre', 'jornada', 'jornada_numero',
+            'fecha_congelacion', 'tiene_posiciones_completas', 'posiciones_faltantes',
+            'puntos_obtenidos', 'dinero_ganado', 'jugadores_titulares_data'
+        ]
+        read_only_fields = ['fecha_congelacion', 'puntos_obtenidos', 'dinero_ganado']

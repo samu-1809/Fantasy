@@ -104,7 +104,15 @@ def poner_en_venta(request, equipo_id, jugador_id):
         jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
     except (Equipo.DoesNotExist, Jugador.DoesNotExist):
         return Response({'error': 'Jugador o equipo no encontrado'}, status=404)
-    
+
+    # ⛔ NUEVA VALIDACIÓN: No vender titulares desde "Mi Equipo"
+    if not jugador.en_banquillo:
+        return Response({
+            'error': 'No puedes poner en venta jugadores titulares desde Mi Equipo. '
+                    'Primero ponlos en el banquillo, o espera a que otros usuarios '
+                    'te hagan ofertas directas desde la clasificación.'
+        }, status=400)
+
     precio_venta = request.data.get('precio_venta', jugador.valor)
     
     try:

@@ -172,6 +172,15 @@ class Equipo(models.Model):
 class Jornada(models.Model):
     numero = models.IntegerField(unique=True)
     fecha = models.DateTimeField(auto_now_add=True)
+    fecha_inicio = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha y hora de inicio de la jornada. Las alineaciones se congelan en este momento."
+    )
+    alineaciones_congeladas = models.BooleanField(
+        default=False,
+        help_text="Indica si las alineaciones ya fueron registradas para esta jornada"
+    )
 
     def __str__(self):
         return f"Jornada {self.numero}"
@@ -186,9 +195,57 @@ class Puntuacion(models.Model):
     goles = models.IntegerField(default=0)
     class Meta:
         unique_together = ('jugador', 'jornada')
-    
+
     def __str__(self):
         return f"{self.jugador.nombre} - J{self.jornada.numero}: {self.puntos} pts"
+
+class AlineacionCongelada(models.Model):
+    """
+    Snapshot de la alineación de un equipo en una jornada específica.
+    Estos son los jugadores que sumarán puntos, independientemente
+    de cambios posteriores en la plantilla.
+    """
+    equipo = models.ForeignKey(
+        Equipo,
+        on_delete=models.CASCADE,
+        related_name='alineaciones_congeladas'
+    )
+    jornada = models.ForeignKey(
+        Jornada,
+        on_delete=models.CASCADE,
+        related_name='alineaciones_congeladas'
+    )
+    jugadores_titulares = models.ManyToManyField(
+        Jugador,
+        related_name='alineaciones_congeladas_titular'
+    )
+    fecha_congelacion = models.DateTimeField(auto_now_add=True)
+    tiene_posiciones_completas = models.BooleanField(
+        default=True,
+        help_text="False si le falta alguna posición requerida (1 POR, 2 DEF, 2 DEL)"
+    )
+    posiciones_faltantes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de posiciones que faltan: ['POR', 'DEF', 'DEL']"
+    )
+    puntos_obtenidos = models.IntegerField(
+        default=0,
+        help_text="Puntos acumulados por los titulares en esta jornada"
+    )
+    dinero_ganado = models.IntegerField(
+        default=0,
+        help_text="Dinero ganado en esta jornada (puntos × 100.000€)"
+    )
+
+    class Meta:
+        unique_together = ('equipo', 'jornada')
+        verbose_name = 'Alineación Congelada'
+        verbose_name_plural = 'Alineaciones Congeladas'
+        ordering = ['jornada__numero', 'equipo__nombre']
+
+    def __str__(self):
+        return f"{self.equipo.nombre} - Jornada {self.jornada.numero}"
 
 class Partido(models.Model):
     jornada = models.ForeignKey(Jornada, on_delete=models.CASCADE, related_name='partidos')
@@ -219,13 +276,23 @@ class Notificacion(models.Model):
         ('publica', 'Pública'),
         ('privada', 'Privada'),
     )
-    
+
     CATEGORIAS = (
         ('distribucion_dinero', 'Distribución de Dinero'),
         ('traspaso', 'Traspaso'),
         ('oferta_rechazada', 'Oferta Rechazada'),
-        ('oferta_editada', 'Oferta Editada'),        
-        ('oferta_retirada', 'Oferta Retirada'),      
+        ('oferta_editada', 'Oferta Editada'),
+        ('oferta_retirada', 'Oferta Retirada'),
+        # Nuevas categorías para el sistema completo
+        ('puja_ganada', 'Puja Ganada'),
+        ('puja_perdida', 'Puja Perdida'),
+        ('puja_superada', 'Puja Superada'),
+        ('oferta_sistema', 'Oferta del Sistema'),
+        ('fichaje_global', 'Fichaje Global'),
+        ('dinero_jornada', 'Dinero de Jornada'),
+        ('sin_dinero_jornada', 'Sin Dinero en Jornada'),
+        ('posicion_vacia', 'Posición Vacía'),
+        ('alineacion_congelada', 'Alineación Congelada'),
     )
     
     tipo = models.CharField(max_length=10, choices=TIPOS)
@@ -264,14 +331,24 @@ class Oferta(models.Model):
         ('rechazada', 'Rechazada'),
         ('expirada', 'Expirada'),
     ]
-    
+
     jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='ofertas')
-    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas')
+    equipo_ofertante = models.ForeignKey(
+        'Equipo',
+        on_delete=models.CASCADE,
+        related_name='ofertas_realizadas',
+        null=True,  # ⚠️ Permitir NULL para ofertas del sistema
+        blank=True
+    )
     equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas')
     monto = models.IntegerField()
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     fecha_oferta = models.DateTimeField(auto_now_add=True)
     fecha_respuesta = models.DateTimeField(null=True, blank=True)
+    es_del_sistema = models.BooleanField(
+        default=False,
+        help_text="True si es una oferta automática generada por el sistema"
+    )
     
     class Meta:
         ordering = ['-fecha_oferta']
