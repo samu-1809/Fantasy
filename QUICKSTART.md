@@ -3,10 +3,23 @@
 **Última actualización:** 2025-10-06
 **Tiempo estimado:** 30-45 minutos
 
----
 
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+sudo systemctl stop postgresql
+sudo docker-compose up -d
+python manage.py flush
+python manage.py populate_database
+python manage.py runserver
+
+cd frontend
+npm install
+npm run dev
+
+```
 ## 🚀 Setup Inicial (Primera Vez)
-
 ### 1. Instalar Dependencias del Backend
 ```bash
 cd backend
