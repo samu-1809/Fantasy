@@ -32,7 +32,8 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     retirarJugadorDelMercado,
     forzarActualizacion,
     calcularPuntosTotales,
-    encontrarJugadoresIntercambiables
+    encontrarJugadoresIntercambiables,
+    moverJugadorAlineacion // 🆕 Obtener la función del hook
   } = useTeam(equipoId);
 
   // Estados de UI
@@ -138,6 +139,34 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
       });
     };
   }, [forzarActualizacion, onRefresh]);
+
+  // 🆕 Función para mover jugador del banquillo a la alineación
+  const handleMoverJugadorAlineacion = async (jugador, posicion, index) => {
+    try {
+      setCargando(true);
+      
+      // 🆕 Usar la función del hook useTeam
+      await moverJugadorAlineacion(jugador.id, posicion, index);
+      
+      console.log('✅ Jugador movido a alineación');
+      
+      // Disparar eventos de actualización
+      window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('alineacionActualizada', {
+        detail: {
+          jugador: jugador,
+          posicion: posicion,
+          index: index
+        }
+      }));
+      
+    } catch (error) {
+      console.error('❌ Error moviendo jugador:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   // Handlers
   const handleClicJugador = (jugador) => {
@@ -336,6 +365,32 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
+<<<<<<< Updated upstream
+=======
+  // Calcular posiciones faltantes
+  const calcularPosicionesFaltantes = () => {
+    const faltantes = [];
+    const porteros = jugadores.filter(j => j.posicion === 'POR' && !j.en_banquillo).length;
+    const defensas = jugadores.filter(j => j.posicion === 'DEF' && !j.en_banquillo).length;
+    const delanteros = jugadores.filter(j => j.posicion === 'DEL' && !j.en_banquillo).length;
+
+    if (porteros < 1) faltantes.push('POR');
+    if (defensas < 2) faltantes.push('DEF');
+    if (delanteros < 2) faltantes.push('DEL');
+
+    return faltantes;
+  };
+
+  // 🆕 Función helper para obtener jugadores del banquillo por posición
+  const getJugadoresBanquilloPorPosicion = (posicion) => {
+    if (!alineacion.banquillo || !Array.isArray(alineacion.banquillo)) return [];
+    
+    return alineacion.banquillo.filter(jugador => 
+      jugador && jugador.posicion === posicion && jugador.en_banquillo === true
+    );
+  };
+
+>>>>>>> Stashed changes
   if (loading && !equipo) {
     return <LoadingState tipo="loading" />;
   }
@@ -405,6 +460,8 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
                   onRemoveFromMarket={handleQuitarDelMercado}
                   getPlayerState={getPlayerState}
                   modoCambio={modoCambio}
+                  onMoverJugadorAlineacion={handleMoverJugadorAlineacion}
+                  getJugadoresBanquilloPorPosicion={getJugadoresBanquilloPorPosicion}
                 />
               </div>
             )}

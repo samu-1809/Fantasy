@@ -30,7 +30,7 @@ urlpatterns = [
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/refresh/', CookieTokenRefreshView.as_view(), name='token-refresh'),
     path('auth/user/', views.current_user, name='current-user'),
-    
+
     # ==================== DATOS GENERALES ====================
     path('datos-iniciales/', views.datos_iniciales, name='datos_iniciales'),
     path('mi-equipo/', views.mi_equipo, name='mi_equipo'),
@@ -57,7 +57,7 @@ urlpatterns = [
     path('ofertas/<int:oferta_id>/retirar/', views.retirar_oferta, name='retirar_oferta'),
     path('ofertas-directas/crear/', views.crear_oferta_directa, name='crear_oferta_directa'),   
     path('ofertas/<int:oferta_id>/editar/', views.editar_oferta, name='editar_oferta'), 
-    
+    path('equipos/<int:equipo_id>/mover_a_alineacion/', views.mover_a_alineacion, name='mover_a_alineacion'),
     # ==================== MERCADO - PUJAS ====================
     path('equipos/<int:equipo_id>/pujar_jugador/', views.pujar_jugador, name='pujar_jugador'),
     path('equipos/<int:equipo_id>/pujas_realizadas/', views.pujas_realizadas, name='pujas_realizadas'),

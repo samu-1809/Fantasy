@@ -3,13 +3,12 @@ import { useMarket } from '../../hooks/useMarket';
 import { useAuth } from '../../context/AuthContext';
 import { useRefresh } from './hooks/useRefresh';
 import MarketHeader from './components/MarketHeader';
-import MarketStats from './components/MarketStats';
 import MercadoTab from './components/MercadoTab';
 import OfertasRecibidasTab from './components/OfertasRecibidasTab';
 import OfertasRealizadasTab from './components/OfertasRealizadasTab';
 import PujaModal from './components/PujaModal';
 import { ShoppingCart, TrendingUp, Users, AlertCircle } from 'lucide-react';
-import { retirarOferta, editarPuja, editarOferta } from '../../services/api'; // 🆕 Importar funciones
+import { retirarOferta, editarPuja, editarOferta } from '../../services/api';
 
 const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const { user } = useAuth();

@@ -281,6 +281,47 @@ def actualizar_estados_banquillo(request, equipo_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def mover_a_alineacion(request, equipo_id):
+    """Mover jugador del banquillo a la alineación"""
+    try:
+        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
+        jugador_id = request.data.get('jugador_id')
+        posicion = request.data.get('posicion')
+        
+        print(f"🔄 Moviendo jugador a alineación: jugador_id={jugador_id}, posicion={posicion}")
+        
+        jugador = Jugador.objects.get(id=jugador_id, equipo=equipo)
+        
+        # Verificar que el jugador esté en el banquillo
+        if not jugador.en_banquillo:
+            return Response({'error': 'El jugador no está en el banquillo'}, status=400)
+        
+        # Verificar que la posición coincida
+        if jugador.posicion != posicion:
+            return Response({'error': f'El jugador no es de la posición {posicion}'}, status=400)
+        
+        # Mover a la alineación (sacar del banquillo)
+        jugador.en_banquillo = False
+        jugador.save()
+        
+        print(f"✅ Jugador {jugador.nombre} movido a la alineación como {posicion}")
+        
+        return Response({
+            'success': True,
+            'message': f'{jugador.nombre} movido a la alineación como {posicion}',
+            'jugador': JugadorSerializer(jugador).data
+        })
+        
+    except Equipo.DoesNotExist:
+        return Response({'error': 'Equipo no encontrado'}, status=404)
+    except Jugador.DoesNotExist:
+        return Response({'error': 'Jugador no encontrado'}, status=404)
+    except Exception as e:
+        print(f"❌ Error inesperado en mover_a_alineacion: {str(e)}")
+        return Response({'error': 'Error interno del servidor'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def guardar_alineacion(request, equipo_id):
     try:
         equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)

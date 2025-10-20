@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from rest_framework.response import Response
 from django.db import transaction
-from ..models import Oferta, Equipo, Jugador
+from ..models import Oferta, Equipo, Jugador, Puja
 from ..serializers import OfertaSerializer
 from .utils_views import (
     crear_notificacion_oferta_rechazada,

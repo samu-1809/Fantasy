@@ -6,7 +6,8 @@ import {
   ponerEnVenta,
   guardarAlineacion,
   quitarJugadorDelMercado,
-  getClasificacion
+  getClasificacion,
+  moverJugadorAlineacion as apiMoverJugadorAlineacion // 🆕 Importar la función del API
 } from '../services/api';
 
 // Función pura fuera del hook para evitar recreación
@@ -136,6 +137,33 @@ export const useTeam = (equipoId) => {
     }
   }, [equipoId, jugadores]);
 
+  // 🆕 Función para mover jugador del banquillo a la alineación
+  const moverJugadorAlineacion = useCallback(async (jugadorId, posicion, index) => {
+    if (!equipoId) return;
+
+    try {
+      console.log('🔄 useTeam: Moviendo jugador a alineación:', { jugadorId, posicion, index });
+
+      // Llamar a la API para mover el jugador
+      const resultado = await apiMoverJugadorAlineacion(equipoId, jugadorId, posicion, index);
+      
+      // Actualizar el estado local del jugador
+      setJugadores(prevJugadores => 
+        prevJugadores.map(jugador => 
+          jugador.id === jugadorId 
+            ? { ...jugador, en_banquillo: false }
+            : jugador
+        )
+      );
+
+      console.log('✅ useTeam: Jugador movido a alineación exitosamente');
+      return resultado;
+    } catch (error) {
+      console.error('❌ useTeam: Error moviendo jugador a alineación:', error);
+      throw error;
+    }
+  }, [equipoId]);
+
   // 🆕 CORREGIDO: Función mejorada para realizar cambios
   const realizarCambio = useCallback(async (jugadorOrigenId, jugadorDestinoId) => {
     if (!equipoId) return;
@@ -236,6 +264,17 @@ export const useTeam = (equipoId) => {
     return intercambiables;
   }, [jugadores]);
 
+  // 🆕 Función para obtener jugadores del banquillo por posición
+  const getJugadoresBanquilloPorPosicion = useCallback((posicion) => {
+    if (!jugadores || !Array.isArray(jugadores)) return [];
+    
+    return jugadores.filter(jugador => 
+      jugador && 
+      jugador.posicion === posicion && 
+      jugador.en_banquillo === true
+    );
+  }, [jugadores]);
+
   useEffect(() => {
     cargarEquipo();
   }, [cargarEquipo]);
@@ -259,6 +298,8 @@ export const useTeam = (equipoId) => {
     puedeVenderJugador,
     forzarActualizacion,
     calcularPuntosTotales,
-    encontrarJugadoresIntercambiables // 🆕 Nueva función
+    encontrarJugadoresIntercambiables,
+    moverJugadorAlineacion, // 🆕 Nueva función
+    getJugadoresBanquilloPorPosicion // 🆕 Nueva función
   };
 };

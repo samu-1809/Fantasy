@@ -190,6 +190,57 @@ class Puntuacion(models.Model):
     def __str__(self):
         return f"{self.jugador.nombre} - J{self.jornada.numero}: {self.puntos} pts"
 
+<<<<<<< Updated upstream
+=======
+class AlineacionCongelada(models.Model):
+    """
+    Snapshot de la alineación de un equipo en una jornada específica.
+    Estos son los jugadores que sumarán puntos, independientemente
+    de cambios posteriores en la plantilla.
+    """
+    equipo = models.ForeignKey(
+        Equipo,
+        on_delete=models.CASCADE,
+        related_name='alineaciones_congeladas'
+    )
+    jornada = models.ForeignKey(
+        Jornada,
+        on_delete=models.CASCADE,
+        related_name='snapshots_alineacion'
+    )
+    jugadores_titulares = models.ManyToManyField(
+        Jugador,
+        related_name='alineaciones_congeladas_titular'
+    )
+    fecha_congelacion = models.DateTimeField(auto_now_add=True)
+    tiene_posiciones_completas = models.BooleanField(
+        default=True,
+        help_text="False si le falta alguna posición requerida (1 POR, 2 DEF, 2 DEL)"
+    )
+    posiciones_faltantes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de posiciones que faltan: ['POR', 'DEF', 'DEL']"
+    )
+    puntos_obtenidos = models.IntegerField(
+        default=0,
+        help_text="Puntos acumulados por los titulares en esta jornada"
+    )
+    dinero_ganado = models.IntegerField(
+        default=0,
+        help_text="Dinero ganado en esta jornada (puntos × 100.000€)"
+    )
+
+    class Meta:
+        unique_together = ('equipo', 'jornada')
+        verbose_name = 'Alineación Congelada'
+        verbose_name_plural = 'Alineaciones Congeladas'
+        ordering = ['jornada__numero', 'equipo__nombre']
+
+    def __str__(self):
+        return f"{self.equipo.nombre} - Jornada {self.jornada.numero}"
+
+>>>>>>> Stashed changes
 class Partido(models.Model):
     jornada = models.ForeignKey(Jornada, on_delete=models.CASCADE, related_name='partidos')
     equipo_local = models.ForeignKey(EquipoReal, on_delete=models.CASCADE, related_name='partidos_local')

@@ -1,4 +1,9 @@
 import PlayerCard from './PlayerCard';
+<<<<<<< Updated upstream
+=======
+import EmptySlot from './components/EmptySlot';
+import { useState } from 'react';
+>>>>>>> Stashed changes
 
 const FieldView = ({
   portero_titular,
@@ -9,8 +14,47 @@ const FieldView = ({
   onSellPlayer,
   onRemoveFromMarket,
   getPlayerState,
-  modoCambio = false
+  modoCambio = false,
+  onMoverJugadorAlineacion // ← Nueva prop para manejar el movimiento
 }) => {
+<<<<<<< Updated upstream
+=======
+  // Función para llenar slots vacíos
+  const fillSlots = (players, requiredCount, posicion) => {
+    const slots = [];
+    for (let i = 0; i < requiredCount; i++) {
+      if (players[i]) {
+        slots.push({ type: 'player', data: players[i], key: players[i].id });
+      } else {
+        slots.push({ 
+          type: 'empty', 
+          posicion, 
+          key: `empty-${posicion}-${i}`,
+          index: i // ← Añadimos el índice para identificar el slot
+        });
+      }
+    }
+    return slots;
+  };
+
+  // Filtrar banquillo por posición
+  const getJugadoresBanquilloPorPosicion = (posicion) => {
+    return banquillo.filter(jugador => jugador.posicion === posicion);
+  };
+
+  // Manejar selección de jugador para slot vacío
+  const handleSeleccionarJugador = (jugador, posicion, index) => {
+    if (onMoverJugadorAlineacion) {
+      onMoverJugadorAlineacion(jugador, posicion, index);
+    }
+  };
+
+  // Crear slots (siempre 1 POR, 2 DEF, 2 DEL)
+  const delanterosSlots = fillSlots(delanteros_titulares, 2, 'DEL');
+  const defensasSlots = fillSlots(defensas_titulares, 2, 'DEF');
+  const porteroSlots = fillSlots(portero_titular ? [portero_titular] : [], 1, 'POR');
+
+>>>>>>> Stashed changes
   return (
     <div className="space-y-8">
       {/* Campo de fútbol */}
@@ -33,6 +77,7 @@ const FieldView = ({
           <div className="relative z-10 h-96 flex flex-col justify-between py-4 pb-12">
             {/* Delanteros TITULARES */}
             <div className="flex justify-around px-24">
+<<<<<<< Updated upstream
               {delanteros_titulares.map((del, idx) => (
                 <PlayerCard 
                   key={del.id} 
@@ -44,11 +89,37 @@ const FieldView = ({
                   showRemoveButton={!modoCambio}
                   modoCambio={modoCambio}
                 />
+=======
+              {delanterosSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot 
+                    key={slot.key} 
+                    posicion="DEL"
+                    jugadoresBanquillo={getJugadoresBanquilloPorPosicion('DEL')}
+                    onSeleccionarJugador={(jugador) => 
+                      handleSeleccionarJugador(jugador, 'DEL', slot.index)
+                    }
+                    onClickBench={true}
+                  />
+                )
+>>>>>>> Stashed changes
               ))}
             </div>
 
             {/* Defensas TITULARES */}
             <div className="flex justify-around px-24">
+<<<<<<< Updated upstream
               {defensas_titulares.map((def, idx) => (
                 <PlayerCard 
                   key={def.id} 
@@ -60,11 +131,37 @@ const FieldView = ({
                   showRemoveButton={!modoCambio}
                   modoCambio={modoCambio}
                 />
+=======
+              {defensasSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot 
+                    key={slot.key} 
+                    posicion="DEF"
+                    jugadoresBanquillo={getJugadoresBanquilloPorPosicion('DEF')}
+                    onSeleccionarJugador={(jugador) => 
+                      handleSeleccionarJugador(jugador, 'DEF', slot.index)
+                    }
+                    onClickBench={true}
+                  />
+                )
+>>>>>>> Stashed changes
               ))}
             </div>
 
             {/* Portero TITULAR */}
             <div className="flex justify-center">
+<<<<<<< Updated upstream
               {portero_titular && (
                 <PlayerCard 
                   player={portero_titular}
@@ -76,6 +173,32 @@ const FieldView = ({
                   modoCambio={modoCambio}
                 />
               )}
+=======
+              {porteroSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot 
+                    key={slot.key} 
+                    posicion="POR"
+                    jugadoresBanquillo={getJugadoresBanquilloPorPosicion('POR')}
+                    onSeleccionarJugador={(jugador) => 
+                      handleSeleccionarJugador(jugador, 'POR', slot.index)
+                    }
+                    onClickBench={true}
+                  />
+                )
+              ))}
+>>>>>>> Stashed changes
             </div>
           </div>
         </div>
