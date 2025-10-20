@@ -12,6 +12,7 @@ import SaleConfirmationAnimation from './components/SaleConfirmationAnimation';
 import EmptyTeamMessage from './components/EmptyTeamMessage';
 import FieldSection from './components/FieldSection';
 import LoadingState from './components/LoadingState';
+import IncompleteLineupWarning from './components/IncompleteLineupWarning';
 
 const DashboardScreen = ({ datosUsuario, onRefresh }) => {
   const equipoId = datosUsuario?.equipo?.id;
@@ -336,6 +337,20 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   };
 
+  // Calcular posiciones faltantes
+  const calcularPosicionesFaltantes = () => {
+    const faltantes = [];
+    const porteros = jugadores.filter(j => j.posicion === 'POR' && !j.en_banquillo).length;
+    const defensas = jugadores.filter(j => j.posicion === 'DEF' && !j.en_banquillo).length;
+    const delanteros = jugadores.filter(j => j.posicion === 'DEL' && !j.en_banquillo).length;
+
+    if (porteros < 1) faltantes.push('POR');
+    if (defensas < 2) faltantes.push('DEF');
+    if (delanteros < 2) faltantes.push('DEL');
+
+    return faltantes;
+  };
+
   if (loading && !equipo) {
     return <LoadingState tipo="loading" />;
   }
@@ -382,6 +397,9 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
             loadingPosicion={loadingPosicion}
             formatValue={formatValue}
           />
+
+          {/* Advertencia de alineación incompleta */}
+          <IncompleteLineupWarning posicionesFaltantes={calcularPosicionesFaltantes()} />
 
           <FieldSection
             titularesCount={jugadores.filter(j => !j.en_banquillo).length}

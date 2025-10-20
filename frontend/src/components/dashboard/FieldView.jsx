@@ -1,4 +1,5 @@
 import PlayerCard from './PlayerCard';
+import EmptySlot from './components/EmptySlot';
 
 const FieldView = ({
   portero_titular,
@@ -11,6 +12,24 @@ const FieldView = ({
   getPlayerState,
   modoCambio = false
 }) => {
+  // Función para llenar slots vacíos
+  const fillSlots = (players, requiredCount, posicion) => {
+    const slots = [];
+    for (let i = 0; i < requiredCount; i++) {
+      if (players[i]) {
+        slots.push({ type: 'player', data: players[i], key: players[i].id });
+      } else {
+        slots.push({ type: 'empty', posicion, key: `empty-${posicion}-${i}` });
+      }
+    }
+    return slots;
+  };
+
+  // Crear slots (siempre 1 POR, 2 DEF, 2 DEL)
+  const delanterosSlots = fillSlots(delanteros_titulares, 2, 'DEL');
+  const defensasSlots = fillSlots(defensas_titulares, 2, 'DEF');
+  const porteroSlots = fillSlots(portero_titular ? [portero_titular] : [], 1, 'POR');
+
   return (
     <div className="space-y-8">
       {/* Campo de fútbol */}
@@ -31,51 +50,64 @@ const FieldView = ({
 
         <div className="relative z-10">
           <div className="relative z-10 h-96 flex flex-col justify-between py-4 pb-12">
-            {/* Delanteros TITULARES */}
+            {/* Delanteros TITULARES - Siempre 2 slots */}
             <div className="flex justify-around px-24">
-              {delanteros_titulares.map((del, idx) => (
-                <PlayerCard 
-                  key={del.id} 
-                  player={del}
-                  onSelect={onPlayerClick}
-                  onRemove={onSellPlayer}
-                  onRemoveFromMarket={onRemoveFromMarket}
-                  estado={getPlayerState(del)}
-                  showRemoveButton={!modoCambio}
-                  modoCambio={modoCambio}
-                />
+              {delanterosSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot key={slot.key} posicion="DEL" />
+                )
               ))}
             </div>
 
-            {/* Defensas TITULARES */}
+            {/* Defensas TITULARES - Siempre 2 slots */}
             <div className="flex justify-around px-24">
-              {defensas_titulares.map((def, idx) => (
-                <PlayerCard 
-                  key={def.id} 
-                  player={def}
-                  onSelect={onPlayerClick}
-                  onRemove={onSellPlayer}
-                  onRemoveFromMarket={onRemoveFromMarket}
-                  estado={getPlayerState(def)}
-                  showRemoveButton={!modoCambio}
-                  modoCambio={modoCambio}
-                />
+              {defensasSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot key={slot.key} posicion="DEF" />
+                )
               ))}
             </div>
 
-            {/* Portero TITULAR */}
+            {/* Portero TITULAR - Siempre 1 slot */}
             <div className="flex justify-center">
-              {portero_titular && (
-                <PlayerCard 
-                  player={portero_titular}
-                  onSelect={onPlayerClick}
-                  onRemove={onSellPlayer}
-                  onRemoveFromMarket={onRemoveFromMarket}
-                  estado={getPlayerState(portero_titular)}
-                  showRemoveButton={!modoCambio}
-                  modoCambio={modoCambio}
-                />
-              )}
+              {porteroSlots.map((slot) => (
+                slot.type === 'player' ? (
+                  <PlayerCard
+                    key={slot.key}
+                    player={slot.data}
+                    onSelect={onPlayerClick}
+                    onRemove={onSellPlayer}
+                    onRemoveFromMarket={onRemoveFromMarket}
+                    estado={getPlayerState(slot.data)}
+                    showRemoveButton={!modoCambio}
+                    modoCambio={modoCambio}
+                  />
+                ) : (
+                  <EmptySlot key={slot.key} posicion="POR" />
+                )
+              ))}
             </div>
           </div>
         </div>
