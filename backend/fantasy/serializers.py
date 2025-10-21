@@ -246,14 +246,65 @@ class JugadorMercadoSerializer(serializers.ModelSerializer):
     pujador_actual = serializers.CharField(source='equipo_pujador.nombre', read_only=True)
     expirado = serializers.SerializerMethodField()
     en_venta = serializers.BooleanField() 
-    
+    goles = serializers.IntegerField(read_only=True)
+    puntuaciones_jornadas = serializers.SerializerMethodField()
+    estadisticas = serializers.SerializerMethodField()
+    tipo = serializers.SerializerMethodField()
+    vendedor = serializers.CharField(source='equipo.nombre', read_only=True)
+
     class Meta:
         model = Jugador
         fields = [
             'id', 'nombre', 'posicion', 'equipo_real', 'equipo_real_nombre', 
             'valor', 'puntos_totales', 'en_venta', 'fecha_mercado',
-            'precio_venta', 'puja_actual', 'pujador_actual', 'expirado'
+            'precio_venta', 'puja_actual', 'pujador_actual', 'expirado',
+            'goles', 'puntuaciones_jornadas', 'estadisticas', 'tipo', 'vendedor'
         ]
     
     def get_expirado(self, obj):
         return obj.expirado
+
+    def get_puntuaciones_jornadas(self, obj):
+        try:
+            # 🆕 CORRECCIÓN: Usar el atributo prefetched o hacer la consulta
+            if hasattr(obj, 'puntuaciones_prefetched'):
+                puntuaciones = obj.puntuaciones_prefetched
+            else:
+                # Fallback si no hay prefetch
+                puntuaciones = Puntuacion.objects.filter(jugador=obj).select_related('jornada').order_by('jornada__numero')
+            
+            return PuntuacionJornadaSerializer(puntuaciones, many=True).data
+        except Exception as e:
+            print(f"❌ Error en get_puntuaciones_jornadas para {obj.nombre}: {e}")
+            return []
+
+    def get_estadisticas(self, obj):
+        try:
+            # 🆕 Usar datos prefetched o calcular desde puntuaciones
+            if hasattr(obj, 'puntuaciones_prefetched'):
+                puntuaciones = obj.puntuaciones_prefetched
+                goles_totales = sum(p.goles for p in puntuaciones)
+                partidos_jugados = len(puntuaciones)
+            else:
+                # Fallback
+                puntuaciones_count = Puntuacion.objects.filter(jugador=obj).count()
+                goles_totales = obj.goles or 0
+                partidos_jugados = puntuaciones_count
+            
+            return {
+                'goles': goles_totales,
+                'partidos_jugados': partidos_jugados,
+                'puntos_totales': obj.puntos_totales,
+            }
+        except Exception as e:
+            print(f"❌ Error en get_estadisticas para {obj.nombre}: {e}")
+            return {
+                'goles': obj.goles or 0,
+                'partidos_jugados': 0,
+                'puntos_totales': obj.puntos_totales or 0,
+            }
+
+    def get_tipo(self, obj):
+        if obj.equipo and obj.en_venta:
+            return 'venta_usuario'
+        return 'libre_rotatorio'

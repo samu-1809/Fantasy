@@ -7,6 +7,7 @@ import MercadoTab from './components/MercadoTab';
 import OfertasRecibidasTab from './components/OfertasRecibidasTab';
 import OfertasRealizadasTab from './components/OfertasRealizadasTab';
 import PujaModal from './components/PujaModal';
+import JugadorModal from './components/JugadorModal';
 import { ShoppingCart, TrendingUp, Users, AlertCircle } from 'lucide-react';
 import { retirarOferta, editarPuja, editarOferta } from '../../services/api';
 
@@ -31,8 +32,13 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
   const [loadingPuja, setLoadingPuja] = useState(false);
   const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
   
+  // 🆕 AGREGAR ESTOS ESTADOS FALTANTES
   const [modoEdicionPuja, setModoEdicionPuja] = useState(false);
   const [pujaEditando, setPujaEditando] = useState(null);
+  
+  // Estados para el modal de jugador
+  const [mostrarModalJugador, setMostrarModalJugador] = useState(false);
+  const [jugadorParaGrafico, setJugadorParaGrafico] = useState(null);
 
   const { 
     mercado, 
@@ -121,7 +127,19 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     };
   }, []);
 
-  // 🆕 Función para retirar ofertas
+  // Función para abrir modal de jugador
+  const handleAbrirModalJugador = (jugador) => {
+    setJugadorParaGrafico(jugador);
+    setMostrarModalJugador(true);
+  };
+
+  // Función para cerrar modal de jugador
+  const handleCerrarModalJugador = () => {
+    setMostrarModalJugador(false);
+    setJugadorParaGrafico(null);
+  };
+
+  // Función para retirar ofertas
   const handleRetirarOferta = async (ofertaId) => {
     if (!window.confirm('¿Estás seguro de que quieres retirar esta oferta? Se te devolverá el dinero.')) {
       return;
@@ -143,7 +161,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   };
 
-  // 🆕 Función para editar puja
+  // Función para editar puja
   const handleEditarPuja = async (pujaId, nuevoMonto) => {
     try {
       const resultado = await editarPuja(pujaId, nuevoMonto);
@@ -165,7 +183,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   };
 
-  // 🆕 Función para editar oferta
+  // Función para editar oferta
   const handleEditarOferta = async (ofertaId, nuevoMonto) => {
     try {
       const resultado = await editarOferta(ofertaId, nuevoMonto);
@@ -263,7 +281,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     }
   };
 
-  // 🆕 Función corregida para verificar si ya se pujó por un jugador
+  // Función corregida para verificar si ya se pujó por un jugador
   const yaPujadoPorJugador = (jugadorId) => {
     console.log('🔍 Verificando pujas para jugador:', jugadorId);
     
@@ -332,7 +350,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     setMostrarModalPuja(true);
   };
 
-  // 🆕 Función corregida para manejar pujas
+  // Función corregida para manejar pujas
   const handlePujar = (jugador) => {
     console.log('🎯 Intentando pujar por:', jugador);
     
@@ -349,7 +367,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
       }
     }
 
-    // 🆕 CORRECCIÓN: Permitir pujar en cualquier tipo de venta que esté en el mercado
+    // CORRECCIÓN: Permitir pujar en cualquier tipo de venta que esté en el mercado
     // El mercado incluye tanto subastas como ventas directas de usuarios
     setJugadorSeleccionado(jugador);
     setModoEdicionPuja(false);
@@ -388,9 +406,15 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
         return;
       }
     } else if (jugadorSeleccionado) {
-      montoMinimo = (jugadorSeleccionado.valor || 0) + 1;
-      if (monto <= montoMinimo) {
-        alert(`❌ La puja debe ser mayor que el valor del jugador (€${formatNumber(montoMinimo)})`);
+      // CALCULAR MONTO MÍNIMO: Si es venta de usuario usar precio_venta, sino valor + 1
+      if (jugadorSeleccionado.tipo === 'venta_usuario' && jugadorSeleccionado.precio_venta) {
+        montoMinimo = jugadorSeleccionado.precio_venta;
+      } else {
+        montoMinimo = (jugadorSeleccionado.valor || 0) + 1;
+      }
+      
+      if (monto < montoMinimo) {
+        alert(`❌ La puja debe ser al menos €${formatNumber(montoMinimo)}`);
         return;
       }
 
@@ -458,7 +482,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
     return esMiJugador;
   };
 
-  // 🆕 Función corregida para verificar si se puede pujar
+  // Función corregida para verificar si se puede pujar
   const puedePujarPorJugador = (jugador) => {
     console.log('🔍 Verificando si se puede pujar por:', jugador.nombre);
     
@@ -671,6 +695,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                   limpiarFiltros={limpiarFiltros}
                   handlePujar={handlePujar}
                   handleActualizar={handleActualizar}
+                  onPlayerClick={handleAbrirModalJugador}
                   loading={loading}
                   formatValue={formatValue}
                   formatNormalValue={formatNormalValue}
@@ -701,7 +726,7 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
                   handleEditarPuja={handleEditarPuja}
                   handleRetirarPuja={handleRetirarPuja}
                   handleRetirarOferta={handleRetirarOferta}
-                  handleEditarOferta={handleEditarOferta} // 🆕 Pasar la nueva función
+                  handleEditarOferta={handleEditarOferta}
                   formatNormalValue={formatNormalValue}
                   totalJugadores={totalJugadores}
                   maxJugadores={maxJugadores}
@@ -728,6 +753,16 @@ const MarketScreen = ({ datosUsuario, onFichajeExitoso }) => {
         formatNumber={formatNumber}
         datosUsuario={datosUsuario}
       />
+
+      {/* Modal para mostrar gráfico de jugador */}
+      {mostrarModalJugador && jugadorParaGrafico && (
+        <JugadorModal
+          jugador={jugadorParaGrafico}
+          onClose={handleCerrarModalJugador}
+          formatValue={formatValue}
+          formatNumber={formatNumber}
+        />
+      )}
     </div>
   );
 };

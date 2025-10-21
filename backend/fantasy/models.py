@@ -190,8 +190,6 @@ class Puntuacion(models.Model):
     def __str__(self):
         return f"{self.jugador.nombre} - J{self.jornada.numero}: {self.puntos} pts"
 
-<<<<<<< Updated upstream
-=======
 class AlineacionCongelada(models.Model):
     """
     Snapshot de la alineación de un equipo en una jornada específica.
@@ -240,7 +238,6 @@ class AlineacionCongelada(models.Model):
     def __str__(self):
         return f"{self.equipo.nombre} - Jornada {self.jornada.numero}"
 
->>>>>>> Stashed changes
 class Partido(models.Model):
     jornada = models.ForeignKey(Jornada, on_delete=models.CASCADE, related_name='partidos')
     equipo_local = models.ForeignKey(EquipoReal, on_delete=models.CASCADE, related_name='partidos_local')
@@ -317,8 +314,8 @@ class Oferta(models.Model):
     ]
     
     jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='ofertas')
-    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas')
-    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas')
+    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas', null=True, blank=True)
+    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas', null=True, blank=True)
     monto = models.IntegerField()
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     fecha_oferta = models.DateTimeField(auto_now_add=True)
@@ -328,10 +325,11 @@ class Oferta(models.Model):
         ordering = ['-fecha_oferta']
     
     def __str__(self):
-        return f"{self.equipo_ofertante.nombre} -> {self.jugador.nombre} (${self.monto})"
+        equipo_ofertante_nombre = self.equipo_ofertante.nombre if self.equipo_ofertante else "Equipo Desconocido"
+        return f"{equipo_ofertante_nombre} -> {self.jugador.nombre} (${self.monto})"
     
     def aceptar(self):
-        if self.estado == 'pendiente':
+        if self.estado == 'pendiente' and self.equipo_ofertante and self.equipo_receptor:
             self.estado = 'aceptada'
             self.fecha_respuesta = timezone.now()
             self.save()

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Users, TrendingUp, Crown, Medal, Star, Target, Calendar, X } from 'lucide-react';
 import { getClasificacion, getPlantillaEquipo, getPuntuacionesJugador, crearOfertaDirecta} from '../../services/api';
-import FieldView from '../dashboard/FieldView';
+import FieldSection from '../dashboard/components/FieldSection';
 import MiniGrafico from '../market/components/MiniGrafico';
 
 const RankingsScreen = ({ datosUsuario }) => {
@@ -15,7 +15,7 @@ const RankingsScreen = ({ datosUsuario }) => {
   const [alineacion, setAlineacion] = useState(null);
   const [loadingAlineacion, setLoadingAlineacion] = useState(false);
   
-  // 🆕 Estados para el nuevo modal de jugador
+  // Estados para el modal de jugador
   const [mostrarModalJugador, setMostrarModalJugador] = useState(false);
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState(null);
   const [puntuacionesJugador, setPuntuacionesJugador] = useState([]);
@@ -25,7 +25,7 @@ const RankingsScreen = ({ datosUsuario }) => {
   const [montoOferta, setMontoOferta] = useState('');
   const [enviandoOferta, setEnviandoOferta] = useState(false);
 
-  // 🆕 Obtener ID del equipo del usuario
+  // Obtener ID del equipo del usuario
   const miEquipoId = datosUsuario?.equipo?.id;
 
   useEffect(() => {
@@ -52,15 +52,14 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
   };
 
-  // 🆕 Función para verificar si un equipo es el del usuario
+  // Función para verificar si un equipo es el del usuario
   const esMiEquipo = (equipo) => {
     const equipoId = equipo.id || equipo.equipo_id;
     return miEquipoId && equipoId && miEquipoId === equipoId;
   };
 
-
   const handleTeamClick = async (equipo) => {
-    // 🆕 No permitir clic en el equipo propio
+    // No permitir clic en el equipo propio
     if (esMiEquipo(equipo)) {
       return;
     }
@@ -111,7 +110,19 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
   };
 
-  // 🆕 Función mejorada para manejar clic en jugador
+  // 🆕 Función para obtener jugadores del banquillo por posición (para FieldSection)
+  const getJugadoresBanquilloPorPosicion = (posicion) => {
+    if (!alineacion?.banquillo || !Array.isArray(alineacion.banquillo)) return [];
+    
+    return alineacion.banquillo.filter(jugador => 
+      jugador && jugador.posicion === posicion && jugador.en_banquillo === true
+    );
+  };
+
+  // 🆕 Función dummy para getPlayerState (solo lectura)
+  const getPlayerState = () => 'normal';
+
+  // Función mejorada para manejar clic en jugador
   const handlePlayerClick = async (jugador) => {
     if (!jugador) return;
     
@@ -122,7 +133,7 @@ const RankingsScreen = ({ datosUsuario }) => {
       console.log(`🔍 Cargando puntuaciones del jugador: ${jugador.id}`);
       const puntuaciones = await getPuntuacionesJugador(jugador.id);
       
-      // 🆕 Formatear puntuaciones para el MiniGrafico
+      // Formatear puntuaciones para el MiniGrafico
       const puntuacionesFormateadas = puntuaciones.map((p, index) => ({
         jornada_numero: p.jornada || index + 1,
         puntos: p.puntos || 0
@@ -133,7 +144,7 @@ const RankingsScreen = ({ datosUsuario }) => {
       
     } catch (err) {
       console.error('❌ Error cargando puntuaciones:', err);
-      // 🆕 Mostrar modal con array vacío si hay error
+      // Mostrar modal con array vacío si hay error
       setPuntuacionesJugador([]);
       setMostrarModalJugador(true);
     } finally {
@@ -141,13 +152,29 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
   };
 
-  // 🆕 Función para hacer oferta desde el modal
+  // 🆕 Funciones dummy para FieldSection (solo lectura)
+  const handlePonerEnVenta = () => {
+    // No hacer nada en modo solo lectura
+    console.log('🛑 Modo solo lectura - venta deshabilitada');
+  };
+
+  const handleQuitarDelMercado = () => {
+    // No hacer nada en modo solo lectura
+    console.log('🛑 Modo solo lectura - quitar del mercado deshabilitado');
+  };
+
+  const handleMoverJugadorAlineacion = () => {
+    // No hacer nada en modo solo lectura
+    console.log('🛑 Modo solo lectura - mover jugador deshabilitado');
+  };
+
+  // Función para hacer oferta desde el modal
   const handleHacerOfertaDesdeModal = () => {
     setMostrarModalJugador(false);
     setMostrarOferta(true);
   };
 
-  // 🆕 Función para cerrar modal de jugador
+  // Función para cerrar modal de jugador
   const cerrarModalJugador = () => {
     setMostrarModalJugador(false);
     setJugadorSeleccionado(null);
@@ -228,7 +255,7 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
   };
 
-  // 🆕 Función para obtener clases CSS condicionales
+  // Función para obtener clases CSS condicionales
   const getClasesFilaEquipo = (equipo) => {
     const baseClasses = `p-4 transition-all duration-200 ${getPosicionColor(equipo.posicion || index + 1)}`;
     
@@ -237,6 +264,26 @@ const RankingsScreen = ({ datosUsuario }) => {
     }
     
     return `${baseClasses} hover:shadow-md hover:scale-[1.02] cursor-pointer`;
+  };
+
+  // 🆕 Calcular contadores para FieldSection
+  const calcularTitularesCount = () => {
+    if (!alineacion) return 0;
+    return (
+      (alineacion.portero_titular ? 1 : 0) +
+      (alineacion.defensas_titulares?.length || 0) +
+      (alineacion.delanteros_titulares?.length || 0)
+    );
+  };
+
+  const calcularTotalCount = () => {
+    if (!alineacion) return 0;
+    return (
+      (alineacion.portero_titular ? 1 : 0) +
+      (alineacion.defensas_titulares?.length || 0) +
+      (alineacion.delanteros_titulares?.length || 0) +
+      (alineacion.banquillo?.length || 0)
+    );
   };
 
   if (loading) {
@@ -427,18 +474,27 @@ const RankingsScreen = ({ datosUsuario }) => {
                         <div className="w-2 h-6 bg-blue-500 rounded-full"></div>
                         Alineación del Equipo
                       </h3>
-                      <FieldView
-                        portero_titular={alineacion.portero_titular}
-                        defensas_titulares={alineacion.defensas_titulares || []}
-                        delanteros_titulares={alineacion.delanteros_titulares || []}
-                        banquillo={alineacion.banquillo || []}
-                        onPlayerClick={handlePlayerClick}
-                        onSellPlayer={() => {}}
-                        getPlayerState={() => 'normal'}
-                        modoCambio={false}
-                        soloLectura={true}
-                        mostrarBotonesVenta={false}
-                      />
+                      
+                      {/* 🆕 CAMBIO PRINCIPAL: FieldSection unificado reemplaza FieldView */}
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200">
+                        <FieldSection
+                          titularesCount={calcularTitularesCount()}
+                          totalCount={calcularTotalCount()}
+                          onRefresh={() => {}} // No hay refresco en modo lectura
+                          // Props específicas del campo
+                          portero_titular={alineacion.portero_titular}
+                          defensas_titulares={alineacion.defensas_titulares || []}
+                          delanteros_titulares={alineacion.delanteros_titulares || []}
+                          banquillo={alineacion.banquillo || []}
+                          onPlayerClick={handlePlayerClick}
+                          onSellPlayer={handlePonerEnVenta} // Dummy function
+                          onRemoveFromMarket={handleQuitarDelMercado} // Dummy function
+                          getPlayerState={getPlayerState}
+                          modoCambio={false} // Siempre false en modo lectura
+                          onMoverJugadorAlineacion={handleMoverJugadorAlineacion} // Dummy function
+                          getJugadoresBanquilloPorPosicion={getJugadoresBanquilloPorPosicion}
+                        />
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -453,10 +509,10 @@ const RankingsScreen = ({ datosUsuario }) => {
           </div>
         )}
 
-        {/* 🆕 MODAL DE JUGADOR CON GRÁFICO */}
+        {/* MODAL DE JUGADOR CON GRÁFICO */}
         {mostrarModalJugador && jugadorSeleccionado && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full"> {/* 🆕 Modal más ancho */}
               {/* Header del Modal */}
               <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
                 <div className="flex justify-between items-center">
@@ -486,9 +542,6 @@ const RankingsScreen = ({ datosUsuario }) => {
 
               {/* Sección del Gráfico */}
               <div className="p-6 border-b border-gray-200">
-                <h4 className="text-lg font-semibold mb-4 text-gray-800">
-                  Rendimiento por Jornada
-                </h4>
                 {loadingPuntuaciones ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -566,7 +619,7 @@ const RankingsScreen = ({ datosUsuario }) => {
                       type="text"
                       value={montoOferta ? formatNumber(montoOferta) : ''}
                       onChange={(e) => {
-                        // 🆕 Permitir solo números y eliminar puntos para el cálculo
+                        // Permitir solo números y eliminar puntos para el cálculo
                         const numericValue = e.target.value.replace(/[^\d]/g, '');
                         setMontoOferta(numericValue);
                       }}
