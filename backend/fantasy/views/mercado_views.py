@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from django.core.cache import cache
@@ -6,8 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from datetime import timedelta
 from django.db import transaction
-from ..models import Jugador, Oferta, Puja, Liga, Equipo
+from ..models import Jugador, Oferta, Puja, Liga, Equipo, Puntuacion
 from ..serializers import OfertaSerializer, PujaSerializer, JugadorMercadoSerializer
+
 
 class MercadoViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -32,6 +34,13 @@ class MercadoViewSet(viewsets.ViewSet):
         ahora = timezone.now()
         limite_expiracion = ahora - timedelta(hours=24)
         
+        # 🆕 PREFETCH CRÍTICO: Cargar puntuaciones relacionadas
+        puntuaciones_prefetch = Prefetch(
+            'puntuacion_set',
+            queryset=Puntuacion.objects.select_related('jornada').order_by('jornada__numero'),
+            to_attr='puntuaciones_prefetched'
+        )
+        
         # 1. JUGADORES LIBRES FIJOS (máximo 8, mismo lote por 24h)
         jugadores_libres = Jugador.objects.filter(
             equipo__isnull=True,
@@ -39,24 +48,32 @@ class MercadoViewSet(viewsets.ViewSet):
             fecha_mercado__isnull=False,
             fecha_mercado__gte=limite_expiracion,
             en_venta=True
-        ).order_by('id')
+        ).prefetch_related(puntuaciones_prefetch).order_by('id')
         
         # 2. JUGADORES EN VENTA POR USUARIOS
         jugadores_en_venta = Jugador.objects.filter(
             en_venta=True,
             equipo__isnull=False,
             equipo__liga=liga
-        ).exclude(fecha_mercado__lt=limite_expiracion)
+        ).exclude(fecha_mercado__lt=limite_expiracion).prefetch_related(puntuaciones_prefetch)
         
         # Combinar y serializar
         todos_jugadores = list(jugadores_libres) + list(jugadores_en_venta)
-        serializer = JugadorMercadoSerializer(todos_jugadores, many=True)
+        
+        # 🆕 Pasar el contexto con la fecha actual para cálculos de expiración
+        serializer = JugadorMercadoSerializer(
+            todos_jugadores, 
+            many=True,
+            context={'ahora': ahora}  # 🆕 IMPORTANTE: Pasar contexto
+        )
         
         # Añadir información adicional
         data = serializer.data
         for jugador_data in data:
-            jugador = Jugador.objects.get(id=jugador_data['id'])
-            
+            jugador = next((j for j in todos_jugadores if j.id == jugador_data['id']), None)
+            if not jugador:
+                continue
+                
             jugador_data['en_venta'] = jugador.en_venta
             
             if jugador.equipo:

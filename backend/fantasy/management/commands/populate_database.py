@@ -88,204 +88,204 @@ class Command(BaseCommand):
         # Mapeo de equipos reales por nombre
         equipos_dict = {equipo.nombre.upper(): equipo for equipo in equipos_reales}
         
-        # Datos REALES de jugadores extraídos del PDF
+        # Datos REALES de jugadores extraídos del PDF con posiciones reales
         jugadores_data = {
             'BARFLEUR': [
-                'Adrian Soteras Iso',
-                'Aimar Azcarate Blanco',
-                'Altzol Puga Saez',
-                'Eduardo Echegoyen Guindano',
-                'Gorka Pilas Machain',
-                'Hugo Bielsa Sola',
-                'Hugo Perez Sanz Galdeano',
-                'Iñigo Rebole Guindado',
-                'Oscar Gutierrez Elizalde',
-                'Sancho Zia Usoz',
-                'Teo Villacampa Apesteguia',
-                'Tomas Torres Granda',
+                ('Adrian Soteras Iso', 'DEL'),
+                ('Aimar Azcarate Blanco', 'DEF'),
+                ('Altzol Puga Saez', 'DEL'),
+                ('Eduardo Echegoyen Guindano', 'DEF'),
+                ('Gorka Pilas Machain', 'DEF'),
+                ('Hugo Bielsa Sola', 'DEL'),
+                ('Hugo Perez Sanz Galdeano', 'DEL'),
+                ('Iñigo Rebole Guindado', 'POR'),
+                ('Oscar Gutierrez Elizalde', 'DEF'),
+                ('Sancho Zia Usoz', 'POR'),
+                ('Teo Villacampa Apesteguia', 'DEL'),
+                ('Tomas Torres Granda', 'DEL'),
             ],
             'CD AIBARES-EX': [
-                'Alberto Garro Baztan',
-                'Ander Cibirian Andueza',
-                'Angel Ibero Artieda',
-                'Asier Labay Santesteban',
-                'Cesar Arbeloa Irigoyen',
-                'Gorka Aldunate Continente',
-                'Iker Ibero Iriarte',
-                'Imanol Ibero Azcarate',
-                'Iñigo Garde Alzueta',
-                'Iñigo Perez Ortiz',
-                'Ion Irigoyen Martinez',
-                'Javier Murillo',
-                'Julen Martinez Orcaray',
-                'Mikel Fanlo Iso',
-                'Mikel Iparaguirre Leoz',
-                'Samuel Gil Zabaleta',
-                'Ugaitz Martinez Remon',
+                ('Alberto Garro Baztan', 'DEF'),
+                ('Ander Cibirian Andueza', 'DEL'),
+                ('Angel Ibero Artieda', 'DEF'),
+                ('Asier Labay Santesteban', 'POR'),
+                ('Cesar Arbeloa Irigoyen', 'DEF'),
+                ('Gorka Aldunate Continente', 'DEF'),
+                ('Iker Ibero Iriarte', 'DEL'),
+                ('Imanol Ibero Azcarate', 'DEF'),
+                ('Iñigo Garde Alzueta', 'DEF'),
+                ('Iñigo Perez Ortiz', 'DEF'),
+                ('Ion Irigoyen Martinez', 'DEF'),
+                ('Javier Murillo', 'DEL'),
+                ('Julen Martinez Orcaray', 'DEL'),
+                ('Mikel Fanlo Iso', 'DEL'),
+                ('Mikel Iparaguirre Leoz', 'DEL'),
+                ('Samuel Gil Zabaleta', 'DEL'),
+                ('Ugaitz Martinez Remon', 'DEF'),
             ],
             'F.C BOTAFUMEIRO': [
-                'Adrian Guerrero Narvaiz',
-                'Breogan Gonzalez Cereijo',
-                'Charlie Fernando Iriarte',
-                'Erick Choco',
-                'Javi Gallego Caballero',
-                'Jean Pierre Sanches Vivanco',
-                'Jinno Anderson Zhunio',
-                'Josu Xabier Agreda Jaramillo',
-                'Jull Iker Agreda Jaramillo',
-                'Luis Maykol Romero Ramon',
-                'Marco Riofrio Ordoñez',
-                'Moundir El Mehdi',
-                'Steeven Granda Hidalgo',
-                'Yeison Granda Hidalgo',
+                ('Adrian Guerrero Narvaiz', 'DEF'),
+                ('Breogan Gonzalez Cereijo', 'DEL'),
+                ('Charlie Fernando Iriarte', 'DEF'),
+                ('Erick Choco', 'DEL'),
+                ('Javi Gallego Caballero', 'DEF'),
+                ('Jean Pierre Sanches Vivanco', 'DEL'),
+                ('Jinno Anderson Zhunio', 'POR'),
+                ('Josu Xabier Agreda Jaramillo', 'DEL'),
+                ('Jull Iker Agreda Jaramillo', 'DEL'),
+                ('Luis Maykol Romero Ramon', 'DEF'),
+                ('Marco Riofrio Ordoñez', 'DEF'),
+                ('Moundir El Mehdi', 'DEL'),
+                ('Steeven Granda Hidalgo', 'DEF'),
+                ('Yeison Granda Hidalgo', 'DEF'),
             ],
             'F.C SCHALKE': [
-                'Adrian Navarro Hualde',
-                'Aimar Ibañez Amatrian',
-                'Aimar Rebole Villahoz',
-                'Ander Erdozain',
-                'Daniel Gallo Juan',
-                'David Gil Zarategui',
-                'Enaitz Pardo Fernandez',
-                'German Bielsa Sola',
-                'Guillermo Ochoa Reta',
-                'Juan Blanco Almarcegui',
-                'Lucas Garces Perez',
-                'Unai Ojer Fernandez',
-                'Xabier Rebole Guindano',
+                ('Adrian Navarro Hualde', 'DEL'),
+                ('Aimar Ibañez Amatrian', 'DEF'),
+                ('Aimar Rebole Villahoz', 'DEL'),
+                ('Ander Erdozain', 'DEL'),
+                ('Daniel Gallo Juan', 'DEL'),
+                ('David Gil Zarategui', 'DEL'),
+                ('Enaitz Pardo Fernandez', 'DEL'),
+                ('German Bielsa Sola', 'DEL'),
+                ('Guillermo Ochoa Reta', 'DEF'),
+                ('Juan Blanco Almarcegui', 'POR'),
+                ('Lucas Garces Perez', 'DEF'),
+                ('Unai Ojer Fernandez', 'DEF'),
+                ('Xabier Rebole Guindano', 'DEF'),
             ],
             'LASAI F.C': [
-                'Alfredo Machin Anso',
-                'Alvaro Iriarte Iriarte',
-                'Cesar de Carlos Goñi',
-                'Diego Gimeno Cajal',
-                'Diego Gomez Cifrain',
-                'Eduardo Juanto Vidondo',
-                'Ekaitz Sanz Domeño',
-                'Ibon Ollo Jimenez',
-                'Iker Ariz Cabodevilla',
-                'Iker Iturbide Jimenez',
-                'Iñaki Cajal Ozcoidi',
-                'Iñaki Mugueta Guillen',
-                'Iñigo Burguete Esquisabel',
-                'Jon Bengoetxea Mendioroz',
-                'Roberto Perez Cajal',
-                'Unai Abaurrea Abadia',
-                'Xabier Gamboa Apolicourt',
-                'Xabier Iturbide Monzon',
+                ('Alfredo Machin Anso', 'DEL'),
+                ('Alvaro Iriarte Iriarte', 'DEL'),
+                ('Cesar de Carlos Goñi', 'DEF'),
+                ('Diego Gimeno Cajal', 'DEL'),
+                ('Diego Gomez Cifrain', 'DEF'),
+                ('Eduardo Juanto Vidondo', 'DEL'),
+                ('Ekaitz Sanz Domeño', 'DEL'),
+                ('Ibon Ollo Jimenez', 'DEL'),
+                ('Iker Ariz Cabodevilla', 'DEF'),
+                ('Iker Iturbide Jimenez', 'DEF'),
+                ('Iñaki Cajal Ozcoidi', 'DEF'),
+                ('Iñaki Mugueta Guillen', 'DEF'),
+                ('Iñigo Burguete Esquisabel', 'DEL'),
+                ('Jon Bengoetxea Mendioroz', 'DEF'),
+                ('Roberto Perez Cajal', 'DEF'),
+                ('Unai Abaurrea Abadia', 'DEF'),
+                ('Xabier Gamboa Apolicourt', 'POR'),
+                ('Xabier Iturbide Monzon', 'DEF'),
             ],
             'MAKILAKIXKI F.C': [
-                'Adrian Martinez Perez',
-                'Adrian Pueyo Gallo',
-                'Aitor Blanco Iso',
-                'Alberto Lecumberri Del Castillo',
-                'Alvaro Del Castillo Mallada',
-                'Ander Bandres Abadia',
-                'Asier Bandres Abadia',
-                'Asier Jimenez Anaut',
-                'Egoitz Arguiñariz Vital',
-                'Fermin Ingelmo Guerrero',
-                'Gabriel Guallar Areta',
-                'Ion Perez Goñi',
-                'Ivan Ramos Arlegui',
-                'Jesus Oiza Ibañez',
-                'Miguel Rodrigues Pona',
-                'Mikel Ruiz Lorenzo',
-                'Oscar Guillen Gil',
-                'Samuel Gomez Jauregui',
+                ('Adrian Martinez Perez', 'DEL'),
+                ('Adrian Pueyo Gallo', 'POR'),
+                ('Aitor Blanco Iso', 'DEF'),
+                ('Alberto Lecumberri Del Castillo', 'DEF'),
+                ('Alvaro Del Castillo Mallada', 'DEF'),
+                ('Ander Bandres Abadia', 'DEF'),
+                ('Asier Bandres Abadia', 'DEL'),
+                ('Asier Jimenez Anaut', 'DEL'),
+                ('Egoitz Arguiñariz Vital', 'DEL'),
+                ('Fermin Ingelmo Guerrero', 'DEF'),
+                ('Gabriel Guallar Areta', 'DEL'),
+                ('Ion Perez Goñi', 'DEL'),
+                ('Ivan Ramos Arlegui', 'DEL'),
+                ('Jesus Oiza Ibañez', 'DEF'),
+                ('Miguel Rodrigues Pona', 'DEF'),
+                ('Mikel Ruiz Lorenzo', 'POR'),
+                ('Oscar Guillen Gil', 'DEL'),
+                ('Samuel Gomez Jauregui', 'DEF'),
             ],
             'PIKATOSTES': [
-                'Aitor Saenz Juanenea',
-                'Alejandro Urricelqui Sadaba',
-                'Aratz Pardo Fernandez',
-                'Egoi Sancet Eslava',
-                'Eneko Carreño Roldan',
-                'Hugo Sarvide Conte',
-                'Imanol Garces Yabar',
-                'Iraitz Arguiñariz Vital',
-                'Ivan de Lucas Santos',
-                'Jon Carmona Burguete',
-                'Oier Sola Leiza'
+                ('Aitor Saenz Juanenea', 'DEF'),
+                ('Alejandro Urricelqui Sadaba', 'DEL'),
+                ('Aratz Pardo Fernandez', 'POR'),
+                ('Egoi Sancet Eslava', 'DEF'),
+                ('Eneko Carreño Roldan', 'DEL'),
+                ('Hugo Sarvide Conte', 'DEF'),
+                ('Imanol Garces Yabar', 'DEF'),
+                ('Iraitz Arguiñariz Vital', 'DEL'),
+                ('Ivan de Lucas Santos', 'DEL'),
+                ('Jon Carmona Burguete', 'DEL'),
+                ('Oier Sola Leiza', 'DEF')
             ],
             'PIÑA SIN MALIBU': [
-                'Alberto Bustingorri Eguaras',
-                'Alvaro Rocafort Beorlegui',
-                'Aritz Lacosta Sanchez',
-                'Carlos Cardenas Pino',
-                'Diego Echeverri Bandres',
-                'Gabriel Echeverri Bandres',
-                'Gonzalo Oiza Irribaren',
-                'Imanol Dominguez Gracia',
-                'Ivan Chamorro Navarro',
-                'Javier Hualde Gonzalez',
-                'Jon Turrillas Bandres',
-                'Mikel Landarech Vicente',
-                'Mikel Valero Gonzalez',
-                'Oier Iturbide Perez',
-                'Samuel Gil Ubani',
+                ('Alberto Bustingorri Eguaras', 'DEL'),
+                ('Alvaro Rocafort Beorlegui', 'DEF'),
+                ('Aritz Lacosta Sanchez', 'DEL'),
+                ('Carlos Cardenas Pino', 'POR'),
+                ('Diego Echeverri Bandres', 'DEL'),
+                ('Gabriel Echeverri Bandres', 'DEF'),
+                ('Gonzalo Oiza Irribaren', 'DEF'),
+                ('Imanol Dominguez Gracia', 'DEF'),
+                ('Ivan Chamorro Navarro', 'DEF'),
+                ('Javier Hualde Gonzalez', 'DEL'),
+                ('Jon Turrillas Bandres', 'DEL'),
+                ('Mikel Landarech Vicente', 'DEF'),
+                ('Mikel Valero Gonzalez', 'DEF'),
+                ('Oier Iturbide Perez', 'DEF'),
+                ('Samuel Gil Ubani', 'DEL'),
             ],
             'PIZZARIN F.C': [
-                'Eric Molero Garcia',
-                'Inhar Suescun Boneta',
-                'Iñigo Perez Mutiloa',
-                'Ivan Bandres Ozcoidi',
-                'Jorge Huelva Semitiel',
-                'Juan Arbea Irigoyen',
-                'Leandro Tapia Peña',
-                'Samuel Arbea Irigoyen',
-                'Sergio Navarro Valde',
-                'Xabier Errea Villacampa',
-                'Yassin Jaiti',
+                ('Eric Molero Garcia', 'DEL'),
+                ('Inhar Suescun Boneta', 'DEF'),
+                ('Iñigo Perez Mutiloa', 'DEF'),
+                ('Ivan Bandres Ozcoidi', 'DEF'),
+                ('Jorge Huelva Semitiel', 'DEL'),
+                ('Juan Arbea Irigoyen', 'DEL'),
+                ('Leandro Tapia Peña', 'POR'),
+                ('Samuel Arbea Irigoyen', 'DEL'),
+                ('Sergio Navarro Valde', 'DEL'),
+                ('Xabier Errea Villacampa', 'DEF'),
+                ('Yassin Jaiti', 'DEL'),
             ],
             'SANZOILO TEAM': [
-                'Andres Felipe Cardenas',
-                'Aritza Jose Villalba',
-                'Arturo Jimenez Gimenez',
-                'Braian Carbonel Jimenez',
-                'Daniel Torrea',
-                'Ivan Torrea',
-                'Javier Sola Alustiza',
-                'Jean Pierre Giraldo',
-                'Marcos Jimenez Gimenez',
-                'Miguel Angel Jauregui Valencia',
-                'Oscar Obed Luque Bustillo',
-                'Paul Alim Dumitru',
-                'Ricardo Gimenez Segura',
-                'Rothman Ortiz Bustillo',
-                'Adrian Aznar Ayape',
+                ('Andres Felipe Cardenas', 'DEF'),
+                ('Aritza Jose Villalba', 'DEL'),
+                ('Arturo Jimenez Gimenez', 'DEL'),
+                ('Braian Carbonel Jimenez', 'DEF'),
+                ('Daniel Torrea', 'DEL'),
+                ('Ivan Torrea', 'DEL'),
+                ('Javier Sola Alustiza', 'DEL'),
+                ('Jean Pierre Giraldo', 'DEF'),
+                ('Marcos Jimenez Gimenez', 'DEF'),
+                ('Miguel Angel Jauregui Valencia', 'POR'),
+                ('Oscar Obed Luque Bustillo', 'DEL'),
+                ('Paul Alim Dumitru', 'DEF'),
+                ('Ricardo Gimenez Segura', 'DEF'),
+                ('Rothman Ortiz Bustillo', 'DEL'),
+                ('Adrian Aznar Ayape', 'DEF'),
             ],
             'SPOLKA': [
-                'Adrian Echeverri Val',
-                'Adrian Segura Rocha',
-                'Alejandro Gallo Taboada',
-                'Alvaro Muiños Abadia',
-                'Andres Iriarte Salinas',
-                'Antonio Valencia Jauregui',
-                'Arkaitz Molero Gonzalez',
-                'Asier Perez Sanchez',
-                'Daniel Mateo Berkamans',
-                'Daniel Montañes Alvarez',
-                'Iñaki Urbia Alaman',
-                'Javier Artajo Jimenez',
-                'Mikel Segurola Baranda',
-                'Pablo Gorriz Irigoyen',
-                'Pablo Labairu',
-                'Sergio Jauregui Vizcay',
-                'Tasio Villacampa Apestegui',
+                ('Adrian Echeverri Val', 'DEL'),
+                ('Adrian Segura Rocha', 'DEF'),
+                ('Alejandro Gallo Taboada', 'DEF'),
+                ('Alvaro Muiños Abadia', 'DEL'),
+                ('Andres Iriarte Salinas', 'POR'),
+                ('Antonio Valencia Jauregui', 'DEL'),
+                ('Arkaitz Molero Gonzalez', 'DEF'),
+                ('Asier Perez Sanchez', 'DEF'),
+                ('Daniel Mateo Berkamans', 'DEF'),
+                ('Daniel Montañes Alvarez', 'DEL'),
+                ('Iñaki Urbia Alaman', 'DEL'),
+                ('Javier Artajo Jimenez', 'DEL'),
+                ('Mikel Segurola Baranda', 'DEF'),
+                ('Pablo Gorriz Irigoyen', 'DEL'),
+                ('Pablo Labairu', 'DEF'),
+                ('Sergio Jauregui Vizcay', 'DEF'),
+                ('Tasio Villacampa Apestegui', 'POR'),
             ],
             'VISEU': [
-                'Adrian del Castillo Guindano',
-                'Asier Acaro Riofrio',
-                'Dario Choco',
-                'Iker Ibañez Lacosta',
-                'Iñaki Jimenez Moriones',
-                'Iñigo Gutierrez Elizalde',
-                'Javier Plano Contin',
-                'Julen Aranguren Conde',
-                'Julen Lacasa Begue',
-                'Martin Gallo Juan',
-                'Pablo Val Martin',
-                'Ruben Ingelmo Guerrero',
+                ('Adrian del Castillo Guindano', 'DEL'),
+                ('Asier Acaro Riofrio', 'DEF'),
+                ('Dario Choco', 'DEF'),
+                ('Iker Ibañez Lacosta', 'DEL'),
+                ('Iñaki Jimenez Moriones', 'DEF'),
+                ('Iñigo Gutierrez Elizalde', 'POR'),
+                ('Javier Plano Contin', 'DEF'),
+                ('Julen Aranguren Conde', 'DEL'),
+                ('Julen Lacasa Begue', 'DEF'),
+                ('Martin Gallo Juan', 'DEF'),
+                ('Pablo Val Martin', 'DEF'),
+                ('Ruben Ingelmo Guerrero', 'DEL'),
             ]
         }
         
@@ -299,11 +299,8 @@ class Command(BaseCommand):
             
             self.stdout.write(f'🎯 Creando jugadores para {equipo_nombre}...')
             
-            for nombre_jugador in jugadores_list:
-                # Asignar posición aleatoriamente
-                posicion = random.choice(['POR', 'DEF', 'DEL'])
-                
-                # Asignar valor según posición
+            for nombre_jugador, posicion in jugadores_list:
+                # Asignar valor según posición real
                 if posicion == 'POR':
                     valor = random.randint(1000000, 5000000)
                 elif posicion == 'DEF':
@@ -527,6 +524,10 @@ class Command(BaseCommand):
                 )
                 
                 total_goles += goles_local_asignados + goles_visitante_asignados
+            
+            # 🆕 CREAR PUNTUACIONES PARA TODOS LOS JUGADORES EN ESTA JORNADA
+            # incluso si no marcaron goles
+            self.crear_puntuaciones_base_para_todos(jornada)
         
         # Actualizar puntos totales de jugadores
         self.actualizar_puntos_totales()
@@ -534,6 +535,26 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\n✅ Asignados {total_goles} goles en {jornadas.count()} jornadas'
         ))
+
+    def crear_puntuaciones_base_para_todos(self, jornada):
+        """🆕 CREAR PUNTUACIONES BASE PARA TODOS LOS JUGADORES EN UNA JORNADA"""
+        jugadores = Jugador.objects.all()
+        puntuaciones_creadas = 0
+        
+        for jugador in jugadores:
+            # Verificar si ya existe una puntuación para este jugador en esta jornada
+            existe_puntuacion = Puntuacion.objects.filter(
+                jugador=jugador, 
+                jornada=jornada
+            ).exists()
+            
+            if not existe_puntuacion:
+                # Crear puntuación base sin goles
+                self.crear_puntuacion_jugador(jugador, jornada, 0)
+                puntuaciones_creadas += 1
+        
+        if puntuaciones_creadas > 0:
+            self.stdout.write(f'   📈 Creadas {puntuaciones_creadas} puntuaciones base para la jornada {jornada.numero}')
 
     def asignar_goles_equipo(self, equipo, jornada, total_goles):
         """Asignar goles a los jugadores de un equipo de forma coherente"""
@@ -543,13 +564,15 @@ class Command(BaseCommand):
         if not jugadores.exists():
             return 0
         
-        # Si no hay goles, crear puntuaciones sin goles
+        # 🆕 PRIMERO ASEGURAR QUE TODOS LOS JUGADORES TIENEN PUNTUACIÓN EN ESTA JORNADA
+        for jugador in jugadores:
+            self.crear_puntuacion_jugador(jugador, jornada, 0)
+        
+        # Si no hay goles, ya hemos creado las puntuaciones base
         if total_goles == 0:
-            for jugador in jugadores:
-                self.crear_puntuacion_jugador(jugador, jornada, 0)
             return 0
         
-        # Distribuir goles según posición
+        # Distribuir goles según posición REAL
         delanteros = jugadores.filter(posicion='DEL')
         defensas = jugadores.filter(posicion='DEF')
         porteros = jugadores.filter(posicion='POR')
@@ -582,12 +605,13 @@ class Command(BaseCommand):
             for _ in range(goles_faltantes):
                 if jugadores_restantes:
                     jugador = random.choice(jugadores_restantes)
-                    puntuacion, created = Puntuacion.objects.get_or_create(
+                    puntuacion = Puntuacion.objects.get(
                         jugador=jugador,
-                        jornada=jornada,
-                        defaults={'puntos': 0, 'goles': 0}
+                        jornada=jornada
                     )
                     puntuacion.goles += 1
+                    # 🆕 ACTUALIZAR PUNTOS POR LOS GOLES ADICIONALES
+                    puntuacion.puntos += 2
                     puntuacion.save()
                     goles_asignados += 1
         
@@ -601,7 +625,14 @@ class Command(BaseCommand):
         # Si hay más goles que jugadores, asignar al menos 1 gol a cada uno
         if total_goles >= len(jugadores_list):
             for jugador in jugadores_list:
-                puntuacion = self.crear_puntuacion_jugador(jugador, jornada, 1)
+                puntuacion = Puntuacion.objects.get(
+                    jugador=jugador,
+                    jornada=jornada
+                )
+                puntuacion.goles += 1
+                # 🆕 ACTUALIZAR PUNTOS POR EL GOL
+                puntuacion.puntos += 2
+                puntuacion.save()
                 goles_asignados += 1
             total_goles -= len(jugadores_list)
         
@@ -609,12 +640,13 @@ class Command(BaseCommand):
         for _ in range(total_goles):
             if jugadores_list:
                 jugador = random.choice(jugadores_list)
-                puntuacion, created = Puntuacion.objects.get_or_create(
+                puntuacion = Puntuacion.objects.get(
                     jugador=jugador,
-                    jornada=jornada,
-                    defaults={'puntos': 0, 'goles': 0}
+                    jornada=jornada
                 )
                 puntuacion.goles += 1
+                # 🆕 ACTUALIZAR PUNTOS POR EL GOL
+                puntuacion.puntos += 2
                 puntuacion.save()
                 goles_asignados += 1
         
@@ -622,7 +654,7 @@ class Command(BaseCommand):
 
     def crear_puntuacion_jugador(self, jugador, jornada, goles):
         """Crear o actualizar puntuación para un jugador"""
-        # Generar puntos basados en posición y goles
+        # Generar puntos basados en posición REAL y goles
         puntos_base = 0
         
         if jugador.posicion == 'POR':
@@ -690,6 +722,12 @@ class Command(BaseCommand):
         goles_jugadores = sum(jugador.goles for jugador in Jugador.objects.all())
         goles_puntuaciones = sum(puntuacion.goles for puntuacion in Puntuacion.objects.all())
         
+        # 🆕 ESTADÍSTICAS DE PUNTUACIONES
+        total_jugadores = Jugador.objects.count()
+        total_jornadas = Jornada.objects.count()
+        total_puntuaciones_esperadas = total_jugadores * total_jornadas
+        total_puntuaciones_reales = Puntuacion.objects.count()
+        
         stats = {
             'Usuarios': User.objects.count(),
             'Ligas': Liga.objects.count(),
@@ -698,6 +736,8 @@ class Command(BaseCommand):
             'Jornadas': Jornada.objects.count(),
             'Partidos': Partido.objects.count(),
             'Puntuaciones Creadas': Puntuacion.objects.count(),
+            'Puntuaciones Esperadas': f'{total_puntuaciones_esperadas} (jugadores × jornadas)',
+            'COBERTURA PUNTUACIONES': f'{total_puntuaciones_reales}/{total_puntuaciones_esperadas} ({round((total_puntuaciones_reales/total_puntuaciones_esperadas)*100, 1)}%)',
             'GOLES EN PARTIDOS (Local)': goles_partidos_local,
             'GOLES EN PARTIDOS (Visitante)': goles_partidos_visitante,
             'GOLES EN PARTIDOS (Total)': goles_partidos_totales,
@@ -707,7 +747,7 @@ class Command(BaseCommand):
         }
         
         for item, cantidad in stats.items():
-            if 'GOLES' in item or 'COHERENCIA' in item:
+            if 'GOLES' in item or 'COHERENCIA' in item or 'PUNTUACIONES' in item:
                 self.stdout.write(self.style.SUCCESS(f'   🎯 {item}: {cantidad}'))
             else:
                 self.stdout.write(self.style.SUCCESS(f'   • {item}: {cantidad}'))
@@ -742,6 +782,12 @@ class Command(BaseCommand):
         top_goleadores = Jugador.objects.order_by('-goles')[:5]
         for i, jugador in enumerate(top_goleadores, 1):
             self.stdout.write(f'   {i}. {jugador.nombre} ({jugador.equipo_real.nombre}) - {jugador.goles} goles')
+        
+        # 🆕 TOP 5 PUNTUADORES
+        self.stdout.write('\n⭐ TOP 5 PUNTUADORES:')
+        top_puntuadores = Jugador.objects.order_by('-puntos_totales')[:5]
+        for i, jugador in enumerate(top_puntuadores, 1):
+            self.stdout.write(f'   {i}. {jugador.nombre} ({jugador.equipo_real.nombre}) - {jugador.puntos_totales} puntos')
         
         self.stdout.write('\n🎮 INSTRUCCIONES PARA PROBAR:')
         self.stdout.write('   1. Login con: admin1/admin1')

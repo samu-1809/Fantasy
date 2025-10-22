@@ -1,7 +1,4 @@
-// components/MercadoTab.jsx
-import React from 'react';
 import { Search, RefreshCw, DollarSign } from 'lucide-react';
-import MiniGrafico from './MiniGrafico';
 
 const MercadoTab = ({
   mercado,
@@ -12,6 +9,7 @@ const MercadoTab = ({
   limpiarFiltros,
   handlePujar,
   handleActualizar,
+  onPlayerClick,
   loading,
   formatValue,
   formatNormalValue,
@@ -94,14 +92,26 @@ const MercadoTab = ({
           const horasEnMercado = player.horas_en_mercado || 0;
           const recibiraOfertaMercado = player.recibira_oferta_mercado;
 
+          // 🆕 Calcular precio mínimo para mostrar
+          const precioMinimo = player.tipo === 'venta_usuario' && player.precio_venta 
+            ? player.precio_venta 
+            : (player.valor || 0) + 1;
+
           return (
-            <div key={player.id} className="flex items-center justify-between p-4 bg-gray-50 rounded border-2 border-gray-300 hover:bg-gray-100 transition-colors">
+            // 🆕 TODO EL CONTENEDOR ES CLICABLE
+            <div 
+              key={player.id} 
+              className="flex items-center justify-between p-4 bg-gray-50 rounded border-2 border-gray-300 hover:bg-gray-100 transition-colors cursor-pointer group"
+              onClick={() => onPlayerClick(player)}
+            >
               <div className="flex items-center gap-4 flex-1">
-                <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs group-hover:scale-105 transition-transform">
                   {player.posicion}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium">{player.nombre}</div>
+                  <div className="font-medium group-hover:text-blue-600 transition-colors">
+                    {player.nombre}
+                  </div>
                   <div className="text-sm text-gray-600">
                     {player.posicion === 'POR' ? 'Portero' : 
                     player.posicion === 'DEF' ? 'Defensa' : 'Delantero'} • 
@@ -123,9 +133,14 @@ const MercadoTab = ({
 
                     {player.tipo === 'venta_usuario' && (
                       <div className="text-xs space-y-1">
+                        {/* 🆕 Mostrar precio de venta establecido por el usuario */}
+                        <div className="text-green-600 font-semibold">
+                          💰 Precio mínimo: {formatNormalValue(precioMinimo)}
+                        </div>
+                        
                         {player.puja_actual && (
                           <div className="text-blue-600">
-                            💰 Puja actual: {formatNormalValue(player.puja_actual)} por {player.pujador_actual}
+                            🏆 Puja actual: {formatNormalValue(player.puja_actual)} por {player.pujador_actual}
                           </div>
                         )}
                         {horasEnMercado >= 24 && (
@@ -144,24 +159,42 @@ const MercadoTab = ({
                 </div>
               </div>
 
-              {/* 🆕 Mini gráfico de puntuaciones */}
-              <MiniGrafico puntuaciones={player.puntuaciones_jornadas} />
-              
-              <button 
-                onClick={() => handlePujar(player)}
-                disabled={!puedePujar}
-                className={`px-4 py-2 rounded flex items-center gap-2 transition-all ${
-                  !puedePujar
-                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                    : yaPujado
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-yellow-600 text-white hover:bg-yellow-700 hover:scale-105'
-                }`}
-                title={getTituloBotonPuja(player)}
+              <div 
+                className="flex items-center gap-3"
+                onClick={(e) => e.stopPropagation()} // 🆕 Evitar que el clic en los botones active el clic de la fila
               >
-                <DollarSign size={16} />
-                {getTextoBotonPuja(player)}
-              </button>
+                {/* 🆕 Botón para ver estadísticas - Mejorado */}
+                <button 
+                  onClick={() => onPlayerClick(player)}
+                  className="p-2 text-gray-500 hover:text-blue-600 transition-colors rounded-full hover:bg-blue-50"
+                  title="Ver estadísticas del jugador"
+                >
+                </button>
+
+                {/* Botón de puja con precio mínimo */}
+                <div className="flex flex-col items-end gap-2">
+                  {/* 🆕 Mostrar precio mínimo a la izquierda del botón */}
+                  <div className="text-xs text-gray-600 bg-white px-2 py-1 rounded border">
+                    Mín: {formatNormalValue(precioMinimo)}
+                  </div>
+                  
+                  <button 
+                    onClick={() => handlePujar(player)}
+                    disabled={!puedePujar}
+                    className={`px-4 py-2 rounded flex items-center gap-2 transition-all ${
+                      !puedePujar
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                        : yaPujado
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-yellow-600 text-white hover:bg-yellow-700 hover:scale-105'
+                    }`}
+                    title={getTituloBotonPuja(player)}
+                  >
+                    <DollarSign size={16} />
+                    {getTextoBotonPuja(player)}
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })}

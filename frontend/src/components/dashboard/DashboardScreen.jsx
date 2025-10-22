@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTeam } from '../../hooks/useTeam';
-import FieldView from './FieldView';
 
 // Componentes modulares
 import DashboardHeader from './components/DashboardHeader';
@@ -32,7 +31,8 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     retirarJugadorDelMercado,
     forzarActualizacion,
     calcularPuntosTotales,
-    encontrarJugadoresIntercambiables
+    encontrarJugadoresIntercambiables,
+    moverJugadorAlineacion
   } = useTeam(equipoId);
 
   // Estados de UI
@@ -46,10 +46,10 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
   const [mostrarAnimacionVenta, setMostrarAnimacionVenta] = useState(false);
   const [jugadorVendido, setJugadorVendido] = useState(null);
 
-  // 🆕 Referencia para detectar clics fuera del campo
+  // Referencia para detectar clics fuera del campo
   const fieldRef = useRef(null);
 
-  // 🆕 Efecto para manejar clics fuera del campo (cancelar modo cambio)
+  // Efecto para manejar clics fuera del campo (cancelar modo cambio)
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (modoCambio && fieldRef.current && !fieldRef.current.contains(event.target)) {
@@ -139,10 +139,37 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     };
   }, [forzarActualizacion, onRefresh]);
 
+  // Función para mover jugador del banquillo a la alineación
+  const handleMoverJugadorAlineacion = async (jugador, posicion, index) => {
+    try {
+      setCargando(true);
+      
+      await moverJugadorAlineacion(jugador.id, posicion, index);
+      
+      console.log('✅ Jugador movido a alineación');
+      
+      // Disparar eventos de actualización
+      window.dispatchEvent(new CustomEvent('dashboardShouldUpdate'));
+      window.dispatchEvent(new CustomEvent('alineacionActualizada', {
+        detail: {
+          jugador: jugador,
+          posicion: posicion,
+          index: index
+        }
+      }));
+      
+    } catch (error) {
+      console.error('❌ Error moviendo jugador:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setCargando(false);
+    }
+  };
+
   // Handlers
   const handleClicJugador = (jugador) => {
     if (modoCambio) {
-      // 🆕 CORRECCIÓN: Permitir cancelar haciendo clic en el mismo jugador
+      // Permitir cancelar haciendo clic en el mismo jugador
       if (jugador.id === jugadorSeleccionado?.id) {
         cancelarModoCambio();
         return;
@@ -180,7 +207,6 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     console.log('🎯 Activando modo cambio para:', jugadorSeleccionado.nombre);
     console.log('📍 Es titular:', !jugadorSeleccionado.en_banquillo);
 
-    // 🆕 CORRECCIÓN: Usar la nueva función del hook
     const intercambiables = encontrarJugadoresIntercambiables(jugadorSeleccionado);
     
     if (intercambiables.length === 0) {
@@ -240,7 +266,7 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     setMostrarModalOpciones(false);
   };
 
-  // 🆕 CORREGIDO: Función mejorada para quitar del mercado
+  // Función para quitar del mercado
   const handleQuitarDelMercado = async () => {
     if (!jugadorSeleccionado || !equipo) return;
 
@@ -248,7 +274,6 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     try {
       console.log('🔄 Dashboard: Quitando del mercado:', jugadorSeleccionado.nombre);
       
-      // 🆕 Usar la función del hook que ahora maneja mejor los errores
       await retirarJugadorDelMercado(jugadorSeleccionado.id);
       
       console.log('✅ Dashboard: Jugador quitado del mercado exitosamente');
@@ -279,17 +304,7 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
       }
 
       const valorActual = jugadorSeleccionado.valor || 0;
-      const precioMinimo = Math.floor(valorActual * 0.8);
-      
-      if (precio < precioMinimo) {
-        alert(`El precio mínimo permitido es €${formatNumber(precioMinimo)} (80% del valor actual)`);
-        return;
-      }
 
-      console.log('💰 Confirmando venta:', {
-        jugador: jugadorSeleccionado.nombre,
-        precio: precio
-      });
 
       await venderJugador(jugadorSeleccionado.id, precio);
       
@@ -334,6 +349,15 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
     if (!number && number !== 0) return '0';
     const num = parseInt(number) || 0;
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
+  // 🆕 Función helper para obtener jugadores del banquillo por posición
+  const getJugadoresBanquilloPorPosicion = (posicion) => {
+    if (!alineacion.banquillo || !Array.isArray(alineacion.banquillo)) return [];
+    
+    return alineacion.banquillo.filter(jugador => 
+      jugador && jugador.posicion === posicion && jugador.en_banquillo === true
+    );
   };
 
   if (loading && !equipo) {
@@ -383,32 +407,33 @@ const DashboardScreen = ({ datosUsuario, onRefresh }) => {
             formatValue={formatValue}
           />
 
-          <FieldSection
-            titularesCount={jugadores.filter(j => !j.en_banquillo).length}
-            totalCount={jugadores.length}
-            onRefresh={forzarActualizacion}
-          >
-            {jugadores.length === 0 ? (
-              <EmptyTeamMessage />
-            ) : (
-              <div 
-                ref={fieldRef}
-                className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200"
-              >
-                <FieldView
-                  portero_titular={alineacion.portero_titular}
-                  defensas_titulares={alineacion.defensas_titulares}
-                  delanteros_titulares={alineacion.delanteros_titulares}
-                  banquillo={alineacion.banquillo}
-                  onPlayerClick={handleClicJugador}
-                  onSellPlayer={handlePonerEnVenta}
-                  onRemoveFromMarket={handleQuitarDelMercado}
-                  getPlayerState={getPlayerState}
-                  modoCambio={modoCambio}
-                />
-              </div>
-            )}
-          </FieldSection>
+          {/* CAMBIO PRINCIPAL: FieldSection unificado reemplaza FieldView */}
+          {jugadores.length === 0 ? (
+            <EmptyTeamMessage />
+          ) : (
+            <div 
+              ref={fieldRef}
+              className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-6 border-2 border-green-200"
+            >
+              <FieldSection
+                titularesCount={jugadores.filter(j => !j.en_banquillo).length}
+                totalCount={jugadores.length}
+                onRefresh={forzarActualizacion}
+                // Props específicas del campo
+                portero_titular={alineacion.portero_titular}
+                defensas_titulares={alineacion.defensas_titulares}
+                delanteros_titulares={alineacion.delanteros_titulares}
+                banquillo={alineacion.banquillo}
+                onPlayerClick={handleClicJugador}
+                onSellPlayer={handlePonerEnVenta}
+                onRemoveFromMarket={handleQuitarDelMercado}
+                getPlayerState={getPlayerState}
+                modoCambio={modoCambio}
+                onMoverJugadorAlineacion={handleMoverJugadorAlineacion}
+                getJugadoresBanquilloPorPosicion={getJugadoresBanquilloPorPosicion}
+              />
+            </div>
+          )}
         </div>
       </div>
 

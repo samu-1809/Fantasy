@@ -22,6 +22,7 @@ from .equipo_views import (
     quitar_del_mercado,
     intercambiar_jugadores, 
     guardar_alineacion,
+    mover_a_alineacion,
     plantilla_equipo,
     actualizar_estados_banquillo
 )
@@ -70,7 +71,7 @@ __all__ = [
     'NotificacionViewSet',  # Añadido aquí
     
     # Funciones de equipo
-    'mi_equipo', 'poner_en_venta', 'quitar_del_mercado',
+    'mi_equipo', 'poner_en_venta', 'quitar_del_mercado', 'mover_a_alineacion',
     'intercambiar_jugadores', 'guardar_alineacion', 'plantilla_equipo','actualizar_estados_banquillo',
     
     # Funciones de puntuación

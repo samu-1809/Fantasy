@@ -105,10 +105,9 @@ def crear_oferta_usuario(request, equipo, jugador, monto_puja):
             )
         
         # Verificar monto mínimo
-        monto_minimo = jugador.valor + 100000
-        if monto_puja < monto_minimo:
+        if monto_puja < jugador.precio_venta:
             return Response(
-                {'error': f'La oferta debe ser mayor a €{monto_minimo:,}'}, 
+                {'error': f'La oferta debe ser mayor a €{jugador.precio_venta:,}'}, 
                 status=400
             )
         

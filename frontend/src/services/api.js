@@ -343,11 +343,12 @@ export const crearEquipo = async (equipoData) => {
 // ==================== OPERACIONES DE EQUIPO ====================
 
 export const guardarAlineacion = async (equipoId, jugadoresData) => {
+  const token = localStorage.getItem('access_token');
   const response = await fetch(`${API_URL}/equipos/${equipoId}/guardar_alineacion/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({ jugadores: jugadoresData })
   });
@@ -1098,6 +1099,29 @@ export const realizarPuja = async (equipoId, jugadorId, montoPuja) => {
     console.error('❌ Error en realizarPuja:', error);
     throw error;
   }
+};
+
+export const moverJugadorAlineacion = async (equipoId, jugadorId, posicion, index = 0) => {
+  const token = localStorage.getItem('access_token');
+  const response = await fetch(`${API_URL}/equipos/${equipoId}/mover_a_alineacion/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      jugador_id: jugadorId,
+      posicion: posicion,
+      index: index
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Error al mover jugador a la alineación');
+  }
+
+  return response.json();
 };
 
 export const getPujasRealizadas = async (equipoId) => {

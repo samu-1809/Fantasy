@@ -190,6 +190,54 @@ class Puntuacion(models.Model):
     def __str__(self):
         return f"{self.jugador.nombre} - J{self.jornada.numero}: {self.puntos} pts"
 
+class AlineacionCongelada(models.Model):
+    """
+    Snapshot de la alineación de un equipo en una jornada específica.
+    Estos son los jugadores que sumarán puntos, independientemente
+    de cambios posteriores en la plantilla.
+    """
+    equipo = models.ForeignKey(
+        Equipo,
+        on_delete=models.CASCADE,
+        related_name='alineaciones_congeladas'
+    )
+    jornada = models.ForeignKey(
+        Jornada,
+        on_delete=models.CASCADE,
+        related_name='snapshots_alineacion'
+    )
+    jugadores_titulares = models.ManyToManyField(
+        Jugador,
+        related_name='alineaciones_congeladas_titular'
+    )
+    fecha_congelacion = models.DateTimeField(auto_now_add=True)
+    tiene_posiciones_completas = models.BooleanField(
+        default=True,
+        help_text="False si le falta alguna posición requerida (1 POR, 2 DEF, 2 DEL)"
+    )
+    posiciones_faltantes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de posiciones que faltan: ['POR', 'DEF', 'DEL']"
+    )
+    puntos_obtenidos = models.IntegerField(
+        default=0,
+        help_text="Puntos acumulados por los titulares en esta jornada"
+    )
+    dinero_ganado = models.IntegerField(
+        default=0,
+        help_text="Dinero ganado en esta jornada (puntos × 100.000€)"
+    )
+
+    class Meta:
+        unique_together = ('equipo', 'jornada')
+        verbose_name = 'Alineación Congelada'
+        verbose_name_plural = 'Alineaciones Congeladas'
+        ordering = ['jornada__numero', 'equipo__nombre']
+
+    def __str__(self):
+        return f"{self.equipo.nombre} - Jornada {self.jornada.numero}"
+
 class Partido(models.Model):
     jornada = models.ForeignKey(Jornada, on_delete=models.CASCADE, related_name='partidos')
     equipo_local = models.ForeignKey(EquipoReal, on_delete=models.CASCADE, related_name='partidos_local')
@@ -266,8 +314,8 @@ class Oferta(models.Model):
     ]
     
     jugador = models.ForeignKey('Jugador', on_delete=models.CASCADE, related_name='ofertas')
-    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas')
-    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas')
+    equipo_ofertante = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_realizadas', null=True, blank=True)
+    equipo_receptor = models.ForeignKey('Equipo', on_delete=models.CASCADE, related_name='ofertas_recibidas', null=True, blank=True)
     monto = models.IntegerField()
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente')
     fecha_oferta = models.DateTimeField(auto_now_add=True)
@@ -277,10 +325,11 @@ class Oferta(models.Model):
         ordering = ['-fecha_oferta']
     
     def __str__(self):
-        return f"{self.equipo_ofertante.nombre} -> {self.jugador.nombre} (${self.monto})"
+        equipo_ofertante_nombre = self.equipo_ofertante.nombre if self.equipo_ofertante else "Equipo Desconocido"
+        return f"{equipo_ofertante_nombre} -> {self.jugador.nombre} (${self.monto})"
     
     def aceptar(self):
-        if self.estado == 'pendiente':
+        if self.estado == 'pendiente' and self.equipo_ofertante and self.equipo_receptor:
             self.estado = 'aceptada'
             self.fecha_respuesta = timezone.now()
             self.save()
