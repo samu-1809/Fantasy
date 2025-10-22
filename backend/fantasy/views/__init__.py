@@ -32,7 +32,10 @@ from .puntuacion_views import (
     puntuaciones_jugador, 
     actualizar_puntuacion_jugador, 
     equipos_disponibles_jornada,
-    puntuaciones_por_partido
+    puntuaciones_por_partido,
+    alineacion_congelada_detalle,
+    forzar_congelacion
+    
 )
 
 # Importa funciones de ofertas
@@ -76,7 +79,8 @@ __all__ = [
     
     # Funciones de puntuación
     'puntuaciones_jugador', 'actualizar_puntuacion_jugador',
-    'equipos_disponibles_jornada','puntuaciones_por_partido',
+    'equipos_disponibles_jornada','puntuaciones_por_partido', 'alineacion_congelada_detalle',
+    'forzar_congelacion',
     
     # Funciones de ofertas
     'ofertas_recibidas', 'ofertas_realizadas', 'aceptar_oferta',

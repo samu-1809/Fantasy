@@ -167,3 +167,112 @@ def equipos_disponibles_jornada(request, jornada_id):
             {'error': 'Jornada no encontrada'}, 
             status=404
         )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def alineacion_congelada_detalle(request, equipo_id, jornada_id):
+    """Obtiene la alineación congelada de un equipo en una jornada específica"""
+    try:
+        # Verificar que el usuario es dueño del equipo o es admin
+        equipo = Equipo.objects.get(id=equipo_id)
+        if equipo.usuario != request.user and not request.user.is_staff:
+            return Response(
+                {"error": "No tienes permiso para ver esta alineación"},
+                status=403
+            )
+            
+        alineacion = AlineacionCongelada.objects.get(
+            equipo_id=equipo_id,
+            jornada_id=jornada_id
+        )
+        
+        # Serializer para AlineacionCongelada
+        from .serializers import AlineacionCongeladaSerializer
+        serializer = AlineacionCongeladaSerializer(alineacion)
+        return Response(serializer.data)
+        
+    except Equipo.DoesNotExist:
+        return Response(
+            {"error": "Equipo no encontrado"},
+            status=404
+        )
+    except AlineacionCongelada.DoesNotExist:
+        return Response(
+            {"error": "Alineación congelada no encontrada"},
+            status=404
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def forzar_congelacion(request):
+    """Fuerza la congelación de la alineación actual (para testing)"""
+    equipo_id = request.data.get('equipo_id')
+    jornada_id = request.data.get('jornada_id')
+    
+    try:
+        equipo = Equipo.objects.get(id=equipo_id, usuario=request.user)
+        jornada = Jornada.objects.get(id=jornada_id)
+        
+        # Obtener jugadores titulares actuales
+        jugadores_titulares = equipo.jugadores.filter(en_banquillo=False)
+        
+        # Verificar formación mínima
+        por_count = jugadores_titulares.filter(posicion='POR').count()
+        def_count = jugadores_titulares.filter(posicion='DEF').count()
+        del_count = jugadores_titulares.filter(posicion='DEL').count()
+        
+        tiene_posiciones_completas = (por_count >= 1 and def_count >= 2 and del_count >= 2)
+        posiciones_faltantes = []
+        
+        if por_count < 1:
+            posiciones_faltantes.append('POR')
+        if def_count < 2:
+            posiciones_faltantes.append('DEF')
+        if del_count < 2:
+            posiciones_faltantes.append('DEL')
+        
+        # Crear o actualizar alineación congelada
+        alineacion, created = AlineacionCongelada.objects.get_or_create(
+            equipo=equipo,
+            jornada=jornada,
+            defaults={
+                'tiene_posiciones_completas': tiene_posiciones_completas,
+                'posiciones_faltantes': posiciones_faltantes
+            }
+        )
+        
+        # Actualizar jugadores
+        alineacion.jugadores_titulares.set(jugadores_titulares)
+        
+        # Calcular puntos si ya hay puntuaciones
+        puntos_totales = 0
+        for jugador in jugadores_titulares:
+            try:
+                puntuacion = Puntuacion.objects.get(jugador=jugador, jornada=jornada)
+                puntos_totales += puntuacion.puntos
+            except Puntuacion.DoesNotExist:
+                pass
+        
+        alineacion.puntos_obtenidos = puntos_totales
+        alineacion.dinero_ganado = puntos_totales * 100000
+        alineacion.save()
+        
+        from .serializers import AlineacionCongeladaSerializer
+        serializer = AlineacionCongeladaSerializer(alineacion)
+        
+        return Response({
+            'message': 'Alineación congelada forzada correctamente',
+            'alineacion': serializer.data,
+            'created': created
+        })
+        
+    except Equipo.DoesNotExist:
+        return Response(
+            {"error": "Equipo no encontrado o no pertenece al usuario"},
+            status=404
+        )
+    except Jornada.DoesNotExist:
+        return Response(
+            {"error": "Jornada no encontrada"},
+            status=404
+        )
