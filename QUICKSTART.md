@@ -19,6 +19,10 @@ npm install
 npm run dev
 
 ```
+
+# Instalar pytest y dependencias si no las tienes
+pip install pytest pytest-django pytest-factoryboy pytest-cov
+
 ## 🚀 Setup Inicial (Primera Vez)
 ### 1. Instalar Dependencias del Backend
 ```bash

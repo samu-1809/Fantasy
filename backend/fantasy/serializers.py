@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion
+from .models import Liga, Jugador, Equipo, Jornada, Puntuacion, EquipoReal, Partido, Oferta, Puja, Notificacion, AlineacionCongelada
 
 class LigaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -240,6 +240,36 @@ class NotificacionSerializer(serializers.ModelSerializer):
     def get_tiempo_desde_creacion(self, obj):
         from django.utils.timesince import timesince
         return timesince(obj.fecha_creacion) + ' atrás'
+
+class AlineacionCongeladaSerializer(serializers.ModelSerializer):
+    equipo_nombre = serializers.CharField(source='equipo.nombre', read_only=True)
+    jornada_numero = serializers.IntegerField(source='jornada.numero', read_only=True)
+    jugadores_titulares_info = serializers.SerializerMethodField()
+    formacion_actual = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = AlineacionCongelada
+        fields = [
+            'id', 'equipo', 'equipo_nombre', 'jornada', 'jornada_numero',
+            'jugadores_titulares', 'jugadores_titulares_info', 'formacion_actual',
+            'fecha_congelacion', 'puntos_obtenidos', 'dinero_ganado',
+            'tiene_posiciones_completas', 'posiciones_faltantes'
+        ]
+    
+    def get_jugadores_titulares_info(self, obj):
+        return JugadorSerializer(
+            obj.jugadores_titulares.all(), 
+            many=True
+        ).data
+    
+    def get_formacion_actual(self, obj):
+        jugadores = obj.jugadores_titulares.all()
+        return {
+            'POR': jugadores.filter(posicion='POR').count(),
+            'DEF': jugadores.filter(posicion='DEF').count(),
+            'DEL': jugadores.filter(posicion='DEL').count(),
+            'total': jugadores.count()
+        }
 
 class JugadorMercadoSerializer(serializers.ModelSerializer):
     equipo_real_nombre = serializers.CharField(source='equipo_real.nombre', read_only=True)
