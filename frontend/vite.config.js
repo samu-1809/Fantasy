@@ -8,9 +8,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false
-  },
-  define: {
-    'process.env': {}
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    }
   }
+  // Elimina completamente la sección 'define'
 })
