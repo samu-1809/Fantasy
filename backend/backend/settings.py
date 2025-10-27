@@ -153,7 +153,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Frontend Vite desarrollo
     "http://127.0.0.1:5173",
-    "https://tu-frontend.vercel.app",  # Tu frontend en Vercel - ACTUALIZA ESTO
+    "https://fantasy-wine-three.vercel.app",  # Tu dominio personalizado de Vercel
+    "https://fantasy-git-main-samuel-gomezs-projects-4d24ad18.vercel.app",  # Dominio de deployment
+    "https://fantasy-6br56rpp7-samuel-gomezs-projects-4d24ad18.vercel.app", 
 ]
 
 # Si tienes un dominio específico en Vercel, añádelo aquí
@@ -205,5 +207,7 @@ if not DEBUG:
     # Additional production settings
     CSRF_TRUSTED_ORIGINS = [
         'https://*.onrender.com',
-        'https://tu-frontend.vercel.app',  # Tu frontend en Vercel
+        'https://fantasy-wine-three.vercel.app',  # Tu dominio personalizado de Vercel
+        'https://fantasy-git-main-samuel-gomezs-projects-4d24ad18.vercel.app',  # Dominio de deployment
+        'https://fantasy-6br56rpp7-samuel-gomezs-projects-4d24ad18.vercel.app',   # Tu frontend en Vercel
     ]
