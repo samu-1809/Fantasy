@@ -18,6 +18,18 @@ else:
     print('El superusuario ya existe')
 "
 
+echo "=== Verificando si la base de datos necesita población ==="
+python manage.py shell -c "
+from fantasy.models import Jugador
+if Jugador.objects.count() == 0:
+    print('Base de datos vacía, ejecutando populate_database...')
+    # Importar y ejecutar el comando
+    from django.core.management import call_command
+    call_command('populate_database')
+else:
+    print('La base de datos ya tiene datos, omitiendo población.')
+"
+
 echo "=== Colectando archivos estáticos ==="
 python manage.py collectstatic --noinput --clear
 

@@ -39,7 +39,12 @@ class Command(BaseCommand):
         self.mostrar_estadisticas()
 
     def clean_database(self):
-        """Limpiar base de datos"""
+        """Limpiar base de datos solo si está vacía"""
+        jugador_count = Jugador.objects.count()
+        if jugador_count > 0:
+            self.stdout.write(self.style.WARNING(f'⚠ Base de datos ya tiene {jugador_count} jugadores. Omitiendo limpieza.'))
+            return False
+        
         self.stdout.write('🧹 Limpiando base de datos...')
         Puntuacion.objects.all().delete()
         Jugador.objects.all().delete()
@@ -48,6 +53,7 @@ class Command(BaseCommand):
         EquipoReal.objects.all().delete()
         Jornada.objects.all().delete()
         Liga.objects.all().delete()
+        return True
 
     def crear_liga(self):
         """Crear liga principal"""
