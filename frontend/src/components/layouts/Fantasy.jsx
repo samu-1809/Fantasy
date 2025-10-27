@@ -51,7 +51,8 @@ const Fantasy = () => {
   const [error, setError] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [selectedRealTeamId, setSelectedRealTeamId] = useState(null);
-  
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+  console.log('🔗 URL de API que se usará:', API_URL);
   // 🎯 VOLVER al uso simple del contexto
   const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
 
