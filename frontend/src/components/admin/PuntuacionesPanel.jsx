@@ -520,15 +520,6 @@ const PuntuacionesPanel = ({ jugadores, equiposReales, onAsignarPuntosSuccess })
                 </div>
               </div>
               
-              {/* Mini gráfico de últimas jornadas */}
-              <div className="flex-1 max-w-[200px]">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp size={14} className="text-gray-500" />
-                  <span className="text-xs font-medium text-gray-600">Últimas jornadas</span>
-                </div>
-                {renderMiniGrafico(jugador.id)}
-              </div>
-              
               {/* Inputs de puntos y goles */}
               <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}> {/* 🆕 Evitar que el click en inputs abra el modal */}
                 <div className="text-right">
