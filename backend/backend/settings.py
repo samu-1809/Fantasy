@@ -22,6 +22,8 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # PythonAnywhere hosts
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='samugoja1.pythonanywhere.com,localhost,127.0.0.1').split(',')
 
+FRONTEND_URL = config('FRONTEND_URL', default='https://fantasy-wine-three.vercel.app')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
