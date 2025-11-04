@@ -8,10 +8,45 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
-import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# =============================================================================
+# DETECCIÓN AUTOMÁTICA DE ENTORNO Y CARGA DE VARIABLES
+# =============================================================================
+
+def is_pythonanywhere():
+    """Detecta si estamos en PythonAnywhere"""
+    return 'pythonanywhere.com' in os.environ.get('HOME', '') or os.path.exists('/home/samugoja1')
+
+# Configuración diferente para cada entorno
+if is_pythonanywhere():
+    # PRODUCCIÓN (PythonAnywhere)
+    ENV_FILE = BASE_DIR / '.env.pythonanywhere'
+    print("🔧 Cargando configuración de PythonAnywhere")
+else:
+    # DESARROLLO LOCAL
+    ENV_FILE = BASE_DIR / '.env.local'
+    print("🔧 Cargando configuración local")
+
+# Cargar variables del archivo .env correcto
+if ENV_FILE.exists():
+    from decouple import Config, RepositoryEnv
+    env_config = Config(RepositoryEnv(ENV_FILE))
+    
+    # Sobrescribir os.environ con las variables del archivo .env específico
+    with open(ENV_FILE) as f:
+        for line in f:
+            if line.strip() and not line.startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ[key] = value
+else:
+    print(f"⚠️  Archivo {ENV_FILE} no encontrado, usando variables por defecto")
+
+# =============================================================================
+# CONFIGURACIÓN PRINCIPAL
+# =============================================================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-ucr)60f7t&p33e47mns*5kg0-+^+9mj#w))b0u+4wdb_p6bm$e')
@@ -75,44 +110,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # =============================================================================
-# DATABASE CONFIGURATION - Diferente para PythonAnywhere vs Local
+# DATABASE CONFIGURATION - SQLITE SIEMPRE (MÁS SIMPLE)
 # =============================================================================
 
-# Detectar si estamos en PythonAnywhere
-def is_pythonanywhere():
-    return 'pythonanywhere.com' in os.environ.get('HOME', '') or os.path.exists('/home/samugoja1')
-
-if is_pythonanywhere():
-    # SQLite para PythonAnywhere (por restricciones de red)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 20,
         }
     }
-    print("✅ Usando SQLite en PythonAnywhere")
-else:
-    # PostgreSQL para desarrollo local y otros entornos
-    DATABASE_URL = config('DATABASE_URL', default='')
-    if DATABASE_URL:
-        DATABASES = {
-            'default': dj_database_url.config(
-                default=DATABASE_URL,
-                conn_max_age=600,
-                conn_health_checks=True,
-                ssl_require=True
-            )
-        }
-        print("✅ Usando PostgreSQL (Neon.tech)")
-    else:
-        # Fallback local SQLite si no hay DATABASE_URL
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
-        print("⚠️  Usando SQLite local (no hay DATABASE_URL)")
+}
+
+print("✅ Usando SQLite (configuración unificada)")
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
