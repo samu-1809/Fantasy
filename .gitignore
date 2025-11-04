@@ -60,3 +60,15 @@ htmlcov/
 *.pem
 *.key
 secret_key.txt
+
+
+# Archivos de entorno específicos
+.env.local
+*.env.local
+
+# Archivos de entorno de PythonAnywhere (opcional - si quieres compartir la configuración)
+# .env.pythonanywhere
+
+# Databases locales
+db.sqlite3
+*.sqlite3
