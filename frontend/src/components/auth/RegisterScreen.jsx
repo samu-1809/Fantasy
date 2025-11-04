@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { UserPlus, Loader, CheckCircle, Users, Trophy, DollarSign } from 'lucide-react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 const RegisterScreen = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -99,7 +100,7 @@ const RegisterScreen = ({ onSwitchToLogin }) => {
 
       console.log('📤 Datos enviados al registro:', requestData);
 
-      const response = await fetch('http://127.0.0.1:8000/api/auth/register/', {
+      const response = await fetch(`${API_URL}/auth/register/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
