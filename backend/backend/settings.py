@@ -13,22 +13,16 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-ucr)60f7t&p33e47mns*5kg0-+^+9mj#w))b0u+4wdb_p6bm$e')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-# ALLOWED_HOSTS para producción
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
-ALLOWED_HOSTS.append('.onrender.com')  # Para Render
+# PythonAnywhere hosts
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='samugoja1.pythonanywhere.com,localhost,127.0.0.1').split(',')
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -50,7 +44,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # Añadido PRIMERO
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Añadido para archivos estáticos
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -78,37 +72,47 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+# =============================================================================
+# DATABASE CONFIGURATION - Diferente para PythonAnywhere vs Local
+# =============================================================================
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# Detectar si estamos en PythonAnywhere
+def is_pythonanywhere():
+    return 'pythonanywhere.com' in os.environ.get('HOME', '') or os.path.exists('/home/samugoja1')
 
-# Configuración de base de datos para producción
-if config('DATABASE_URL', default=''):
-    # Usar DATABASE_URL de Render
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
-else:
-    # Configuración local
+if is_pythonanywhere():
+    # SQLite para PythonAnywhere (por restricciones de red)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('DB_NAME', default='fantasy_db'),
-            'USER': config('DB_USER', default='fantasy_user'),
-            'PASSWORD': config('DB_PASSWORD', default='fantasy_dev_password'),
-            'HOST': config('DB_HOST', default='localhost'),
-            'PORT': config('DB_PORT', default='5432'),
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-
+    print("✅ Usando SQLite en PythonAnywhere")
+else:
+    # PostgreSQL para desarrollo local y otros entornos
+    DATABASE_URL = config('DATABASE_URL', default='')
+    if DATABASE_URL:
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=DATABASE_URL,
+                conn_max_age=600,
+                conn_health_checks=True,
+                ssl_require=True
+            )
+        }
+        print("✅ Usando PostgreSQL (Neon.tech)")
+    else:
+        # Fallback local SQLite si no hay DATABASE_URL
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+        print("⚠️  Usando SQLite local (no hay DATABASE_URL)")
 
 # Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -124,42 +128,29 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'es-es'
-
 TIME_ZONE = 'Europe/Madrid'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
+# Static files (PythonAnywhere)
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Whitenoise para servir archivos estáticos
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Frontend Vite desarrollo
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://fantasy-wine-three.vercel.app"  # Tu dominio personalizado de Vercel
+    "https://fantasy-wine-three.vercel.app",
+    "https://samugoja1.pythonanywhere.com",
 ]
-
-# Si tienes un dominio específico en Vercel, añádelo aquí
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
-if FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -182,28 +173,61 @@ SIMPLE_JWT = {
 
 # Cookie settings for JWT
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = config('COOKIE_SECURE', default=False, cast=bool)
+SESSION_COOKIE_SECURE = config('COOKIE_SECURE', default=True, cast=bool)
 SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = False  # False para que JS pueda leerlo si es necesario
+CSRF_COOKIE_HTTPONLY = False
 
 # CORS para cookies
 CORS_ALLOW_CREDENTIALS = True
 
-# Security settings for production
-if not DEBUG:
-    # Security settings
+# =============================================================================
+# SECURITY SETTINGS - Diferente para PythonAnywhere vs Local
+# =============================================================================
+
+if is_pythonanywhere():
+    # Configuración de seguridad para PythonAnywhere (producción)
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    
-    # Additional production settings
-    CSRF_TRUSTED_ORIGINS = [
-        'https://*.onrender.com',
-        'https://fantasy-wine-three.vercel.app'  # Tu dominio personalizado de Vercel
-    ]
+    print("🔒 Configuración de seguridad ACTIVADA para PythonAnywhere")
+else:
+    # Configuración más relajada para desarrollo local
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    print("🔓 Configuración de seguridad RELAJADA para desarrollo local")
+
+# Additional production settings
+CSRF_TRUSTED_ORIGINS = [
+    'https://samugoja1.pythonanywhere.com',
+    'https://fantasy-wine-three.vercel.app'
+]
+
+# Logging para mejor debugging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

@@ -14,9 +14,9 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       sourcemap: false
     },
-    // Forzar la definición de la variable
+    /* Forzar la definición de la variable
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'https://fantasy-y4dl.onrender.com/api')
-    }
+    }*/
   }
 })
